@@ -1,0 +1,50 @@
+[project]
+name = "FletPlatformer"
+version = "0.1.0"
+description = "A Platformer Game Made in Flet"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "MetaDusk", email = "andredcxxv@gmail.com" }]
+license = { text = "AGPL-3.0" }
+
+dependencies = [
+    "flet==0.70.0.dev6735",
+    "flet-audio @ git+https://github.com/flet-dev/flet-audio.git",
+    "flet-cli==0.70.0.dev6735",
+    "flet-desktop==0.70.0.dev6735",
+    "pynput>=1.8.1",
+]
+
+[tool.flet]
+org = "com.metadusk"
+product = "Flet Platformer"
+company = "MetaDusk Inc."
+copyright = "Copyright (C) 2025 MetaDusk"
+compile_app = true
+compile_packages = true
+cleanup_on_compile = true
+build_number = 1
+
+[tool.flet.assets]
+include = ["images/**", "audio/**"]
+
+[tool.flet.splash]
+color = "#ffffff"
+dark_color = "#333333"
+
+[tool.flet.app]
+path = "src"
+
+[tool.flet.app.boot_screen]
+show = true
+message = "Loading... Please wait."
+
+[tool.flet.app.startup_screen]
+show = true
+message = "Loading... Please wait."
+
+# [tool.uv.sources]
+# flet-audio = { git = "https://github.com/flet-dev/flet-audio.git" }
+
+[dependency-groups]
+dev = ["tomlkit>=0.13.3"]
