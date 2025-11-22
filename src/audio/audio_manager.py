@@ -3,8 +3,9 @@ from audio.music_data import MusicList
 from audio.sfx_data import SFXList
 from utilities.file_management import get_asset_path
 
-
+# TODO: Add more features for the AudioManager class
 class AudioManager:
+    """Handles all the audio playbacks (both Music and SFX)."""
     def __init__(
         self, music_volume: float = 0.3,
         sfx_volume: float = 0.5,

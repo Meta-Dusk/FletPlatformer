@@ -14,6 +14,7 @@ def before_test(page: ft.Page):
     page.padding = 0
     
 async def test(page: ft.Page):
+    # TODO: Make classes for the player and the enemies
     # * Player Variables
     is_moving: bool = False
     sprint: bool = False

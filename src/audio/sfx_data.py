@@ -3,6 +3,7 @@ from enum import Enum
 
 
 class SFXList(Enum):
+    """A list of available SFXs."""
     FAST_SWORD_WOOSH = os.path.join("assets", "audio", "sfx", "fast-sword-whoosh.wav")
     HEAVY_SWORD_HIT_METAL = os.path.join("assets", "audio", "sfx", "heavy-sword-smashes-metal.wav")
     JUMP_LANDING = os.path.join("assets", "audio", "sfx", "jump_landing.wav")
