@@ -1,7 +1,10 @@
 import asyncio
 import flet as ft
 from pynput import keyboard
-import keyboard_manager
+import utilities.keyboard_manager as keyboard_manager
+from audio.music_data import MusicList
+from audio.sfx_data import SFXList
+from audio.audio_manager import AudioManager
 
 
 def before_test(page: ft.Page):
@@ -24,6 +27,12 @@ async def test(page: ft.Page):
     # * Setup Keyboard Manager
     keyboard_manager.start()
     
+    # * Setup Audio
+    audio_manager = AudioManager()
+    audio_manager.initialize()
+    audio_manager.play_music(MusicList.DREAMS)
+    
+    # * Setup Widgets
     char_spr = ft.Image(
         src="images/player/idle_0.png", width=180, height=180,
         filter_quality=ft.FilterQuality.NONE, fit=ft.BoxFit.COVER,
@@ -67,6 +76,8 @@ async def test(page: ft.Page):
                 wait_time = 0.05 if sprint else 0.075
                 await asyncio.sleep(wait_time)
                 char_spr.src = f"images/player/run_{index}.png"
+                if index == 2: audio_manager.play_sfx(SFXList.ARMOR_RUSTLE_2)
+                if index == 5: audio_manager.play_sfx(SFXList.ARMOR_RUSTLE_3)
             else: # Idle animation
                 if index > 10: index = 0
                 await asyncio.sleep(0.075)
@@ -78,6 +89,8 @@ async def test(page: ft.Page):
     async def jump_anim():
         """Player jump animation."""
         nonlocal jump_task, jumped
+        audio_manager.play_sfx(SFXList.ROUGH_CLOTH)
+        audio_manager.play_sfx(SFXList.INHALE_EXHALE_SHORT)
         for i in range(3):
             await asyncio.sleep(0.1)
             char_spr.src = f"images/player/jump_{i}.png"
@@ -91,6 +104,12 @@ async def test(page: ft.Page):
         prefix = "attack-main" if attack_phase == 1 else "attack-secondary"
         for i in range(7):
             await asyncio.sleep(0.1)
+            if i == 2 and attack_phase == 1:
+                audio_manager.play_sfx(SFXList.FAST_SWORD_WOOSH)
+                audio_manager.play_sfx(SFXList.SMALL_GRUNT)
+            elif i == 1 and attack_phase == 2:
+                audio_manager.play_sfx(SFXList.SWORD_TING)
+                audio_manager.play_sfx(SFXList.GRUNT)
             char_spr.src = f"images/player/{prefix}_{i}.png"
             char_spr.update()
         is_attacking = False
@@ -142,7 +161,9 @@ async def test(page: ft.Page):
                 if ( # ? Manages asset flip direction
                     (dx > 0 and char_spr.scale.scale_x < 0) or
                     (dx < 0 and char_spr.scale.scale_x > 0)
-                ): char_spr.scale.scale_x *= -1
+                ): 
+                    char_spr.scale.scale_x *= -1
+                    audio_manager.play_sfx(SFXList.ARMOR_RUSTLE)
                 
                 # ? Checks for user inputting movement
                 if dx > 0 or dx < 0 or dy > 0 or dy < 0:
@@ -158,14 +179,16 @@ async def test(page: ft.Page):
             if char_stack.bottom < 0:
                 # ? Grounding
                 char_stack.bottom += 10
-                if char_stack.bottom > 0:
-                    char_stack.bottom = 0
+                if char_stack.bottom > 0: char_stack.bottom = 0
                     
             elif char_stack.bottom > 0 and not jumped:
                 # ? Gravity
                 # if dx == 0 and dy == 0: # ? Turns off gravity during movement
                 is_falling = True
                 char_stack.bottom -= 25
+                if char_stack.bottom <= 0:
+                    audio_manager.play_sfx(SFXList.JUMP_LANDING)
+                    audio_manager.play_sfx(SFXList.EXHALE)
                 
             elif char_stack.bottom == 0: is_falling = False
             char_stack.update()

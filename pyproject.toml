@@ -9,9 +9,9 @@ license = { text = "AGPL-3.0" }
 
 dependencies = [
     "flet==0.70.0.dev6735",
-    "flet-audio @ git+https://github.com/flet-dev/flet-audio.git",
     "flet-cli==0.70.0.dev6735",
     "flet-desktop==0.70.0.dev6735",
+    "pygame>=2.6.1",
     "pynput>=1.8.1",
 ]
 
@@ -42,9 +42,6 @@ message = "Loading... Please wait."
 [tool.flet.app.startup_screen]
 show = true
 message = "Loading... Please wait."
-
-# [tool.uv.sources]
-# flet-audio = { git = "https://github.com/flet-dev/flet-audio.git" }
 
 [dependency-groups]
 dev = ["tomlkit>=0.13.3"]
