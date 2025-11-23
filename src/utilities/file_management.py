@@ -1,27 +1,29 @@
-import os, sys
+import sys
+from pathlib import Path
 
-
-def get_asset_path(relative_path: str):
+def get_asset_path(relative_path: str) -> str:
     """
     Returns the absolute path to an asset, working in both Dev and PyInstaller/Flet build.
     Handles the script being nested inside 'src/utilities'.
     """
-    # 1. Determine the base directory where this script file is located
-    # (e.g., .../src/utilities)
-    current_file_path = os.path.abspath(__file__)
-    utilities_dir = os.path.dirname(current_file_path)
-
-    # 2. Go UP one level to find the 'src' (or app root) folder
-    # (e.g., .../src)
-    root_dir = os.path.dirname(utilities_dir)
-
-    # 3. If frozen (built app), we might need to adjust based on how Flet extracts files
+    
+    # 1. Get the directory where this script lives (.../src/utilities)
+    # We use .resolve() to get the absolute path, resolving symlinks
+    current_file = Path(__file__).resolve()
+    
+    # 2. Determine the Root
     if getattr(sys, 'frozen', False):
-        # In Flet builds, usually the 'src' content is extracted to the app root.
-        # If this file is still in 'utilities', going up one level is still correct.
-        # However, if sys.executable is safer:
-        # root_dir = os.path.dirname(sys.executable)
-        pass 
+        # CASE: PyInstaller / Flet Build
+        # When frozen, files are often extracted to a temp folder (sys._MEIPASS)
+        # If you are using 'flet pack', your assets usually end up at the root of this temp folder.
+        base_path = Path(sys._MEIPASS)
+    else:
+        # CASE: Development
+        # Go up two levels: src/utilities -> src
+        base_path = current_file.parent.parent
 
-    # 4. Join the root with the asset path (e.g. "assets/audio/...")
-    return os.path.join(root_dir, relative_path)
+    # 3. Join the paths using the / operator
+    full_path = base_path / relative_path
+
+    # 4. Return as a string (Flet expects strings, not Path objects)
+    return str(full_path)
