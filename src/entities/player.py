@@ -1,15 +1,33 @@
-from src.utilities import setup_path
-setup_path.configure()
+try:
+    from ..utilities import setup_path
+    setup_path.configure()
+    from .entity import Entity
+    from ..images import Sprite
+    from ..audio.audio_manager import AudioManager
+    from ..audio.sfx_data import SFXList
+    from ..utilities.keyboard_manager import held_keys, start as km_start
+    
+except (ImportError, ValueError):
+    try:
+        from src.utilities import setup_path
+        setup_path.configure()
+        from src.entities.entity import Entity
+        from src.images import Sprite
+        from src.audio.audio_manager import AudioManager
+        from src.audio.sfx_data import SFXList
+        from src.utilities.keyboard_manager import held_keys, start as km_start
+    except (ImportError, ValueError):
+        from utilities import setup_path
+        setup_path.configure()
+        from entities.entity import Entity
+        from images import Sprite
+        from audio.audio_manager import AudioManager
+        from audio.sfx_data import SFXList
+        from utilities.keyboard_manager import held_keys, start as km_start
 
 import asyncio
 import flet as ft
-from src.entities.entity import Entity
-from src.images import Sprite
-from src.audio.audio_manager import AudioManager
-from src.audio.sfx_data import SFXList
 from pynput import keyboard
-from src.utilities.keyboard_manager import held_keys
-
 
 class Player(Entity):
     """Handles the player's actions and states."""
@@ -142,7 +160,8 @@ class Player(Entity):
                     self._play_sfx(SFXList.EXHALE)
                 
             elif self.stack.bottom == 0: self.states.is_falling = False
-            if self.stack.page: self.stack.update()
+            try: self.stack.update()
+            except RuntimeError: pass
             await asyncio.sleep(0.05) # ? Delay for logic just in case
     
     def _get_jump_dy(self):
@@ -185,7 +204,8 @@ class Player(Entity):
         """Play jump action."""
         if self.stack.bottom == 0 and not self.states.jumped:
             self.stack.bottom += self._get_jump_dy()
-            if self.stack.page: self.stack.update()
+            try: self.stack.update()
+            except RuntimeError: pass
             self.states.jumped = True
             self._jump_task = asyncio.create_task(
                 coro=self._jump_anim(),
@@ -215,8 +235,6 @@ class Player(Entity):
 
 # * Test for the Player class
 # ? Run with: uv run py -m src.entities.player
-from ..utilities.keyboard_manager import start as km_start
-
 def test(page: ft.Page):
     page.title = "Player Class Test"
     page.vertical_alignment = ft.MainAxisAlignment.CENTER

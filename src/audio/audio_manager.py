@@ -1,8 +1,29 @@
+try:
+    from ..utilities import setup_path
+    setup_path.configure()
+    from .music_data import MusicList
+    from .sfx_data import SFXList
+    from ..utilities.file_management import get_asset_path
+    from ..utilities.values import clamp
+    
+except (ImportError, ValueError):
+    try:
+        from src.utilities import setup_path
+        setup_path.configure()
+        from src.audio.music_data import MusicList
+        from src.audio.sfx_data import SFXList
+        from src.utilities.file_management import get_asset_path
+        from src.utilities.values import clamp
+    except (ImportError, ValueError):
+        from utilities import setup_path
+        setup_path.configure()
+        from audio.music_data import MusicList
+        from audio.sfx_data import SFXList
+        from utilities.file_management import get_asset_path
+        from utilities.values import clamp
+
 import pygame, os
-from src.audio.music_data import MusicList
-from src.audio.sfx_data import SFXList
-from src.utilities.file_management import get_asset_path
-from src.utilities.values import clamp
+
 
 # TODO: Add more features for the AudioManager class
 class AudioManager:
@@ -10,10 +31,12 @@ class AudioManager:
     def __init__(
         self, music_volume: float = 0.3,
         sfx_volume: float = 0.5,
-        debug: bool = True
+        directional_sfx: bool = True,
+        *, debug: bool = True
     ):
         self.music_volume = music_volume
         self.sfx_volume = sfx_volume
+        self.directional_sfx = directional_sfx
         self.debug = debug
         
         # Optimization: Cache loaded sounds so we don't read from disk every time
@@ -40,6 +63,7 @@ class AudioManager:
             self._debug_msg(f"Error initializing pygame.mixer: {e}")
     
     def play_music(self, music: MusicList):
+        """Plays music that is on loop."""
         try:
             music_path = get_asset_path(music.value)
             pygame.mixer.music.load(music_path)
@@ -53,7 +77,8 @@ class AudioManager:
         right_volume: float = None
     ):
         """
-        Can handle audio panning if `left_volume` and `right_volume` is provided.
+        If `directional_sfx` is `True`, then audio panning will work.\n
+        Audio panning will only work if `left_volume` and `right_volume` is provided.
         """
         try:
             # Load Sound (with basic caching)
@@ -72,7 +97,7 @@ class AudioManager:
             if not channel: return
             
             # Apply Panning (If requested)
-            if left_volume is not None and right_volume is not None:
+            if left_volume is not None and right_volume is not None and self.directional_sfx:
                 clamped_vol_r = clamp(right_volume)
                 clamped_vol_l = clamp(left_volume)
                 channel.set_volume(clamped_vol_l, clamped_vol_r)

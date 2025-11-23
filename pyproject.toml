@@ -1,6 +1,6 @@
 [project]
 name = "FletPlatformer"
-version = "0.1.1"
+version = "0.1.2"
 description = "A Platformer Game Made in Flet"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -8,9 +8,9 @@ authors = [{ name = "MetaDusk", email = "andredcxxv@gmail.com" }]
 license = { text = "AGPL-3.0" }
 
 dependencies = [
-    "flet==0.70.0.dev6735",
-    "flet-cli==0.70.0.dev6735",
-    "flet-desktop==0.70.0.dev6735",
+    "flet==0.70.0.dev6787",
+    "flet-cli==0.70.0.dev6787",
+    "flet-desktop==0.70.0.dev6787",
     "pygame>=2.6.1",
     "pynput>=1.8.1",
 ]

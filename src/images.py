@@ -18,13 +18,17 @@ class Sprite(ft.Image):
     def change_src(self, new_src: str, update_ctrl: bool = True):
         """Swap the `src` and optionally update."""
         self.src = new_src
-        if update_ctrl and self.page: self.update()
+        if not update_ctrl: return
+        try: self.update()
+        except RuntimeError: pass
     
     def flip_x(self, update_ctrl: bool = True):
         """Flip the image on the x-axis."""
         scale_x = self.scale.scale_x
         if scale_x > 0 or scale_x < 0: self.scale.scale_x *= -1
-        if update_ctrl and self.page: self.update()
+        if not update_ctrl: return
+        try: self.update()
+        except RuntimeError: pass
             
             
 # * Test for the Sprite class

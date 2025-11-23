@@ -1,11 +1,21 @@
-from src.utilities import setup_path
-setup_path.configure()
+try:
+    from ..utilities import setup_path
+    setup_path.configure()
+    from ..images import Sprite
+    
+except (ImportError, ValueError):
+    try:
+        from src.utilities import setup_path
+        setup_path.configure()
+        from src.images import Sprite
+    except (ImportError, ValueError):
+        from utilities import setup_path
+        setup_path.configure()
+        from images import Sprite
 
 import asyncio, random
 import flet as ft
-from src.images import Sprite
 from dataclasses import dataclass
-
 
 @dataclass
 class EntityStates:
@@ -71,7 +81,8 @@ class Entity:
                 (dx < 0 and self.sprite.scale.scale_x > 0)
             ): self.sprite.flip_x()
             
-            if self.stack.page: self.stack.update()
+            try: self.stack.update()
+            except RuntimeError: pass
             await asyncio.sleep(0.5)
     
     def _start_movement_loop(self):

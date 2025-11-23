@@ -9,7 +9,7 @@ def before_main_ui(page: ft.Page):
     page.title = "Flet Platformer Game"
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.padding = 0
+    # page.padding = 0
 
 async def fix_stretched_window(page: ft.Page, *, center_page: bool = False):
     """
