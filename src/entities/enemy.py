@@ -1,20 +1,7 @@
-try:
-    from ..utilities import setup_path
-    setup_path.configure()
-    from .entity import Entity
-    from ..images import Sprite
-    
-except (ImportError, ValueError):
-    try:
-        from src.utilities import setup_path
-        setup_path.configure()
-        from src.entities.entity import Entity
-        from src.images import Sprite
-    except (ImportError, ValueError):
-        from utilities import setup_path
-        setup_path.configure()
-        from entities.entity import Entity
-        from images import Sprite
+from utilities import setup_path
+setup_path.configure()
+from entities.entity import Entity
+from images import Sprite
 
 import asyncio
 import flet as ft

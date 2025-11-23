@@ -1,26 +1,7 @@
-try:
-    from ..utilities import setup_path
-    setup_path.configure()
-    from .music_data import MusicList
-    from .sfx_data import SFXList
-    from ..utilities.file_management import get_asset_path
-    from ..utilities.values import clamp
-    
-except (ImportError, ValueError):
-    try:
-        from src.utilities import setup_path
-        setup_path.configure()
-        from src.audio.music_data import MusicList
-        from src.audio.sfx_data import SFXList
-        from src.utilities.file_management import get_asset_path
-        from src.utilities.values import clamp
-    except (ImportError, ValueError):
-        from utilities import setup_path
-        setup_path.configure()
-        from audio.music_data import MusicList
-        from audio.sfx_data import SFXList
-        from utilities.file_management import get_asset_path
-        from utilities.values import clamp
+from audio.music_data import MusicList
+from audio.sfx_data import SFXList
+from utilities.file_management import get_asset_path
+from utilities.values import clamp
 
 import pygame, os
 

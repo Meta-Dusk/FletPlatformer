@@ -1,29 +1,10 @@
-try:
-    from ..utilities import setup_path
-    setup_path.configure()
-    from .entity import Entity
-    from ..images import Sprite
-    from ..audio.audio_manager import AudioManager
-    from ..audio.sfx_data import SFXList
-    from ..utilities.keyboard_manager import held_keys, start as km_start
-    
-except (ImportError, ValueError):
-    try:
-        from src.utilities import setup_path
-        setup_path.configure()
-        from src.entities.entity import Entity
-        from src.images import Sprite
-        from src.audio.audio_manager import AudioManager
-        from src.audio.sfx_data import SFXList
-        from src.utilities.keyboard_manager import held_keys, start as km_start
-    except (ImportError, ValueError):
-        from utilities import setup_path
-        setup_path.configure()
-        from entities.entity import Entity
-        from images import Sprite
-        from audio.audio_manager import AudioManager
-        from audio.sfx_data import SFXList
-        from utilities.keyboard_manager import held_keys, start as km_start
+from utilities import setup_path
+setup_path.configure()
+from entities.entity import Entity
+from images import Sprite
+from audio.audio_manager import AudioManager
+from audio.sfx_data import SFXList
+from utilities.keyboard_manager import held_keys, start as km_start
 
 import asyncio
 import flet as ft
