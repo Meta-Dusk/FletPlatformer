@@ -1,6 +1,6 @@
 [project]
 name = "FletPlatformer"
-version = "0.1.0"
+version = "0.1.1"
 description = "A Platformer Game Made in Flet"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -37,11 +37,11 @@ path = "src"
 
 [tool.flet.app.boot_screen]
 show = true
-message = "Loading... Please wait."
+message = "Booting Up App... Please wait."
 
 [tool.flet.app.startup_screen]
 show = true
-message = "Loading... Please wait."
+message = "Starting App... Please wait."
 
 [dependency-groups]
 dev = ["tomlkit>=0.13.3"]

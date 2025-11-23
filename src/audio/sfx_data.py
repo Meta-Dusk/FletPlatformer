@@ -18,3 +18,11 @@ class SFXList(Enum):
     SMALL_GRUNT = _SFX_DIR / "small_grunt.wav"
     GRUNT = _SFX_DIR / "grunt.wav"
     INHALE_EXHALE_SHORT = _SFX_DIR / "inhale_exhale_short.wav"
+    GRUNT_HURT = _SFX_DIR / "grunt_hurt.wav"
+    DROP_KEYS = _SFX_DIR / "drop_keys.wav"
+    ARMOR_HIT_SOFT = _SFX_DIR / "armor_hit_soft.wav"
+    DEATH = _SFX_DIR / "death.wav"
+    DEATH_2 = _SFX_DIR / "death_2.wav"
+    BLADE_DROP = _SFX_DIR / "blade_drop.wav"
+    CLOTHES_DROP = _SFX_DIR / "clothes_drop.wav"
+    

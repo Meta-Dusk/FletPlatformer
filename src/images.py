@@ -8,7 +8,7 @@ class Sprite(ft.Image):
         filter_quality: ft.FilterQuality = ft.FilterQuality.NONE,
         fit: ft.BoxFit = ft.BoxFit.COVER, gapless_playback: bool = True,
         scale: ft.Scale = ft.Scale(scale_x=2, scale_y=2),
-        offset: ft.Offset = ft.Offset(0, 0.225)
+        offset: ft.Offset = ft.Offset(0, 0.2)
     ):
         super().__init__(
             src=src, width=width, height=height, filter_quality=filter_quality,

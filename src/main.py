@@ -1,12 +1,13 @@
 import flet as ft
-from player_test import test, before_test
+from main_ui import main_ui
+from setup import before_main_ui
 
 
 async def main(page: ft.Page):
-    await test(page)
+    await main_ui(page)
     
 def before_main(page: ft.Page):
-    before_test(page)
+    before_main_ui(page)
     
 
 if __name__ == "__main__":

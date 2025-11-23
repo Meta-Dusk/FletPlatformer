@@ -8,13 +8,12 @@ from audio.audio_manager import AudioManager
 
 
 def before_test(page: ft.Page):
-    page.title = "Keyboard Detection Test"
+    page.title = "Standalone Player Test"
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.padding = 0
     
 async def test(page: ft.Page):
-    # TODO: Make classes for the player and the enemies
     # * Player Variables
     is_moving: bool = False
     sprint: bool = False
@@ -31,7 +30,7 @@ async def test(page: ft.Page):
     # * Setup Audio
     audio_manager = AudioManager()
     audio_manager.initialize()
-    audio_manager.play_music(MusicList.DREAMS)
+    # audio_manager.play_music(MusicList.DREAMS)
     
     # * Setup Widgets
     char_spr = ft.Image(
@@ -94,8 +93,10 @@ async def test(page: ft.Page):
         audio_manager.play_sfx(SFXList.INHALE_EXHALE_SHORT)
         for i in range(3):
             await asyncio.sleep(0.1)
+            if is_attacking: continue
             char_spr.src = f"images/player/jump_{i}.png"
             char_spr.update()
+        await asyncio.sleep(0.1)
         jumped = False
         jump_task = None
     
@@ -121,22 +122,22 @@ async def test(page: ft.Page):
         nonlocal jumped, jump_task
         nonlocal attack_phase, attack_task, is_attacking
         match e.key:
+            case "Escape": await page.window.close()
+                
             case " ":
-                if char_stack.bottom == 0:
+                if char_stack.bottom == 0 and not jumped:
                     char_stack.bottom += 150
                     char_stack.update()
                     jumped = True
                     jump_task = asyncio.create_task(jump_anim())
-            case "Escape":
-                await page.window.close()
+                
             case "V":
-                if is_attacking: # Prevent interrupting an existing attack
-                    return
+                # Prevent interrupting an existing attack
+                if is_attacking: return
                 
                 # Cycle phases (Simple 1 -> 2 -> 1 logic)
                 attack_phase += 1
-                if attack_phase > 2: 
-                    attack_phase = 1
+                if attack_phase > 2 or jumped: attack_phase = 1
                 print(f"Attacking! Phase: {attack_phase}")
                 is_attacking = True
                 attack_task = asyncio.create_task(attack_anim())
