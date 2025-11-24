@@ -1,28 +1,49 @@
-from enum import Enum
 from pathlib import Path
+from dataclasses import dataclass
 
-# Define the base directory once
+
 _SFX_DIR = Path("assets") / "audio" / "sfx"
 
-class SFXList(Enum):
-    """A list of available SFXs."""
-    FAST_SWORD_WOOSH = _SFX_DIR / "fast-sword-whoosh.wav"
-    HEAVY_SWORD_HIT_METAL = _SFX_DIR / "heavy-sword-smashes-metal.wav"
-    JUMP_LANDING = _SFX_DIR / "jump_landing.wav"
-    ARMOR_RUSTLE = _SFX_DIR / "armor_rustle.wav"
-    SWORD_TING = _SFX_DIR / "woosh_sword_ting.wav"
-    ROUGH_CLOTH = _SFX_DIR / "rough_cloth.wav"
-    ARMOR_RUSTLE_2 = _SFX_DIR / "armor_rustle_2.wav"
-    ARMOR_RUSTLE_3 = _SFX_DIR / "armor_rustle_3.wav"
-    EXHALE = _SFX_DIR / "exhale.wav"
-    SMALL_GRUNT = _SFX_DIR / "small_grunt.wav"
-    GRUNT = _SFX_DIR / "grunt.wav"
-    INHALE_EXHALE_SHORT = _SFX_DIR / "inhale_exhale_short.wav"
-    GRUNT_HURT = _SFX_DIR / "grunt_hurt.wav"
-    DROP_KEYS = _SFX_DIR / "drop_keys.wav"
-    ARMOR_HIT_SOFT = _SFX_DIR / "armor_hit_soft.wav"
-    DEATH = _SFX_DIR / "death.wav"
-    DEATH_2 = _SFX_DIR / "death_2.wav"
-    BLADE_DROP = _SFX_DIR / "blade_drop.wav"
-    CLOTHES_DROP = _SFX_DIR / "clothes_drop.wav"
+@dataclass
+class SwordSFX:
+    fast_woosh = _SFX_DIR / "fast-sword-whoosh.wav"
+    heavy_hit_metal = _SFX_DIR / "heavy-sword-smashes-metal.wav"
+    ting = _SFX_DIR / "woosh_sword_ting.wav"
+    blade_drop = _SFX_DIR / "blade_drop.wav"
+
+@dataclass
+class PlayerSFX:
+    exhale = _SFX_DIR / "exhale.wav"
+    small_grunt = _SFX_DIR / "small_grunt.wav"
+    grunt = _SFX_DIR / "grunt.wav"
+    inhale_exhale_short = _SFX_DIR / "inhale_exhale_short.wav"
+    grunt_hurt = _SFX_DIR / "grunt_hurt.wav"
+    death_1 = _SFX_DIR / "death.wav"
+    death_2 = _SFX_DIR / "death_2.wav"
+    jump_landing = _SFX_DIR / "jump_landing.wav"
+
+@dataclass
+class ArmorSFX:
+    rustle_1 = _SFX_DIR / "armor_rustle.wav"
+    rustle_2 = _SFX_DIR / "armor_rustle_2.wav"
+    rustle_3 = _SFX_DIR / "armor_rustle_3.wav"
+    hit_soft = _SFX_DIR / "armor_hit_soft.wav"
+
+@dataclass
+class ClothSFX:
+    rough_rustle = _SFX_DIR / "rough_cloth.wav"
+    clothes_drop = _SFX_DIR / "clothes_drop.wav"
+
+@dataclass
+class ItemsSFX:
+    keys_drop = _SFX_DIR / "drop_keys.wav"
+
+@dataclass
+class SFXLibrary:
+    """Dataclasses containing the `Path` for the SFX."""
+    sword = SwordSFX()
+    item = ItemsSFX()
+    player = PlayerSFX()
+    cloth = ClothSFX()
+    armor = ArmorSFX()
     

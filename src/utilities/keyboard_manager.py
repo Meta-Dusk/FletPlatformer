@@ -1,7 +1,7 @@
 from pynput import keyboard
 
 # A set to keep track of what is currently pressed
-held_keys = set()
+held_keys: set[str | keyboard.KeyCode] = set()
 
 # Setup Pynput Listeners (Non-blocking)
 def on_press(key: keyboard.KeyCode):

@@ -10,7 +10,7 @@ def before_main_ui(page: ft.Page):
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.padding = 0
-    page.window.title_bar_hidden = True
+    # page.window.title_bar_hidden = True
 
 async def fix_stretched_window(page: ft.Page, *, center_page: bool = False):
     """
