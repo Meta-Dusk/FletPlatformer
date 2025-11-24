@@ -139,6 +139,7 @@ class Player(Entity):
     async def _revive_anim(self):
         """Handles the player's revival animation."""
         index = 10
+        self._play_sfx(sfx.magic.strike)
         while index >= 0:
             await asyncio.sleep(0.1)
             if index == 5: self._play_sfx(sfx.armor.rustle_3)
@@ -198,6 +199,9 @@ class Player(Entity):
     # ? === CALLABLE PLAYER ACTIONS/EVENTS ===
     async def death(self):
         """Cancels all running tasks, and plays the death animation."""
+        if self.states.dead:
+            self._debug_msg(f"{self.name} is already dead")
+            return
         self._debug_msg(f"{self.name} has died!")
         self._revivable = False
         self._reset_states()
@@ -238,16 +242,22 @@ class Player(Entity):
         
     async def take_damage(self, damage_amount: float):
         """Decrease player's health with logic."""
-        if self.states.dead or self.states.taking_damage: return
+        if self.states.dead:
+            self._debug_msg(f"{self.name} is already dead")
+            return
+        if self.states.taking_damage:
+            self._debug_msg(f"{self.name} cannot be damaged again yet")
+            return
         self.stats.health -= damage_amount
         self._debug_msg(f"Took damage: {damage_amount}, health is now: {self.stats.health}")
         self.states.taking_damage = True
-        self._take_hit_task = asyncio.create_task(
-            coro=self._take_hit_anim(),
-            name=f"[{self._handler_str}] Taking Damage :: Start animation"
-        )
-        await self._update_health_bar()
         if self.stats.health <= 0: await self.death()
+        else:
+            self._take_hit_task = asyncio.create_task(
+                coro=self._take_hit_anim(),
+                name=f"[{self._handler_str}] Taking Damage :: Start animation"
+            )
+        await self._update_health_bar()
     
     async def revive(self):
         if not self.states.dead:
@@ -256,8 +266,9 @@ class Player(Entity):
         elif not self._revivable:
             self._debug_msg(f"{self.name} is not yet ready to be revived")
             return
-        await self._revive_anim()
+        self._revivable = False
         self._debug_msg(f"Reviving: {self.name}")
+        await self._revive_anim()
         self._reset_states()
         self.stats.health = self.stats.max_health
         attempt_cancel(self._movement_loop_task)

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 _SFX_DIR = Path("assets") / "audio" / "sfx"
 
+# * Sub Sound Libraries
 @dataclass
 class SwordSFX:
     fast_woosh = _SFX_DIR / "fast-sword-whoosh.wav"
@@ -39,6 +40,17 @@ class ItemsSFX:
     keys_drop = _SFX_DIR / "drop_keys.wav"
 
 @dataclass
+class MagicSFX:
+    strike = _SFX_DIR / "magic_strike.wav"
+
+@dataclass
+class EffectsSFX:
+    level_up_quirky = _SFX_DIR / "level_up_quirky.wav"
+    riser_end_up_swell = _SFX_DIR / "riser_end_up_swell.wav"
+
+
+# * Main Sound Library
+@dataclass
 class SFXLibrary:
     """Dataclasses containing the `Path` for the SFX."""
     sword = SwordSFX()
@@ -46,4 +58,6 @@ class SFXLibrary:
     player = PlayerSFX()
     cloth = ClothSFX()
     armor = ArmorSFX()
+    magic = MagicSFX()
+    effects = EffectsSFX()
     
