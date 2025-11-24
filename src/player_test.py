@@ -1,11 +1,12 @@
 import asyncio
 import flet as ft
 from pynput import keyboard
+
 import utilities.keyboard_manager as keyboard_manager
-from audio.music_data import MusicList
 from audio.sfx_data import SFXList
 from audio.audio_manager import AudioManager
 
+# ? This was the first attempt for a controllable character.
 
 def before_test(page: ft.Page):
     page.title = "Standalone Player Test"
@@ -30,7 +31,6 @@ async def test(page: ft.Page):
     # * Setup Audio
     audio_manager = AudioManager()
     audio_manager.initialize()
-    # audio_manager.play_music(MusicList.DREAMS)
     
     # * Setup Widgets
     char_spr = ft.Image(

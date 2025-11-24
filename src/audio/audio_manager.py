@@ -1,9 +1,9 @@
+import pygame, os
+
 from audio.music_data import MusicList
 from audio.sfx_data import SFXList
 from utilities.file_management import get_asset_path
 from utilities.values import clamp
-
-import pygame, os
 
 
 # TODO: Add more features for the AudioManager class

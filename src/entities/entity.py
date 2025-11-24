@@ -1,10 +1,12 @@
-from utilities import setup_path
-setup_path.configure()
-from images import Sprite
-
 import asyncio, random
 import flet as ft
 from dataclasses import dataclass
+
+from images import Sprite
+from audio.audio_manager import AudioManager
+from audio.sfx_data import SFXList
+from utilities.values import pathify
+
 
 @dataclass
 class EntityStates:
@@ -16,11 +18,13 @@ class EntityStates:
     is_attacking: bool = False
     is_falling: bool = False
     dead: bool = False
+    taking_damage: bool = False
 
 @dataclass
 class EntityStats:
     """Includes health, movement speed, etc."""
     health: float = 20
+    max_health: float = 20
     movement_speed: int = 10
     attack_damage: float = 5
     attack_speed: float = 2
@@ -31,22 +35,31 @@ class EntityStats:
 class Entity:
     """Entity base class. Handles the sprite and some states."""
     def __init__(
-        self, sprite: Sprite, name: str,
-        page: ft.Page, *, debug: bool = True
+        self, sprite: Sprite, name: str, page: ft.Page,
+        audio_manager: AudioManager = None,
+        *, debug: bool = True
     ):
         self.sprite = sprite
         self.name = name
         self.page = page
+        self.audio_manager = audio_manager
         self.debug = debug
         self.states = EntityStates()
         self.stats = EntityStats()
         self.stack: ft.Stack = self._make_stack()
         self._movement_loop_task: asyncio.Task = None
         self._handler_str: str = "Entity"
+        self._spr_path = pathify(sprite.src)
     
     def _debug_msg(self, msg: str):
         """A simple debug message for simple logging."""
         if self.debug: print(f"[{self._handler_str}] {msg}")
+    
+    def _play_sfx(self, sfx: SFXList):
+        """Play an SFX with support for directional playback."""
+        right_vol = (self.stack.left + (self.sprite.width / 2)) / self.page.width
+        left_vol = 1.0 - right_vol
+        self.audio_manager.play_sfx(sfx, left_vol, right_vol)
     
     def _make_stack(self):
         """Returns a stack positioned at the bottom-center of the screen."""
@@ -85,17 +98,29 @@ class Entity:
         in another stack.
         """
         return self.stack
+    
+    def _get_spr_path(self, state: str, index: int, *, debug: bool = False):
+        """Returns a formatted str path for sprites."""
+        _parent = self._spr_path.parent
+        _suffix = self._spr_path.suffix
+        spr_path = _parent / f"{state}_{index}{_suffix}"
+        if debug: self._debug_msg(f"Generated spr_path: {spr_path}")
+        return spr_path.as_posix()
+    
+    def _update_stack(self):
+        try: self.stack.update()
+        except RuntimeError: pass
 
 
-# * Test for the Entity class
+# * Test for the Entity class; a simple implementation
 # ? Run with: uv run py -m src.entities.entity
 def test(page: ft.Page):
     page.title = "Entity Class Test"
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     
-    entity_spr = Sprite("images/enemies/goblin/idle_0.png", width=180, height=180, offset=ft.Offset(0, 0.21))
-    entity = Entity(entity_spr, "Entity", page)
+    entity_spr = Sprite("images/enemies/goblin/idle_0.png", width=150, height=150)
+    entity = Entity(entity_spr, "Gob", page)
     stage = ft.Stack(controls=[entity()], expand=True)
     
     page.add(stage)

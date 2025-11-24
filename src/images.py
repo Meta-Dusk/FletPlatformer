@@ -8,7 +8,7 @@ class Sprite(ft.Image):
         filter_quality: ft.FilterQuality = ft.FilterQuality.NONE,
         fit: ft.BoxFit = ft.BoxFit.COVER, gapless_playback: bool = True,
         scale: ft.Scale = ft.Scale(scale_x=2, scale_y=2),
-        offset: ft.Offset = ft.Offset(0, 0.2)
+        offset: ft.Offset = ft.Offset(0, 0.15)
     ):
         super().__init__(
             src=src, width=width, height=height, filter_quality=filter_quality,
@@ -31,7 +31,9 @@ class Sprite(ft.Image):
         except RuntimeError: pass
             
             
-# * Test for the Sprite class
+# * Test for the Sprite class; a simple implementation
+# ? You can run this directly with file paths such as:
+# ? uv run py .\src\images.py
 def test(page: ft.Page):
     page.title = "Sprite Class Test"
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
