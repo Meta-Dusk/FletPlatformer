@@ -1,7 +1,7 @@
 import pygame, os
+from pathlib import Path
 
 from audio.music_data import MusicList
-from audio.sfx_data import SFXList
 from utilities.file_management import get_asset_path
 from utilities.values import clamp
 
@@ -53,21 +53,22 @@ class AudioManager:
             self._debug_msg(f"Error playing music: {e}")
     
     def play_sfx(
-        self, sfx: SFXList,
+        self, sfx_path: Path,
         left_volume: float = None,
         right_volume: float = None
     ):
         """
+        Use the `SFXLibrary` dataclass for supplying the `sfx_path`.\n
         If `directional_sfx` is `True`, then audio panning will work.\n
         Audio panning will only work if `left_volume` and `right_volume` is provided.
         """
         try:
             # Load Sound (with basic caching)
-            if sfx not in self._sfx_cache:
-                sfx_path = get_asset_path(sfx.value)
-                self._sfx_cache[sfx] = pygame.mixer.Sound(sfx_path)
+            if sfx_path not in self._sfx_cache:
+                sfx_path = get_asset_path(sfx_path.as_posix())
+                self._sfx_cache[sfx_path] = pygame.mixer.Sound(sfx_path)
             
-            sound = self._sfx_cache[sfx]
+            sound = self._sfx_cache[sfx_path]
             
             # Apply Master Volume
             # We set this on the sound object itself so it scales appropriately

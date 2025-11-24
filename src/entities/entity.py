@@ -1,10 +1,10 @@
 import asyncio, random
 import flet as ft
 from dataclasses import dataclass
+from pathlib import Path
 
 from images import Sprite
 from audio.audio_manager import AudioManager
-from audio.sfx_data import SFXList
 from utilities.values import pathify
 
 
@@ -19,6 +19,7 @@ class EntityStates:
     is_falling: bool = False
     dead: bool = False
     taking_damage: bool = False
+    disable_movement: bool = False
 
 @dataclass
 class EntityStats:
@@ -55,7 +56,7 @@ class Entity:
         """A simple debug message for simple logging."""
         if self.debug: print(f"[{self._handler_str}] {msg}")
     
-    def _play_sfx(self, sfx: SFXList):
+    def _play_sfx(self, sfx: Path):
         """Play an SFX with support for directional playback."""
         right_vol = (self.stack.left + (self.sprite.width / 2)) / self.page.width
         left_vol = 1.0 - right_vol

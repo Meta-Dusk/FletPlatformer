@@ -1,7 +1,7 @@
 from enum import Enum
 from pathlib import Path
 
-# Define the base directory once to keep things clean
+
 _MUSIC_DIR = Path("assets") / "audio" / "music"
 
 class MusicList(Enum):
