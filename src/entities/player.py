@@ -208,11 +208,7 @@ class Player(Entity):
         self.states.dead = True
         self.stats.health = 0
         await self._update_health_bar()
-        tasks = [
-            # self._movement_loop_task, # ? Commented out to enable player gravity
-            self._animation_loop_task
-        ]
-        for task in tasks: attempt_cancel(task)
+        attempt_cancel(self._animation_loop_task)
         self._cancel_temp_tasks()
         await self._death_anim()
     

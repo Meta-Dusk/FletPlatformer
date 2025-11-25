@@ -23,6 +23,7 @@ class EnemyType(Enum):
     # MUSHROOM = EnemyData("Mushy", 150, 150)
     # SKELETON = EnemyData("Skelly", 150, 150)
 
+# TODO: Finish the Enemy class
 class Enemy(Entity):
     """Handles an enemy's actions and states."""
     def __init__(
