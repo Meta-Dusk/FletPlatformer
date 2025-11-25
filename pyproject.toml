@@ -1,6 +1,6 @@
 [project]
 name = "FletPlatformer"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Platformer Game Made in Flet"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -8,10 +8,10 @@ authors = [{ name = "MetaDusk", email = "andredcxxv@gmail.com" }]
 license = { text = "AGPL-3.0" }
 
 dependencies = [
-    "flet==0.70.0.dev6735",
-    "flet-audio @ git+https://github.com/flet-dev/flet-audio.git",
-    "flet-cli==0.70.0.dev6735",
-    "flet-desktop==0.70.0.dev6735",
+    "flet==0.70.0.dev6787",
+    "flet-cli==0.70.0.dev6787",
+    "flet-desktop==0.70.0.dev6787",
+    "pygame>=2.6.1",
     "pynput>=1.8.1",
 ]
 
@@ -37,14 +37,21 @@ path = "src"
 
 [tool.flet.app.boot_screen]
 show = true
-message = "Loading... Please wait."
+message = "Booting Up App... Please wait."
 
 [tool.flet.app.startup_screen]
 show = true
-message = "Loading... Please wait."
-
-# [tool.uv.sources]
-# flet-audio = { git = "https://github.com/flet-dev/flet-audio.git" }
+message = "Starting App... Please wait."
 
 [dependency-groups]
 dev = ["tomlkit>=0.13.3"]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
