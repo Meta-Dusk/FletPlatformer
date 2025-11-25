@@ -2,11 +2,16 @@ import asyncio, random
 import flet as ft
 from dataclasses import dataclass
 from pathlib import Path
+from enum import Enum
 
 from images import Sprite
 from audio.audio_manager import AudioManager
 from utilities.values import pathify
 
+
+class Factions(Enum):
+    HUMAN = "Human"
+    NONHUMAN = "Non-Human"
 
 @dataclass
 class EntityStates:
@@ -20,6 +25,7 @@ class EntityStates:
     dead: bool = False
     taking_damage: bool = False
     disable_movement: bool = False
+    revivable: bool = False
 
 @dataclass
 class EntityStats:
@@ -45,16 +51,21 @@ class Entity:
         self.page = page
         self.audio_manager = audio_manager
         self.debug = debug
-        self.states = EntityStates()
-        self.stats = EntityStats()
+        self._handler_str: str = "Entity"
+        self.faction: Factions = None
+        self.states: EntityStates = EntityStates()
+        self.stats: EntityStats = EntityStats()
         self.stack: ft.Stack = self._make_stack()
         self._movement_loop_task: asyncio.Task = None
-        self._handler_str: str = "Entity"
-        self._spr_path = pathify(sprite.src)
+        self._spr_path: Path = pathify(sprite.src)
+        self.health_bar: ft.ProgressBar = None
     
-    def _debug_msg(self, msg: str):
+    # * === FUNCTIONAL WRAPPERS ===
+    def _debug_msg(self, msg: str, *, end: str = None, include_handler: bool = True):
         """A simple debug message for simple logging."""
-        if self.debug: print(f"[{self._handler_str}] {msg}")
+        if self.debug:
+            if include_handler: print(f"[{self._handler_str}] {msg}", end=end)
+            else: print(msg, end=end)
     
     def _play_sfx(self, sfx: Path):
         """Play an SFX with support for directional playback."""
@@ -62,14 +73,7 @@ class Entity:
         left_vol = 1.0 - right_vol
         self.audio_manager.play_sfx(sfx, left_vol, right_vol)
     
-    def _make_stack(self):
-        """Returns a stack positioned at the bottom-center of the screen."""
-        return ft.Stack(
-            controls=[self.sprite],
-            left=(self.page.width / 2) - (self.sprite.width / 2), bottom=0,
-            animate_position=ft.Animation(100, ft.AnimationCurve.EASE_IN_OUT)
-        )
-    
+    # * === MOVEMENT LOOP ===
     async def _movement_loop(self):
         """A simple implementation of what the movement loop should be."""
         while not self.states.dead:
@@ -92,14 +96,8 @@ class Entity:
         """Starts the movement loop and stores it in a variable."""
         self._debug_msg("Starting Movement Loop!")
         self._movement_loop_task = self.page.run_task(self._movement_loop)
-        
-    def __call__(self):
-        """
-        Returns the `Stack` control. Make sure to always put this
-        in another stack.
-        """
-        return self.stack
     
+    # * === COMPONENT METHODS ===
     def _get_spr_path(self, state: str, index: int, *, debug: bool = False):
         """Returns a formatted str path for sprites."""
         _parent = self._spr_path.parent
@@ -108,9 +106,112 @@ class Entity:
         if debug: self._debug_msg(f"Generated spr_path: {spr_path}")
         return spr_path.as_posix()
     
-    def _update_stack(self):
-        try: self.stack.update()
-        except RuntimeError: pass
+    def _make_stack(self):
+        """Returns a stack positioned at the bottom-center of the screen."""
+        self._debug_msg(f"Created Entity of faction: {self.faction}")
+        return ft.Stack(
+            controls=[
+                ft.Container(
+                    self.sprite,
+                    # border=ft.Border.all(2),
+                    data=self.faction
+                )
+            ],
+            left=(self.page.width / 2) - (self.sprite.width / 2), bottom=0,
+            animate_position=ft.Animation(100, ft.AnimationCurve.EASE_IN_OUT)
+        )
+    
+    def _safe_update(self, *controls: ft.Control):
+        """
+        Updates multiple controls safely.\n
+        As of Flet version `0.70.0.dev6787`, accessing the `.page` property
+        will raise a `RuntimeError` exception.
+        """
+        for control in controls:
+            try: control.update()
+            except RuntimeError: pass
+    
+    async def _update_health_bar(self):
+        """Updates the health bar if provided."""
+        if self.health_bar is None: return
+        await asyncio.sleep(0.1)
+        self.health_bar.value = abs((self.stats.health / self.stats.max_health) - 1)
+        self._safe_update(self.health_bar)
+    
+    # * === OTHER HELPERS ===
+    def _reset_states(self, new_states: EntityStates = None):
+        """Reset entity state values back to their defaults."""
+        if new_states is None: new_states = EntityStates()
+        self.states = new_states
+    
+    def _reset_stats(self, new_stats: EntityStates = None):
+        """Reset entity statistics back to their defaults."""
+        if new_stats is None: new_stats = EntityStats()
+        self.stats = new_stats
+    
+    # * === CALLABLE ACTIONS/EVENTS ===
+    def __call__(self):
+        """
+        Returns the `Stack` control. Make sure to always put this
+        in another stack.
+        """
+        return self.stack
+    
+    def attack(self):
+        """
+        Simple spam-proof implementation for `attack()`.
+        Returns `False` if action is interrupted.
+        """
+        if self.states.is_attacking:
+            self._debug_msg(f"{self.name} is already attacking")
+            return False
+        if self.states.dead:
+            self._debug_msg(f"{self.name} cannot attack while dead")
+            return False
+        if self.states.taking_damage:
+            self._debug_msg(f"{self.name} cannot attack while being damaged")
+            return False
+        return True
+        # ? Implement the rest of the logic here
+    
+    def take_damage(self):
+        """
+        Simple spam-proof implementation for `take_damage()`.
+        Returns `False` if action is interrupted.
+        """
+        if self.states.dead:
+            self._debug_msg(f"{self.name} is already dead")
+            return False
+        if self.states.taking_damage:
+            self._debug_msg(f"{self.name} cannot be damaged again yet")
+            return False
+        return True
+        # ? Implement the rest of the logic here
+    
+    def death(self):
+        """
+        Simple spam-proof implementation for `death()`.
+        Returns `False` if action is interrupted.
+        """
+        if self.states.dead:
+            self._debug_msg(f"{self.name} is already dead")
+            return False
+        return True
+        # ? Implement the rest of the logic here
+        
+    def revive(self):
+        """
+        Simple spam-proof implementation for `revive()`.
+        Returns `False` if action is interrupted.
+        """
+        if not self.states.dead:
+            self._debug_msg(f"{self.name} is not dead")
+            return False
+        elif not self.states.revivable:
+            self._debug_msg(f"{self.name} is not yet ready to be revived")
+            return False
+        return True
+        # ? Implement the rest of the logic here
 
 
 # * Test for the Entity class; a simple implementation

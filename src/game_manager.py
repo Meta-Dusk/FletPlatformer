@@ -5,6 +5,7 @@ from audio.audio_manager import AudioManager
 from utilities.keyboard_manager import held_keys, start as km_start
 from utilities.tasks import attempt_cancel
 from entities.player import Player
+from entities.enemy import Enemy, EnemyType
 from bg_loops import light_mv_loop, stage_panning_loop
 from backgrounds import bg_image_forest
 
@@ -45,13 +46,16 @@ class GameManager:
         # Player
         self.player = Player(self.page, self.audio_manager, held_keys)
         
+        # Test Enemy
+        self.gobby = Enemy(EnemyType.GOBLIN, self.page, self.audio_manager, debug=True)
+        
         # Stacks (BG/FG)
         self.background_stack = ft.Stack(expand=True)
         self.foreground_stack = ft.Stack(expand=True)
         
         def bg_forest(index: int): return bg_image_forest(index, self.page)
         
-        for i in range(7): self.background_stack.controls.append(bg_forest(i))
+        for i in range(1, 7): self.background_stack.controls.append(bg_forest(i))
         self.background_stack.controls.append(bg_forest(9))
         self.foreground_stack.controls.extend([bg_forest(8), bg_forest(10)])
 
@@ -93,6 +97,7 @@ class GameManager:
             controls=[
                 self.background_stack,
                 self.player(), # ? Call player to get the Stack control
+                self.gobby(),
                 self.foreground_stack,
                 buttons_row
             ], expand=True

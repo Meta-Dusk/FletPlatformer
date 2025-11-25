@@ -2,7 +2,7 @@ import asyncio, random
 import flet as ft
 from pynput import keyboard
 
-from entities.entity import Entity, EntityStates, EntityStats
+from entities.entity import Entity, EntityStates, EntityStats, Factions
 from images import Sprite
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
@@ -15,7 +15,8 @@ class Player(Entity):
     """Handles the player's actions and states."""
     def __init__(
         self, page: ft.Page, audio_manager: AudioManager,
-        held_keys: set = set(), restrict_traversal: bool = True
+        held_keys: set = set(), restrict_traversal: bool = True,
+        *, debug: bool = False
     ):
         self.held_keys = held_keys
         self.restrict_traversal = restrict_traversal
@@ -23,20 +24,19 @@ class Player(Entity):
             src="images/player/idle_0.png", width=180, height=180,
             offset=ft.Offset(0, 0.15)
         )
-        name = "Player 1"
+        self.name = "Hero Knight"
+        self._handler_str = "Player"
+        self.faction = Factions.HUMAN
         super().__init__(
-            sprite=sprite, name=name, page=page,
-            audio_manager=audio_manager
+            sprite=sprite, name=self.name, page=page,
+            audio_manager=audio_manager, debug=debug
         )
         self._jump_task: asyncio.Task = None
         self._attack_task: asyncio.Task = None
         self._take_hit_task: asyncio.Task = None
         self._animation_loop_task: asyncio.Task = None
-        self._handler_str = "Player"
-        self._revivable: bool = False
-        self.health_bar: ft.ProgressBar = None
     
-    # ? === LOOPING ANIMATIONS ===
+    # * === LOOPING ANIMATIONS ===
     async def _animation_loop(self):
         """Handles the player's different animation loops."""
         index: int = 0
@@ -73,7 +73,7 @@ class Player(Entity):
         """Starts the animation loop and stores it in a variable."""
         self._animation_loop_task = self.page.run_task(self._animation_loop)
     
-    # ? === MOVEMENT LOOP OVERRIDE ===
+    # * === CUSTOM MOVEMENT LOOP ===
     async def _movement_loop(self):
         """Handles player movements."""
         while True:
@@ -104,7 +104,7 @@ class Player(Entity):
                         self._play_sfx(sfx.armor.rustle_1)
                     
                     # ? Checks for user inputting movement
-                    if dx > 0 or dx < 0 or dy > 0 or dy < 0:
+                    if dx != 0 or dy != 0:
                         self.states.is_moving = True
                         if is_shift_held: self.states.sprint = True
                         else: self.states.sprint = False
@@ -123,7 +123,6 @@ class Player(Entity):
                     
             elif self.stack.bottom > 0 and not self.states.jumped:
                 # ? Gravity
-                # if dx == 0 and dy == 0: # ? Turns off gravity during movement
                 self.states.is_falling = True
                 self.stack.bottom -= 25
                 if self.stack.bottom <= 0:
@@ -131,11 +130,10 @@ class Player(Entity):
                     self._play_sfx(sfx.player.exhale)
                 
             elif self.stack.bottom == 0: self.states.is_falling = False
-            try: self.stack.update()
-            except RuntimeError: pass
+            self._safe_update(self.stack)
             await asyncio.sleep(0.05) # ? Delay for logic just in case
     
-    # ? === ONE-SHOT ANIMATIONS ===
+    # * === ONE-SHOT ANIMATIONS ===
     async def _revive_anim(self):
         """Handles the player's revival animation."""
         index = 10
@@ -185,7 +183,7 @@ class Player(Entity):
                 self._play_sfx(sfx.item.keys_drop)
                 self._play_sfx(sfx.sword.blade_drop)
             self.sprite.change_src(self._get_spr_path("death", i))
-        self._revivable = True
+        self.states.revivable = True
     
     async def _take_hit_anim(self):
         """Handles the player's taking damage animation."""
@@ -196,18 +194,15 @@ class Player(Entity):
         self.states.taking_damage = False
         self._take_hit_task = None
     
-    # ? === CALLABLE PLAYER ACTIONS/EVENTS ===
+    # * === CALLABLE PLAYER ACTIONS/EVENTS ===
     async def death(self):
         """Cancels all running tasks, and plays the death animation."""
-        if self.states.dead:
-            self._debug_msg(f"{self.name} is already dead")
-            return
+        if not super().death(): return
         self._debug_msg(f"{self.name} has died!")
-        self._revivable = False
-        self._reset_states()
-        self.states.dead = True
-        self.stats.health = 0
+        self._reset_states(EntityStates(dead=True))
+        self._reset_stats(EntityStats(health=0))
         await self._update_health_bar()
+        
         attempt_cancel(self._animation_loop_task)
         self._cancel_temp_tasks()
         await self._death_anim()
@@ -216,62 +211,53 @@ class Player(Entity):
         """Play jump action."""
         if self.stack.bottom != 0 or self._interrupt_action(): return
         self.stack.bottom += self._get_jump_dy()
-        try: self.stack.update()
-        except RuntimeError: pass
+        self._safe_update(self.stack)
         self.states.jumped = True
-        self._jump_task = asyncio.create_task(
-            coro=self._jump_anim(),
-            name="[Player] Jumping :: Start animation"
-        )
+        self._jump_task = self.page.run_task(self._jump_anim)
     
     def attack(self):
         """Player attack. Combo cycles: 1 -> 2 -> 1."""
-        if self.states.is_attacking or self.states.taking_damage or self.states.dead: return
+        if not super().attack(): return
         self.states.attack_phase += 1
         if self.states.attack_phase > 2 or self.states.jumped: self.states.attack_phase = 1
         self._debug_msg(f"Attacking! Phase: {self.states.attack_phase}")
         self.states.is_attacking = True
-        self._attack_task = asyncio.create_task(
-            coro=self._attack_anim(),
-            name=f"[{self._handler_str}] Attacking :: Start animation"
-        )
+        self._attack_task = self.page.run_task(self._attack_anim)
         
     async def take_damage(self, damage_amount: float):
         """Decrease player's health with logic."""
-        if self.states.dead:
-            self._debug_msg(f"{self.name} is already dead")
-            return
-        if self.states.taking_damage:
-            self._debug_msg(f"{self.name} cannot be damaged again yet")
-            return
+        if not super().take_damage(): return
         self.stats.health -= damage_amount
         self._debug_msg(f"Took damage: {damage_amount}, health is now: {self.stats.health}")
         self.states.taking_damage = True
+        if (self.states.is_attacking and self.states.jumped) or self.states.is_attacking:
+            attempt_cancel(self._attack_task)
+            self.states.is_attacking = False
+            self._safe_update(self.stack)
         if self.stats.health <= 0: await self.death()
-        else:
-            self._take_hit_task = asyncio.create_task(
-                coro=self._take_hit_anim(),
-                name=f"[{self._handler_str}] Taking Damage :: Start animation"
-            )
+        else: self._take_hit_task = self.page.run_task(self._take_hit_anim)
         await self._update_health_bar()
     
     async def revive(self):
-        if not self.states.dead:
-            self._debug_msg(f"{self.name} is not dead")
-            return
-        elif not self._revivable:
-            self._debug_msg(f"{self.name} is not yet ready to be revived")
-            return
-        self._revivable = False
+        if not super().revive(): return
+        self.states.revivable = False
         self._debug_msg(f"Reviving: {self.name}")
         await self._revive_anim()
         self._reset_states()
-        self.stats.health = self.stats.max_health
+        self._reset_stats()
         attempt_cancel(self._movement_loop_task)
         await self._update_health_bar()
         self._start_loops()
     
-    # ? === OTHER HELPERS ===
+    def __call__(self, start_loops: bool = True):
+        """
+        Returns the `Stack` control, and starts the movement and
+        animation loops.
+        """
+        if start_loops: self._start_loops()
+        return super().__call__()
+    
+    # * === OTHER HELPERS ===
     def _cancel_temp_tasks(self):
         """Cancels all running temporary tasks."""
         tasks = [
@@ -284,14 +270,6 @@ class Player(Entity):
     def _start_loops(self):
         self._start_animation_loop()
         self._start_movement_loop()
-    
-    def __call__(self, start_loops: bool = True):
-        """
-        Returns the `Stack` control, and starts the movement and
-        animation loops.
-        """
-        if start_loops: self._start_loops()
-        return super().__call__()
     
     def _interrupt_action(self):
         """
@@ -307,21 +285,6 @@ class Player(Entity):
             self._cancel_temp_tasks()
             return False
     
-    def _reset_states(self):
-        """Reset palyer state values back to their defaults."""
-        self.states = EntityStates()
-    
-    def _reset_stats(self):
-        """Reset player statistics back to their defaults."""
-        self.stats = EntityStats()
-    
-    async def _update_health_bar(self):
-        if self.health_bar is None: return
-        await asyncio.sleep(0.1)
-        self.health_bar.value = abs((self.stats.health / self.stats.max_health) - 1)
-        try: self.health_bar.update()
-        except RuntimeError: pass
-        
     def _get_jump_dy(self):
         """Returns the total jump distance."""
         _dist = float(self.stats.jump_distance)
@@ -342,10 +305,10 @@ def test(page: ft.Page):
     audio_manager.initialize()
     km_start()
     
-    async def player_die(_): await player.take_damage(5)
+    async def player_dmg(_): await player.take_damage(5)
     
     player = Player(page, audio_manager, held_keys)
-    take_dmg_btn = ft.Button(content="Take Damage", on_click=player_die, left=60, top=0)
+    take_dmg_btn = ft.Button(content="Take Damage", on_click=player_dmg, left=60, top=0)
     stage = ft.Stack(controls=[player(), take_dmg_btn], expand=True)
     
     async def on_keyboard_event(e: ft.KeyboardEvent):
