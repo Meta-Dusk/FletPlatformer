@@ -15,8 +15,8 @@ class Player(Entity):
     """Handles the player's actions and states."""
     def __init__(
         self, page: ft.Page, audio_manager: AudioManager,
-        held_keys: set = set(), restrict_traversal: bool = True,
-        *, debug: bool = False
+        held_keys: set = set(), *, debug: bool = False,
+        restrict_traversal: bool = True
     ):
         self.held_keys = held_keys
         self.restrict_traversal = restrict_traversal
@@ -26,10 +26,10 @@ class Player(Entity):
         )
         self.name = "Hero Knight"
         self._handler_str = "Player"
-        self.faction = Factions.HUMAN
         super().__init__(
             sprite=sprite, name=self.name, page=page,
-            audio_manager=audio_manager, debug=debug
+            audio_manager=audio_manager, faction=Factions.HUMAN,
+            debug=debug
         )
         self._jump_task: asyncio.Task = None
         self._attack_task: asyncio.Task = None
@@ -71,7 +71,8 @@ class Player(Entity):
     
     def _start_animation_loop(self):
         """Starts the animation loop and stores it in a variable."""
-        self._animation_loop_task = self.page.run_task(self._animation_loop)
+        # self._animation_loop_task = self.page.run_task(self._animation_loop)
+        self._animation_loop_task = asyncio.create_task(self._animation_loop())
     
     # * === CUSTOM MOVEMENT LOOP ===
     async def _movement_loop(self):
@@ -91,17 +92,21 @@ class Player(Entity):
                     # if 's' in keyboard_manager.held_keys: dy += step # ? Use for flying downwards
                     if 'a' in self.held_keys: dx -= step
                     if 'd' in self.held_keys: dx += step
-                    if dx != 0 or dy != 0: self._debug_msg(f"Moving with: ({dx}, {dy})")
                     if (self.stack.left + dx) <= 0 or (self.stack.left + dx + self.sprite.width) >= self.page.width: dx = 0
                     self.stack.left += dx
                     self.stack.bottom -= dy
-                    
-                    if ( # ? Manages asset flip direction
-                        (dx > 0 and self.sprite.scale.scale_x < 0) or
-                        (dx < 0 and self.sprite.scale.scale_x > 0)
-                    ): 
-                        self.sprite.flip_x()
-                        self._play_sfx(sfx.armor.rustle_1)
+                    if dx != 0 or dy != 0:
+                        self._debug_msg(f"Moving with: ({dx}, {dy}), Sprite(scale_x): {self.sprite.scale.scale_x}")
+                        # self.sprite.scale.scale_x = 2 if dx > 0 else -2
+                        
+                        if ( # ? Manages asset flip direction
+                            (dx > 0 and self.sprite.scale.scale_x < 0) or
+                            (dx < 0 and self.sprite.scale.scale_x > 0)
+                        ):
+                            # self._debug_msg(f"Flipping: {self.sprite.scale.scale_x} -> ", end="")
+                            self.sprite.flip_x()
+                            # self._debug_msg(self.sprite.scale.scale_x, include_handler=False)
+                            self._play_sfx(sfx.armor.rustle_1)
                     
                     # ? Checks for user inputting movement
                     if dx != 0 or dy != 0:
@@ -130,7 +135,7 @@ class Player(Entity):
                     self._play_sfx(sfx.player.exhale)
                 
             elif self.stack.bottom == 0: self.states.is_falling = False
-            self._safe_update(self.stack)
+            if self.states.is_moving or self.states.is_falling: self._safe_update(self.stack)
             await asyncio.sleep(0.05) # ? Delay for logic just in case
     
     # * === ONE-SHOT ANIMATIONS ===
@@ -213,7 +218,8 @@ class Player(Entity):
         self.stack.bottom += self._get_jump_dy()
         self._safe_update(self.stack)
         self.states.jumped = True
-        self._jump_task = self.page.run_task(self._jump_anim)
+        # self._jump_task = self.page.run_task(self._jump_anim)
+        self._jump_task = asyncio.create_task(self._jump_anim())
     
     def attack(self):
         """Player attack. Combo cycles: 1 -> 2 -> 1."""
@@ -222,7 +228,8 @@ class Player(Entity):
         if self.states.attack_phase > 2 or self.states.jumped: self.states.attack_phase = 1
         self._debug_msg(f"Attacking! Phase: {self.states.attack_phase}")
         self.states.is_attacking = True
-        self._attack_task = self.page.run_task(self._attack_anim)
+        # self._attack_task = self.page.run_task(self._attack_anim)
+        self._attack_task = asyncio.create_task(self._attack_anim())
         
     async def take_damage(self, damage_amount: float):
         """Decrease player's health with logic."""
@@ -235,7 +242,8 @@ class Player(Entity):
             self.states.is_attacking = False
             self._safe_update(self.stack)
         if self.stats.health <= 0: await self.death()
-        else: self._take_hit_task = self.page.run_task(self._take_hit_anim)
+        # else: self._take_hit_task = self.page.run_task(self._take_hit_anim)
+        else: self._take_hit_task = asyncio.create_task(self._take_hit_anim())
         await self._update_health_bar()
     
     async def revive(self):
@@ -301,13 +309,13 @@ def test(page: ft.Page):
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     
-    audio_manager = AudioManager()
+    audio_manager = AudioManager(debug=False)
     audio_manager.initialize()
     km_start()
     
     async def player_dmg(_): await player.take_damage(5)
     
-    player = Player(page, audio_manager, held_keys)
+    player = Player(page, audio_manager, held_keys, debug=True)
     take_dmg_btn = ft.Button(content="Take Damage", on_click=player_dmg, left=60, top=0)
     stage = ft.Stack(controls=[player(), take_dmg_btn], expand=True)
     

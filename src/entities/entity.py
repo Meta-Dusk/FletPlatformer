@@ -44,6 +44,7 @@ class Entity:
     def __init__(
         self, sprite: Sprite, name: str, page: ft.Page,
         audio_manager: AudioManager = None,
+        faction: Factions = None,
         *, debug: bool = True
     ):
         self.sprite = sprite
@@ -51,8 +52,8 @@ class Entity:
         self.page = page
         self.audio_manager = audio_manager
         self.debug = debug
+        self.faction: Factions = faction
         self._handler_str: str = "Entity"
-        self.faction: Factions = None
         self.states: EntityStates = EntityStates()
         self.stats: EntityStats = EntityStats()
         self.stack: ft.Stack = self._make_stack()
@@ -86,10 +87,9 @@ class Entity:
             if ( # ? Manages asset flip direction
                 (dx > 0 and self.sprite.scale.scale_x < 0) or
                 (dx < 0 and self.sprite.scale.scale_x > 0)
-            ): self.sprite.flip_x()
+            ): self.sprite.flip_x(update_ctrl=False)
             
-            try: self.stack.update()
-            except RuntimeError: pass
+            self._safe_update(self.stack)
             await asyncio.sleep(0.5)
     
     def _start_movement_loop(self):

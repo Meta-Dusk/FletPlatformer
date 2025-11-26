@@ -6,6 +6,7 @@ from utilities.keyboard_manager import held_keys, start as km_start
 from utilities.tasks import attempt_cancel
 from entities.player import Player
 from entities.enemy import Enemy, EnemyType
+from entities.entity import Entity
 from bg_loops import light_mv_loop, stage_panning_loop
 from backgrounds import bg_image_forest
 
@@ -19,6 +20,8 @@ class GameManager:
         self.audio_manager: AudioManager = None
         self.background_stack: ft.Stack = None
         self.foreground_stack: ft.Stack = None
+        self.stage: ft.Stack = None
+        self.entity_list: list[Entity] = []
         
         # Task Management
         self.running_tasks: list[asyncio.Task] = []
@@ -44,10 +47,12 @@ class GameManager:
     async def _setup_ui(self):
         """Initializes Player, Stacks, and HUD."""
         # Player
-        self.player = Player(self.page, self.audio_manager, held_keys)
+        self.player = Player(self.page, self.audio_manager, held_keys, debug=True)
         
         # Test Enemy
-        self.gobby = Enemy(EnemyType.GOBLIN, self.page, self.audio_manager, debug=True)
+        self.gobby = Enemy(EnemyType.GOBLIN, self.page, self.audio_manager, self.player)
+        
+        self.entity_list.extend([self.player, self.gobby])
         
         # Stacks (BG/FG)
         self.background_stack = ft.Stack(expand=True)
@@ -93,10 +98,10 @@ class GameManager:
         self.player.stack.controls.extend([nametag, health_bar])
         
         # Composition
-        stage = ft.Stack(
+        self.stage = ft.Stack(
             controls=[
                 self.background_stack,
-                self.player(), # ? Call player to get the Stack control
+                self.player(),
                 self.gobby(),
                 self.foreground_stack,
                 buttons_row
@@ -104,7 +109,7 @@ class GameManager:
         )
         
         await self.page.window.center()
-        self.page.add(stage)
+        self.page.add(self.stage)
         
     # * --- Event Handlers ---
     def _da_btn_on_change(self, e: ft.ControlEvent): self.audio_manager.directional_sfx = e.data
@@ -127,8 +132,10 @@ class GameManager:
             await stage_panning_loop(
                 self.background_stack,
                 self.foreground_stack,
+                self.page,
                 self.player,
-                self.page
+                self.entity_list,
+                self.stage
             )
             
         # Store tasks so we can cancel them later

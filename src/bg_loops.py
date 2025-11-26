@@ -1,6 +1,7 @@
 import asyncio
 import flet as ft
 from entities.player import Player
+from entities.entity import Entity, Factions
 
 
 async def light_mv_loop(background_stack: ft.Stack):
@@ -25,8 +26,10 @@ async def light_mv_loop(background_stack: ft.Stack):
 async def stage_panning_loop(
     background_stack: ft.Stack,
     foreground_stack: ft.Stack,
+    page: ft.Page,
     player: Player,
-    page: ft.Page
+    entity_list: list[Entity],
+    stage: ft.Stack
 ):
     # Constants for configuration
     PAN_STEP = 928 / 2
@@ -40,28 +43,23 @@ async def stage_panning_loop(
         for bg in background_stack.controls:
             if bg.data not in IGNORED_LAYERS:
                 bg.left += step_amount
-                bg.update()
                 
         # Move Foregrounds
-        for fg in foreground_stack.controls:
-            fg.left += step_amount
-            fg.update()
+        for fg in foreground_stack.controls: fg.left += step_amount
             
-        # Move Player & Handle Animation
-        player.states.disable_movement = True
+        # Handle Entities
+        for entity in entity_list:
+            entity.states.disable_movement = True
+            entity.stack.left += step_amount
+            entity.stack.animate_position.duration = PAN_ANIM_DURATION
         
-        # Save previous animation speed, set to slow pan speed
-        prev_dur = player.stack.animate_position.duration
-        player.stack.animate_position.duration = PAN_ANIM_DURATION
-        
-        player.stack.left += step_amount
-        player.stack.update()
+        stage.update()
         await asyncio.sleep(2)
         
-        # Restore Player State
-        player.states.disable_movement = False
-        player.stack.animate_position.duration = prev_dur
-        player.stack.update()
+        # Restore Entity States
+        for entity in entity_list:
+            entity.states.disable_movement = False
+            entity.stack.animate_position.duration = 100
         
     while True:
         await asyncio.sleep(1)

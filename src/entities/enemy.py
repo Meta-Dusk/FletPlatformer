@@ -17,6 +17,7 @@ class EnemyData:
     name: str
     width: ft.Number
     height: ft.Number
+    melee_range: int = 100
 
 class EnemyType(Enum):
     """Available enemy types."""
@@ -43,17 +44,17 @@ class Enemy(Entity):
         )
         self.name = type.value.name
         self._handler_str = self.name
-        self.faction = Factions.NONHUMAN
         super().__init__(
             sprite=_sprite, name=self.name, page=page,
-            audio_manager=audio_manager, debug=debug
+            audio_manager=audio_manager, faction=Factions.NONHUMAN,
+            debug=debug
         )
         # ? No jump sprites available
         self._attack_task: asyncio.Task = None
         self._take_hit_task: asyncio.Task = None
         self._animation_loop_task: asyncio.Task = None
         self.is_idling: bool = False
-        self.melee_range: int = 100
+        self.melee_range: int = type.value.melee_range
         self._cached_player_stack = None
     
     # * === LOOPING ANIMATIONS ===
@@ -94,35 +95,28 @@ class Enemy(Entity):
                 continue
             
             dx, dy = 0, 0
-            if not self._is_player_in_range():
-                self._debug_msg("Idling: No player in range")
-                rand_m = random.randint(-1, 1)
-                if rand_m == 0: continue
-                dx += self.stats.movement_speed * rand_m
-            else:
+            if not self._is_player_in_range(): # ? Chase
+                if self.target.stack.left > self.stack.left: dx = self.stats.movement_speed
+                elif self.target.stack.left < self.stack.left: dx = -self.stats.movement_speed
+            else: # ? Attack
                 self._debug_msg("Attacking player")
                 self.attack()
+                await asyncio.sleep(1)
                 continue
             self._debug_msg(f"Moving with: ({dx}, {dy})")
             self.stack.left += dx
             self.stack.bottom += dy
             
-            if ( # ? Manages asset flip direction
-                (dx > 0 and self.sprite.scale.scale_x < 0) or
-                (dx < 0 and self.sprite.scale.scale_x > 0)
-            ): self.sprite.flip_x()
+            if dx != 0 or dy != 0:
+                self.states.is_moving = True
+                # self.sprite.scale.scale_x = 2 if dx > 0 else -2
+                if ( # ? Manages asset flip direction
+                    (dx > 0 and self.sprite.scale.scale_x < 0) or
+                    (dx < 0 and self.sprite.scale.scale_x > 0)
+                ): self.sprite.flip_x(update_ctrl=False)
             
-            if dx != 0 or dy != 0: self.states.is_moving = True
-            
-            self._safe_update(self.stack)
+            if self.states.is_moving or self.states.is_falling: self._safe_update(self.stack)
             await asyncio.sleep(0.1)
-            self.states.is_moving = False
-            
-            if self._is_player_in_range(): continue
-            if random.randint(1, 2) == 1: continue
-            rand_w = round(random.randint(1000, 3000) / 1000, 3)
-            self._debug_msg(f"Idling for {rand_w}s")
-            await asyncio.sleep(rand_w)
         
     
     # * === ONE-SHOT ANIMATIONS ===
@@ -220,18 +214,13 @@ class Enemy(Entity):
     
     def _is_player_in_range(self):
         """Checks if the specifically targeted player is in range."""
-        # 1. Safety Checks
-        if self.target is None: 
-            return False
-        if self.target.states.dead:
-            return False
-
-        # 2. Get Dimensions (We have direct access now!)
+        if self.target is None: return False
+        if self.target.states.dead: return False
+        
         # We assume the target (Player) has a sprite and stack
         p_w = self.target.sprite.width
         p_h = self.target.sprite.height
         
-        # 3. Perform the Check using your collision utility
         return is_in_range(
             entity1_stack=self.stack, 
             entity1_w=self.sprite.width, 
@@ -280,6 +269,7 @@ def test(page: ft.Page):
     enemy = Enemy(EnemyType.GOBLIN, page, audio_manager, dummy_player, debug=True)
     
     stage = ft.Stack(controls=[dummy_player(), enemy(), buttons_row], expand=True)
+    dummy_player._start_movement_loop()
     
     page.add(stage)
     
