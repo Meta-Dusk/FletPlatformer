@@ -47,10 +47,10 @@ class GameManager:
     async def _setup_ui(self):
         """Initializes Player, Stacks, and HUD."""
         # Player
-        self.player = Player(self.page, self.audio_manager, held_keys, debug=True)
+        self.player = Player(self.page, self.audio_manager, held_keys)
         
         # Test Enemy
-        self.gobby = Enemy(EnemyType.GOBLIN, self.page, self.audio_manager, self.player)
+        self.gobby = Enemy(EnemyType.GOBLIN, self.page, self.audio_manager, self.player, debug=True)
         
         self.entity_list.extend([self.player, self.gobby])
         

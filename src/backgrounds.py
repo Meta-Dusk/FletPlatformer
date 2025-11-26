@@ -8,13 +8,12 @@ DEFAULT_DURATION = 1000
 
 # Map index to specific durations (None = No animation)
 LAYER_DURATIONS = {
-    0: None,       # ? Static layer
     1: 2000,
     2: 1800,
-    3: 120000,      # ? Dynamic layer (Light)
+    3: 120000, # ? Dynamic layer (Light)
     4: 1600,
     5: 1400,
-    6: 120000,      # ? Dynamic layer (Light)
+    6: 120000, # ? Dynamic layer (Light)
     7: 1200,
 }
 

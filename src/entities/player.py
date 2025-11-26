@@ -71,63 +71,72 @@ class Player(Entity):
     
     def _start_animation_loop(self):
         """Starts the animation loop and stores it in a variable."""
-        # self._animation_loop_task = self.page.run_task(self._animation_loop)
-        self._animation_loop_task = asyncio.create_task(self._animation_loop())
+        self._animation_loop_task = self.page.run_task(self._animation_loop)
     
     # * === CUSTOM MOVEMENT LOOP ===
     async def _movement_loop(self):
         """Handles player movements."""
         while True:
             if not self.states.dead and not self.states.disable_movement:
-                # is_ctrl_held = keyboard.Key.ctrl_l in keyboard_manager.held_keys # ? Enable if needed
                 is_shift_held = keyboard.Key.shift in self.held_keys
+                # is_ctrl_held = keyboard.Key.ctrl_l in keyboard_manager.held_keys # ? Enable if needed
                 # print(f"keyboard_manager.held_keys: {keyboard_manager.held_keys} | shift:{is_shift_held}, ctrl:{is_ctrl_held}")
                 if (
                     self.page.window.focused and
                     (not self.states.is_attacking and not self.states.taking_damage)
                 ):
+                    current_scale_x = self.sprite.scale.scale_x if hasattr(self.sprite.scale, "scale_x") else self.sprite.scale
+                    start_facing_sign = 1 if current_scale_x > 0 else -1
+                    
                     step = self.stats.movement_speed * 2 if is_shift_held else self.stats.movement_speed
                     dx, dy = 0, 0
+                    
                     # if 'w' in keyboard_manager.held_keys: dy -= step # ? Use for flying upwards
                     # if 's' in keyboard_manager.held_keys: dy += step # ? Use for flying downwards
                     if 'a' in self.held_keys: dx -= step
                     if 'd' in self.held_keys: dx += step
                     if (self.stack.left + dx) <= 0 or (self.stack.left + dx + self.sprite.width) >= self.page.width: dx = 0
-                    self.stack.left += dx
-                    self.stack.bottom -= dy
-                    if dx != 0 or dy != 0:
-                        self._debug_msg(f"Moving with: ({dx}, {dy}), Sprite(scale_x): {self.sprite.scale.scale_x}")
-                        # self.sprite.scale.scale_x = 2 if dx > 0 else -2
-                        
-                        if ( # ? Manages asset flip direction
-                            (dx > 0 and self.sprite.scale.scale_x < 0) or
-                            (dx < 0 and self.sprite.scale.scale_x > 0)
-                        ):
-                            # self._debug_msg(f"Flipping: {self.sprite.scale.scale_x} -> ", end="")
-                            self.sprite.flip_x()
-                            # self._debug_msg(self.sprite.scale.scale_x, include_handler=False)
-                            self._play_sfx(sfx.armor.rustle_1)
                     
-                    # ? Checks for user inputting movement
+                    # ? Movement
                     if dx != 0 or dy != 0:
                         self.states.is_moving = True
                         if is_shift_held: self.states.sprint = True
                         else: self.states.sprint = False
+                        
+                        self._debug_msg(f"Moving with: ({dx}, {dy})")
+                        self.stack.left += dx
+                        self.stack.bottom -= dy
+                        
+                        # ? Sprite flipping logic
+                        desired_sign = start_facing_sign
+                        if dx > 0: desired_sign = 1
+                        elif dx < 0: desired_sign = -1
+                        
+                        has_flipped = False
+                        if desired_sign != start_facing_sign:
+                            new_scale = abs(current_scale_x) * desired_sign
+                            self.sprite.scale = ft.Scale(scale_x=new_scale, scale_y=self.sprite.scale.scale_y)
+                            has_flipped = True
+                        
+                        if has_flipped: 
+                            self.sprite.try_update()
+                            self._play_sfx(sfx.armor.rustle_1)
                     else: self.states.is_moving = False
+                    
                 else:
-                    # Reset state if doing nothing or window not focused
+                    # ? Reset state if doing nothing or window not focused
                     self.states.is_moving = False
                     self.states.sprint = False
                     
-            elif self.states.disable_movement: self.states.is_moving = False
+            else: self.states.is_moving = False
             
+            # ? Grounding
             if self.stack.bottom < 0:
-                # ? Grounding
                 self.stack.bottom += 10
                 if self.stack.bottom > 0: self.stack.bottom = 0
-                    
+                
+            # ? Gravity
             elif self.stack.bottom > 0 and not self.states.jumped:
-                # ? Gravity
                 self.states.is_falling = True
                 self.stack.bottom -= 25
                 if self.stack.bottom <= 0:
@@ -218,8 +227,7 @@ class Player(Entity):
         self.stack.bottom += self._get_jump_dy()
         self._safe_update(self.stack)
         self.states.jumped = True
-        # self._jump_task = self.page.run_task(self._jump_anim)
-        self._jump_task = asyncio.create_task(self._jump_anim())
+        self._jump_task = self.page.run_task(self._jump_anim)
     
     def attack(self):
         """Player attack. Combo cycles: 1 -> 2 -> 1."""
@@ -228,8 +236,7 @@ class Player(Entity):
         if self.states.attack_phase > 2 or self.states.jumped: self.states.attack_phase = 1
         self._debug_msg(f"Attacking! Phase: {self.states.attack_phase}")
         self.states.is_attacking = True
-        # self._attack_task = self.page.run_task(self._attack_anim)
-        self._attack_task = asyncio.create_task(self._attack_anim())
+        self._attack_task = self.page.run_task(self._attack_anim)
         
     async def take_damage(self, damage_amount: float):
         """Decrease player's health with logic."""
@@ -242,8 +249,7 @@ class Player(Entity):
             self.states.is_attacking = False
             self._safe_update(self.stack)
         if self.stats.health <= 0: await self.death()
-        # else: self._take_hit_task = self.page.run_task(self._take_hit_anim)
-        else: self._take_hit_task = asyncio.create_task(self._take_hit_anim())
+        else: self._take_hit_task = self.page.run_task(self._take_hit_anim)
         await self._update_health_bar()
     
     async def revive(self):

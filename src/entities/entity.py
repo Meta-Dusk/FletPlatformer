@@ -45,7 +45,8 @@ class Entity:
         self, sprite: Sprite, name: str, page: ft.Page,
         audio_manager: AudioManager = None,
         faction: Factions = None,
-        *, debug: bool = True
+        *, debug: bool = True,
+        stats: EntityStats = None
     ):
         self.sprite = sprite
         self.name = name
@@ -53,9 +54,10 @@ class Entity:
         self.audio_manager = audio_manager
         self.debug = debug
         self.faction: Factions = faction
+        if stats is None: stats = EntityStats()
         self._handler_str: str = "Entity"
         self.states: EntityStates = EntityStates()
-        self.stats: EntityStats = EntityStats()
+        self.stats: EntityStats = stats
         self.stack: ft.Stack = self._make_stack()
         self._movement_loop_task: asyncio.Task = None
         self._spr_path: Path = pathify(sprite.src)

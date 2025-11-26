@@ -1,7 +1,7 @@
 import asyncio
 import flet as ft
 from entities.player import Player
-from entities.entity import Entity, Factions
+from entities.entity import Entity
 
 
 async def light_mv_loop(background_stack: ft.Stack):
@@ -36,13 +36,21 @@ async def stage_panning_loop(
     EDGE_THRESHOLD = 20
     PAN_ANIM_DURATION = 1000 # ms
     IGNORED_LAYERS = {3, 6}  # Using a set for faster lookups
+    LAYER_STEPS = {
+        1: 0.2,
+        2: 0.4,
+        4: 0.6,
+        5: 0.8
+    }
     
     async def perform_pan(step_amount: float):
-        """Helper to move world elements and handle player state."""
+        """Helper to move world elements and handle entity states."""
         # Move Backgrounds
         for bg in background_stack.controls:
-            if bg.data not in IGNORED_LAYERS:
-                bg.left += step_amount
+            bg: ft.Image
+            if bg.data in IGNORED_LAYERS: continue
+            mul = LAYER_STEPS.get(bg.data, 1)
+            bg.left += step_amount * mul
                 
         # Move Foregrounds
         for fg in foreground_stack.controls: fg.left += step_amount

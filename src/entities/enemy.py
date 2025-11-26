@@ -47,7 +47,7 @@ class Enemy(Entity):
         super().__init__(
             sprite=_sprite, name=self.name, page=page,
             audio_manager=audio_manager, faction=Factions.NONHUMAN,
-            debug=debug
+            debug=debug, stats=EntityStats(movement_speed=12)
         )
         # ? No jump sprites available
         self._attack_task: asyncio.Task = None
@@ -72,10 +72,13 @@ class Enemy(Entity):
                 if index > 7: index = 0
                 await asyncio.sleep(0.075)
                 self.sprite.change_src(self._get_spr_path("run", index))
-            else: # Idle animation
+             
+             # Idle animation
+            else:
                 if index > 3: index = 0
                 await asyncio.sleep(0.1)
                 self.sprite.change_src(self._get_spr_path("idle", index))
+            
             
             index += 1
     
@@ -90,32 +93,56 @@ class Enemy(Entity):
         while not self.states.dead:
             if self.states.is_attacking or self.states.disable_movement:
                 self.states.is_moving = False
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.1)
                 continue
             
+            current_scale_x = self.sprite.scale.scale_x if hasattr(self.sprite.scale, "scale_x") else self.sprite.scale
+            start_facing_sign = 1 if current_scale_x > 0 else -1
             dx, dy = 0, 0
-            if not self._is_player_in_range(): # ? Chase
-                if self.target.stack.left > self.stack.left: dx = self.stats.movement_speed
-                elif self.target.stack.left < self.stack.left: dx = -self.stats.movement_speed
+            
+            if not self._is_player_in_range():
+                if self.target and not self.target.states.dead: # ? Chase
+                    self._debug_msg(f"Chasing {self.target.name}", end=" -> ")
+                    if self.target.stack.left > self.stack.left: dx = self.stats.movement_speed
+                    elif self.target.stack.left < self.stack.left: dx = -self.stats.movement_speed
+                    self.is_idling = False
+                else: # ? Idle
+                    self.states.is_moving = False 
+                    self._debug_msg("Attacking player")
+                    self.attack()
+                    continue
+                
             else: # ? Attack
                 self._debug_msg("Attacking player")
                 self.attack()
                 await asyncio.sleep(1)
                 continue
-            self._debug_msg(f"Moving with: ({dx}, {dy})")
-            self.stack.left += dx
-            self.stack.bottom += dy
             
             if dx != 0 or dy != 0:
+                self._debug_msg(f"Moving with: ({dx}, {dy})")
+                self.stack.left += dx
+                self.stack.bottom += dy
+                
                 self.states.is_moving = True
-                # self.sprite.scale.scale_x = 2 if dx > 0 else -2
-                if ( # ? Manages asset flip direction
-                    (dx > 0 and self.sprite.scale.scale_x < 0) or
-                    (dx < 0 and self.sprite.scale.scale_x > 0)
-                ): self.sprite.flip_x()
-            
+                desired_sign = start_facing_sign
+                if dx > 0: desired_sign = 1
+                elif dx < 0: desired_sign = -1
+                
+                has_flipped = False
+                if desired_sign != start_facing_sign:
+                    new_scale = abs(current_scale_x) * desired_sign
+                    self.sprite.scale = ft.Scale(scale_x=new_scale, scale_y=self.sprite.scale.scale_y)
+                    has_flipped = True
+                
+                if has_flipped: self.sprite.try_update()
+            else: self.states.is_moving = False
             if self.states.is_moving or self.states.is_falling: self._safe_update(self.stack)
-            await asyncio.sleep(0.1)
+            if self.is_idling and dx == 0:
+                wait_time = random.uniform(1.0, 3.0)
+                self._debug_msg(f"Idling for {wait_time}")
+                await asyncio.sleep(wait_time)
+                self.is_idling = False
+            else: await asyncio.sleep(0.1)
         
     
     # * === ONE-SHOT ANIMATIONS ===
@@ -214,7 +241,7 @@ class Enemy(Entity):
     def _is_player_in_range(self):
         """Checks if the specifically targeted player is in range."""
         if self.target is None: return False
-        if self.target.states.dead: return False
+        # if self.target.states.dead: return False
         
         # We assume the target (Player) has a sprite and stack
         p_w = self.target.sprite.width
@@ -255,8 +282,9 @@ def test(page: ft.Page):
     
     async def on_death(_): await enemy.death()
     async def on_damage(_): await enemy.take_damage(5)
+    async def on_attack(_): enemy.attack()
     
-    attack_btn = ft.Button("Attack", on_click=lambda _: enemy.attack())
+    attack_btn = ft.Button("Attack", on_click=on_attack)
     death_btn = ft.Button("Death", on_click=on_death)
     damage_btn = ft.Button("Take Damage", on_click=on_damage)
     buttons_row = ft.Row(controls=[attack_btn, death_btn, damage_btn], left=60, top=30)
