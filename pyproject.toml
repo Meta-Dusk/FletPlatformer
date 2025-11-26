@@ -1,6 +1,6 @@
 [project]
 name = "FletPlatformer"
-version = "0.2.2"
+version = "0.3.0"
 description = "A Platformer Game Made in Flet"
 readme = "README.md"
 requires-python = ">=3.13"

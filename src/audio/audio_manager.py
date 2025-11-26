@@ -1,7 +1,6 @@
 import pygame, os
 from pathlib import Path
 
-from audio.music_data import MusicList
 from utilities.file_management import get_asset_path
 from utilities.values import clamp
 
@@ -21,7 +20,7 @@ class AudioManager:
         self.debug = debug
         
         # Optimization: Cache loaded sounds so we don't read from disk every time
-        self._sfx_cache = {} 
+        self._sfx_cache: dict[Path, pygame.mixer.Sound] = {}
     
     def _debug_msg(self, msg: str):
         if self.debug:
@@ -43,10 +42,11 @@ class AudioManager:
         except Exception as e:
             self._debug_msg(f"Error initializing pygame.mixer: {e}")
     
-    def play_music(self, music: MusicList):
+    def play_music(self, music_path: Path):
         """Plays music that is on loop."""
         try:
-            music_path = get_asset_path(music.value)
+            music_path = get_asset_path(music_path)
+            self._debug_msg(f"Playing music: {music_path}")
             pygame.mixer.music.load(music_path)
             pygame.mixer.music.play(-1) # -1 usually means loop forever
         except Exception as e:
@@ -55,7 +55,8 @@ class AudioManager:
     def play_sfx(
         self, sfx_path: Path,
         left_volume: float = None,
-        right_volume: float = None
+        right_volume: float = None,
+        base_volume: float = None
     ):
         """
         Use the `SFXLibrary` dataclass for supplying the `sfx_path`.\n
@@ -72,7 +73,7 @@ class AudioManager:
             
             # Apply Master Volume
             # We set this on the sound object itself so it scales appropriately
-            sound.set_volume(self.sfx_volume)
+            sound.set_volume(self.sfx_volume if base_volume is None else base_volume)
             
             # Play to get a Channel
             channel = sound.play()

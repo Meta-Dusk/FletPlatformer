@@ -62,6 +62,7 @@ class Entity:
         self._spr_path: Path = pathify(sprite.src)
         self.health_bar: ft.ProgressBar = None
         self.nametag: ft.Text = None
+        self._entity_list: list[Entity] = []
         print(f"Making a {faction.value} entity, named; \"{name}\"")
         if show_hud:
             self.health_bar = self._make_health_bar()
@@ -76,11 +77,11 @@ class Entity:
             if include_handler: print(f"[{self._handler_str}] {msg}", end=end)
             else: print(msg, end=end)
     
-    def _play_sfx(self, sfx: Path):
+    def _play_sfx(self, sfx: Path, volume: float = None):
         """Play an SFX with support for directional playback."""
         right_vol = (self.stack.left + (self.sprite.width / 2)) / self.page.width
         left_vol = 1.0 - right_vol
-        self.audio_manager.play_sfx(sfx, left_vol, right_vol)
+        self.audio_manager.play_sfx(sfx, left_vol, right_vol, volume)
     
     # * === MOVEMENT LOOP ===
     async def _movement_loop(self):
@@ -125,7 +126,8 @@ class Entity:
     def _make_health_bar(self):
         return ft.ProgressBar(
             value=0, scale=ft.Scale(scale_x=-1, scale_y=1), color=ft.Colors.BLACK,
-            bgcolor=ft.Colors.RED, border_radius=5, width=120, height=5
+            bgcolor=ft.Colors.RED if self.faction == Factions.NONHUMAN else ft.Colors.GREEN,
+            border_radius=5, width=120, height=5
         )
     
     def _get_spr_path(self, state: str, index: int, *, debug: bool = False):
@@ -140,13 +142,7 @@ class Entity:
         """Returns a stack positioned at the bottom-center of the screen."""
         self._debug_msg(f"Created Entity of faction: {self.faction}")
         return ft.Stack(
-            controls=[
-                ft.Container(
-                    self.sprite,
-                    # border=ft.Border.all(2),
-                    data=self.faction
-                )
-            ],
+            controls=[ft.Container(self.sprite, data=self.faction)],
             left=(self.page.width / 2) - (self.sprite.width / 2), bottom=0,
             animate_position=ft.Animation(100, ft.AnimationCurve.EASE_IN_OUT)
         )
@@ -182,8 +178,8 @@ class Entity:
     # * === CALLABLE ACTIONS/EVENTS ===
     def __call__(self):
         """
-        Returns the `Stack` control. Make sure to always put this
-        in another stack.
+        Returns the `Stack` control. Make sure to
+        always put this in another stack.
         """
         return self.stack
     

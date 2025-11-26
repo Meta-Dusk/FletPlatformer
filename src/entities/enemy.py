@@ -32,24 +32,23 @@ class Enemy(Entity):
     """Handles an enemy's actions and states."""
     def __init__(
         self, type: EnemyType, page: ft.Page,
-        audio_manager: AudioManager,
-        target: Entity = None,
+        audio_manager: AudioManager, target: Entity = None,
         *, debug: bool = False
     ):
-        self.target = target
         self._enemy_name = type.name.lower()
         _sprite = Sprite(
             src=f"images/enemies/{self._enemy_name}/idle_0.png",
             width=type.value.width, height=type.value.height
         )
         self.name = type.value.name
-        self._handler_str = self.name
         super().__init__(
             sprite=_sprite, name=self.name, page=page,
             audio_manager=audio_manager, faction=Factions.NONHUMAN,
             debug=debug, stats=EntityStats(movement_speed=12)
         )
-        # ? No jump sprites available
+        self.type = type
+        self.target = target
+        self._handler_str = self.name
         self._attack_task: asyncio.Task = None
         self._take_hit_task: asyncio.Task = None
         self._animation_loop_task: asyncio.Task = None
@@ -73,13 +72,14 @@ class Enemy(Entity):
                 if index > 7: index = 0
                 await asyncio.sleep(0.075)
                 self.sprite.change_src(self._get_spr_path("run", index))
+                if index == 2: self._play_sfx(sfx.footsteps.footstep_grass_1, 0.2)
+                if index == 5: self._play_sfx(sfx.footsteps.footstep_grass_1, 0.2)
              
              # Idle animation
             else:
                 if index > 3: index = 0
                 await asyncio.sleep(0.1)
                 self.sprite.change_src(self._get_spr_path("idle", index))
-            
             
             index += 1
     
@@ -99,13 +99,23 @@ class Enemy(Entity):
             await asyncio.sleep(0.1)
     
     def _start_damage_detection_loop(self):
-        """Starts the loop."""
+        """Starts the loop for detecting damage."""
         self._damage_detection_task = self.page.run_task(self._detect_damage)
     
     # * === CUSTOM MOVEMENT LOOP ===
     async def _movement_loop(self):
         """Handles the enemy's movements."""
-        await asyncio.sleep(2)
+        await asyncio.sleep(0.1)
+        self.stack.opacity = 1
+        self._safe_update(self.stack)
+        await asyncio.sleep(round(self.stack.animate_opacity.duration / 1000, 3))
+        self.is_idling = True
+        self._play_sfx(sfx.enemy.goblin_cackle)
+        wait_time = round(random.randint(2000, 4000) / 1000, 3)
+        self._debug_msg(f"Idling for {wait_time}")
+        await asyncio.sleep(wait_time - 2.0)
+        self.is_idling = False
+        # await asyncio.sleep(1)
         while not self.states.dead:
             if self.states.disable_movement or self.states.disable_movement:
                 self.states.is_moving = False
@@ -153,13 +163,7 @@ class Enemy(Entity):
             if self.states.is_moving:
                 self.states.dealing_damage = False
                 self._safe_update(self.stack)
-            if self.is_idling and dx == 0:
-                wait_time = random.uniform(1.0, 3.0)
-                self._debug_msg(f"Idling for {wait_time}")
-                await asyncio.sleep(wait_time)
-                await asyncio.sleep(0.1)
-                self.is_idling = False
-            else: await asyncio.sleep(0.1)
+            await asyncio.sleep(0.05)
         
     
     # * === ONE-SHOT ANIMATIONS ===
@@ -169,6 +173,7 @@ class Enemy(Entity):
         for i in range(8):
             await asyncio.sleep(0.1)
             self.sprite.change_src(self._get_spr_path(prefix, i))
+            if i == 5 and self.type == EnemyType.GOBLIN: self._play_sfx(sfx.enemy.boggart_hya)
             if i == 6: self.states.dealing_damage = True
             else: self.states.dealing_damage = False
         self.states.is_attacking = False
@@ -176,6 +181,9 @@ class Enemy(Entity):
     
     async def _death_anim(self):
         """Handles the enemy's death animation."""
+        if self.type == EnemyType.GOBLIN:
+            self._play_sfx(sfx.enemy.goblin_scream)
+            self._play_sfx(sfx.impacts.flesh_impact_2)
         for i in range(4):
             await asyncio.sleep(0.1)
             self.sprite.change_src(self._get_spr_path("death", i))
@@ -186,11 +194,19 @@ class Enemy(Entity):
         for i in range(4):
             await asyncio.sleep(0.1)
             self.sprite.change_src(self._get_spr_path("take-hit", i))
+            if i == 1 and self.type == EnemyType.GOBLIN:
+                self._play_sfx(sfx.enemy.goblin_hurt)
+                if self.target.states.attack_phase == 1: self._play_sfx(sfx.impacts.flesh_impact_1)
+                if self.target.states.attack_phase == 2: self._play_sfx(sfx.impacts.axe_hit_flesh)
         self.states.taking_damage = False
         self._take_hit_task = None
     
     # * === CALLABLE PLAYER ACTIONS/EVENTS ===
-    def __call__(self, start_loops: bool = True):
+    def __call__(self, *, start_loops: bool = True, center_spawn: bool = True):
+        if not center_spawn:
+            new_left = random.randint(0, int(self.page.width))
+            new_left -= self.sprite.width / 2
+            self.stack.left = new_left
         if start_loops:
             self._start_animation_loop()
             self._start_movement_loop()
@@ -217,10 +233,19 @@ class Enemy(Entity):
         self._safe_update(self.stack)
         await asyncio.sleep(self.stack.animate_opacity.duration / 1000)
         stage = self._get_parent()
-        self._debug_msg(f"Attempting to remove Gobby from stage: {len(stage.controls)} -> ", end="")
+        
+        self._debug_msg(f"Attempting to remove self from stage: {len(stage.controls)} -> ", end="")
         stage.controls.remove(self.stack)
-        self._safe_update(stage)
         self._debug_msg(len(stage.controls), include_handler=False)
+        
+        self._debug_msg(f"Attempting to remove self from _entity_list: {len(self._entity_list)} -> ", end="")
+        if self._entity_list is not None: self._entity_list.remove(self)
+        self._debug_msg(len(self._entity_list), include_handler=False)
+        
+        self._safe_update(stage)
+        self._reset_states()
+        self._reset_stats()
+        self._cancel_loop_tasks()
         
     def attack(self):
         """
@@ -258,10 +283,17 @@ class Enemy(Entity):
         ]
         for task in tasks: attempt_cancel(task)
     
+    def _cancel_loop_tasks(self):
+        """Cancels all running looping tasks."""
+        tasks = [
+            self._movement_loop_task,
+            self._damage_detection_task
+        ]
+        for task in tasks: attempt_cancel(task)
+    
     def _is_player_in_range(self):
         """Checks if the specifically targeted player is in range."""
         if self.target is None: return False
-        # if self.target.states.dead: return False
         
         # We assume the target (Player) has a sprite and stack
         p_w = self.target.sprite.width
@@ -281,7 +313,7 @@ class Enemy(Entity):
     def _make_stack(self):
         stack = super()._make_stack()
         stack.animate_opacity = ft.Animation(2000, ft.AnimationCurve.EASE_IN_OUT)
-        stack.opacity = 1
+        stack.opacity = 0
         return stack
     
     def _get_parent(self):

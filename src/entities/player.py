@@ -16,22 +16,22 @@ class Player(Entity):
     """Handles the player's actions and states."""
     def __init__(
         self, page: ft.Page, audio_manager: AudioManager,
-        held_keys: set = set(), *, debug: bool = False,
-        restrict_traversal: bool = True
+        held_keys: set = set(), *,
+        debug: bool = False, restrict_traversal: bool = True
     ):
-        self.held_keys = held_keys
-        self.restrict_traversal = restrict_traversal
         sprite = Sprite(
             src="images/player/idle_0.png", width=180, height=180,
             offset=ft.Offset(0, 0.15)
         )
         self.name = "Hero Knight"
-        self._handler_str = "Player"
         super().__init__(
             sprite=sprite, name=self.name, page=page,
             audio_manager=audio_manager, faction=Factions.HUMAN,
             debug=debug
         )
+        self.held_keys = held_keys
+        self.restrict_traversal = restrict_traversal
+        self._handler_str = "Player"
         self._jump_task: asyncio.Task = None
         self._attack_task: asyncio.Task = None
         self._take_hit_task: asyncio.Task = None
@@ -60,8 +60,12 @@ class Player(Entity):
                 wait_time = 0.05 if self.states.sprint else 0.075
                 await asyncio.sleep(wait_time)
                 self.sprite.change_src(self._get_spr_path("run", index))
-                if index == 2: self._play_sfx(sfx.armor.rustle_2)
-                if index == 5: self._play_sfx(sfx.armor.rustle_3)
+                if index == 2:
+                    self._play_sfx(sfx.armor.rustle_2, 0.2)
+                    self._play_sfx(sfx.footsteps.footstep_grass_1, 0.2)
+                if index == 5:
+                    self._play_sfx(sfx.armor.rustle_3, 0.2)
+                    self._play_sfx(sfx.footsteps.footstep_grass_2, 0.2)
                 
             # Idle animation
             elif not self.states.is_moving and not self.states.is_falling:
@@ -79,12 +83,13 @@ class Player(Entity):
     async def _movement_loop(self):
         """Handles player movements."""
         while True:
-            for entity in self._entity_list:
-                if entity.faction != Factions.HUMAN and entity.states.dealing_damage:
-                    if check_collision(
-                        self.stack.left, self.stack.bottom, self.sprite.width, self.sprite.height,
-                        entity.stack.left, entity.stack.bottom, entity.sprite.width, entity.sprite.height
-                    ): await self.take_damage(entity.stats.attack_damage)
+            if self._entity_list is not None:
+                for entity in self._entity_list:
+                    if entity.faction != Factions.HUMAN and entity.states.dealing_damage:
+                        if check_collision(
+                            self.stack.left, self.stack.bottom, self.sprite.width, self.sprite.height,
+                            entity.stack.left, entity.stack.bottom, entity.sprite.width, entity.sprite.height
+                        ): await self.take_damage(entity.stats.attack_damage)
             if not self.states.dead and not self.states.disable_movement:
                 is_shift_held = keyboard.Key.shift in self.held_keys
                 # is_ctrl_held = keyboard.Key.ctrl_l in keyboard_manager.held_keys # ? Enable if needed
@@ -150,6 +155,7 @@ class Player(Entity):
                 if self.stack.bottom <= 0:
                     self._play_sfx(sfx.player.jump_landing)
                     self._play_sfx(sfx.player.exhale)
+                    self._play_sfx(sfx.impacts.landing_on_grass)
                 
             elif self.stack.bottom == 0: self.states.is_falling = False
             if self.states.is_moving or self.states.is_falling: self._safe_update(self.stack)
@@ -191,6 +197,7 @@ class Player(Entity):
                 self._play_sfx(sfx.player.grunt)
             if i == 3 or i == 4: self.states.dealing_damage = True
             else: self.states.dealing_damage = False
+            if i == 3 and self.states.attack_phase == 2: self._play_sfx(sfx.impacts.landing_on_grass)
             self.sprite.change_src(self._get_spr_path(prefix, i))
         self.states.is_attacking = False
         self._attack_task = None
