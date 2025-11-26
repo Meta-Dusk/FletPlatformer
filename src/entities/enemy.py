@@ -74,7 +74,6 @@ class Enemy(Entity):
                 self.sprite.change_src(self._get_spr_path("run", index))
             else: # Idle animation
                 if index > 3: index = 0
-                wait_time = 0.1
                 await asyncio.sleep(0.1)
                 self.sprite.change_src(self._get_spr_path("idle", index))
             
@@ -113,7 +112,7 @@ class Enemy(Entity):
                 if ( # ? Manages asset flip direction
                     (dx > 0 and self.sprite.scale.scale_x < 0) or
                     (dx < 0 and self.sprite.scale.scale_x > 0)
-                ): self.sprite.flip_x(update_ctrl=False)
+                ): self.sprite.flip_x()
             
             if self.states.is_moving or self.states.is_falling: self._safe_update(self.stack)
             await asyncio.sleep(0.1)

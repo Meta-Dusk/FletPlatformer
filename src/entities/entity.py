@@ -87,7 +87,7 @@ class Entity:
             if ( # ? Manages asset flip direction
                 (dx > 0 and self.sprite.scale.scale_x < 0) or
                 (dx < 0 and self.sprite.scale.scale_x > 0)
-            ): self.sprite.flip_x(update_ctrl=False)
+            ): self.sprite.flip_x()
             
             self._safe_update(self.stack)
             await asyncio.sleep(0.5)

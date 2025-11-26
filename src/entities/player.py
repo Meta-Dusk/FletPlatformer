@@ -66,7 +66,7 @@ class Player(Entity):
                 if index > 10: index = 0
                 await asyncio.sleep(0.075)
                 self.sprite.change_src(self._get_spr_path("idle", index))
-                
+            
             index += 1
     
     def _start_animation_loop(self):
