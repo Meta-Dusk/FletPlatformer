@@ -8,7 +8,7 @@ from images import Sprite
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
 from utilities.tasks import attempt_cancel
-from utilities.collisions import is_in_range
+from utilities.collisions import is_in_range, check_collision
 
 sfx = SFXLibrary()
 
@@ -56,6 +56,7 @@ class Enemy(Entity):
         self.is_idling: bool = False
         self.melee_range: int = type.value.melee_range
         self._cached_player_stack = None
+        self._damage_detection_task: asyncio.Task = None
     
     # * === LOOPING ANIMATIONS ===
     async def _animation_loop(self):
@@ -86,12 +87,27 @@ class Enemy(Entity):
         """Starts the animation loop and stores it in a variable."""
         self._animation_loop_task = self.page.run_task(self._animation_loop)
     
+    # * === DAMAGE DETECTION ===
+    async def _detect_damage(self):
+        """Handles the looping for check for taking damage."""
+        while not self.states.dead:
+            if self.target and self.target.states.dealing_damage:
+                if check_collision(
+                    self.stack.left, self.stack.bottom, self.sprite.width, self.sprite.height,
+                    self.target.stack.left, self.target.stack.bottom, self.target.sprite.width, self.target.sprite.height
+                ): await self.take_damage(self.target.stats.attack_damage)
+            await asyncio.sleep(0.1)
+    
+    def _start_damage_detection_loop(self):
+        """Starts the loop."""
+        self._damage_detection_task = self.page.run_task(self._detect_damage)
+    
     # * === CUSTOM MOVEMENT LOOP ===
     async def _movement_loop(self):
         """Handles the enemy's movements."""
         await asyncio.sleep(2)
         while not self.states.dead:
-            if self.states.is_attacking or self.states.disable_movement:
+            if self.states.disable_movement or self.states.disable_movement:
                 self.states.is_moving = False
                 await asyncio.sleep(0.1)
                 continue
@@ -106,17 +122,15 @@ class Enemy(Entity):
                     if self.target.stack.left > self.stack.left: dx = self.stats.movement_speed
                     elif self.target.stack.left < self.stack.left: dx = -self.stats.movement_speed
                     self.is_idling = False
-                else: # ? Idle
-                    self.states.is_moving = False 
-                    self._debug_msg("Attacking player")
-                    self.attack()
-                    continue
+                else: self.is_idling = True
                 
             else: # ? Attack
-                self._debug_msg("Attacking player")
-                self.attack()
-                await asyncio.sleep(1)
-                continue
+                if self.target and not self.target.states.dead:
+                    self._debug_msg("Attacking player")
+                    self.attack()
+                    await asyncio.sleep(1)
+                    continue
+                else: self.is_idling = True
             
             if dx != 0 or dy != 0:
                 self._debug_msg(f"Moving with: ({dx}, {dy})")
@@ -136,11 +150,14 @@ class Enemy(Entity):
                 
                 if has_flipped: self.sprite.try_update()
             else: self.states.is_moving = False
-            if self.states.is_moving or self.states.is_falling: self._safe_update(self.stack)
+            if self.states.is_moving:
+                self.states.dealing_damage = False
+                self._safe_update(self.stack)
             if self.is_idling and dx == 0:
                 wait_time = random.uniform(1.0, 3.0)
                 self._debug_msg(f"Idling for {wait_time}")
                 await asyncio.sleep(wait_time)
+                await asyncio.sleep(0.1)
                 self.is_idling = False
             else: await asyncio.sleep(0.1)
         
@@ -152,6 +169,8 @@ class Enemy(Entity):
         for i in range(8):
             await asyncio.sleep(0.1)
             self.sprite.change_src(self._get_spr_path(prefix, i))
+            if i == 6: self.states.dealing_damage = True
+            else: self.states.dealing_damage = False
         self.states.is_attacking = False
         self._attack_task = None
     
@@ -175,6 +194,7 @@ class Enemy(Entity):
         if start_loops:
             self._start_animation_loop()
             self._start_movement_loop()
+            self._start_damage_detection_loop()
         return super().__call__()
     
     async def death(self):

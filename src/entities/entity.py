@@ -26,6 +26,7 @@ class EntityStates:
     taking_damage: bool = False
     disable_movement: bool = False
     revivable: bool = False
+    dealing_damage: bool = False
 
 @dataclass
 class EntityStats:
@@ -43,10 +44,8 @@ class Entity:
     """Entity base class. Handles the sprite and some states."""
     def __init__(
         self, sprite: Sprite, name: str, page: ft.Page,
-        audio_manager: AudioManager = None,
-        faction: Factions = None,
-        *, debug: bool = True,
-        stats: EntityStats = None
+        audio_manager: AudioManager = None, faction: Factions = None,
+        show_hud: bool = True, *, debug: bool = True, stats: EntityStats = None
     ):
         self.sprite = sprite
         self.name = name
@@ -62,6 +61,13 @@ class Entity:
         self._movement_loop_task: asyncio.Task = None
         self._spr_path: Path = pathify(sprite.src)
         self.health_bar: ft.ProgressBar = None
+        self.nametag: ft.Text = None
+        print(f"Making a {faction.value} entity, named; \"{name}\"")
+        if show_hud:
+            self.health_bar = self._make_health_bar()
+            self.nametag = self._make_nametag()
+            self.stack.controls.append(self._make_hud())
+            self._safe_update(self.stack)
     
     # * === FUNCTIONAL WRAPPERS ===
     def _debug_msg(self, msg: str, *, end: str = None, include_handler: bool = True):
@@ -100,6 +106,28 @@ class Entity:
         self._movement_loop_task = self.page.run_task(self._movement_loop)
     
     # * === COMPONENT METHODS ===
+    def _make_hud(self):
+        if self.nametag is None:
+            print("Missing nametag!")
+        if self.health_bar is None:
+            print("Missing healthbar!")
+        return ft.Container(
+            ft.Column(
+                controls=[self.nametag, self.health_bar],
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER
+            ), top=0, left=0, right=0
+        )
+    
+    def _make_nametag(self):
+        return ft.Text(value=self.name, size=20, text_align=ft.TextAlign.CENTER)
+    
+    def _make_health_bar(self):
+        return ft.ProgressBar(
+            value=0, scale=ft.Scale(scale_x=-1, scale_y=1), color=ft.Colors.BLACK,
+            bgcolor=ft.Colors.RED, border_radius=5, width=120, height=5
+        )
+    
     def _get_spr_path(self, state: str, index: int, *, debug: bool = False):
         """Returns a formatted str path for sprites."""
         _parent = self._spr_path.parent

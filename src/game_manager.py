@@ -48,9 +48,10 @@ class GameManager:
         """Initializes Player, Stacks, and HUD."""
         # Player
         self.player = Player(self.page, self.audio_manager, held_keys)
+        self.player._entity_list = self.entity_list
         
         # Test Enemy
-        self.gobby = Enemy(EnemyType.GOBLIN, self.page, self.audio_manager, self.player, debug=True)
+        self.gobby = Enemy(EnemyType.GOBLIN, self.page, self.audio_manager, self.player)
         
         self.entity_list.extend([self.player, self.gobby])
         
@@ -81,21 +82,6 @@ class GameManager:
                 ft.Container(directional_audio_btn, padding=16),
             ], alignment=ft.MainAxisAlignment.CENTER, top=0, left=40
         )
-        
-        nametag = ft.Text(
-            value="You", size=20, width=50,
-            left=(self.player.sprite.width / 2) - 25,
-            bottom=self.player.sprite.height - 30,
-            text_align=ft.TextAlign.CENTER
-        )
-        health_bar = ft.ProgressBar(
-            value=0, left=(self.player.sprite.width / 2) - 50,
-            bottom=self.player.sprite.height - 50, width=100,
-            bar_height=5, scale=ft.Scale(scale_x=-1, scale_y=1),
-            color=ft.Colors.BLACK, bgcolor=ft.Colors.RED, border_radius=5
-        )
-        self.player.health_bar = health_bar
-        self.player.stack.controls.extend([nametag, health_bar])
         
         # Composition
         self.stage = ft.Stack(

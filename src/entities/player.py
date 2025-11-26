@@ -8,6 +8,7 @@ from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
 from utilities.keyboard_manager import held_keys
 from utilities.tasks import attempt_cancel
+from utilities.collisions import check_collision
 
 sfx = SFXLibrary()
 
@@ -35,6 +36,7 @@ class Player(Entity):
         self._attack_task: asyncio.Task = None
         self._take_hit_task: asyncio.Task = None
         self._animation_loop_task: asyncio.Task = None
+        self._entity_list: list[Entity] = None
     
     # * === LOOPING ANIMATIONS ===
     async def _animation_loop(self):
@@ -77,6 +79,12 @@ class Player(Entity):
     async def _movement_loop(self):
         """Handles player movements."""
         while True:
+            for entity in self._entity_list:
+                if entity.faction != Factions.HUMAN and entity.states.dealing_damage:
+                    if check_collision(
+                        self.stack.left, self.stack.bottom, self.sprite.width, self.sprite.height,
+                        entity.stack.left, entity.stack.bottom, entity.sprite.width, entity.sprite.height
+                    ): await self.take_damage(entity.stats.attack_damage)
             if not self.states.dead and not self.states.disable_movement:
                 is_shift_held = keyboard.Key.shift in self.held_keys
                 # is_ctrl_held = keyboard.Key.ctrl_l in keyboard_manager.held_keys # ? Enable if needed
@@ -181,6 +189,8 @@ class Player(Entity):
             elif i == 1 and self.states.attack_phase == 2: # Downward slash
                 self._play_sfx(sfx.sword.ting)
                 self._play_sfx(sfx.player.grunt)
+            if i == 3 or i == 4: self.states.dealing_damage = True
+            else: self.states.dealing_damage = False
             self.sprite.change_src(self._get_spr_path(prefix, i))
         self.states.is_attacking = False
         self._attack_task = None
