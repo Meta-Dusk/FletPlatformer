@@ -4,50 +4,75 @@ from dataclasses import dataclass
 
 _SFX_DIR = Path("assets") / "audio" / "sfx"
 
+def sound_path(name: str, extension: str = ".wav"):
+    return _SFX_DIR / f"{name}{extension}"
+
 # * Sub Sound Libraries
 @dataclass
 class SwordSFX:
-    fast_woosh = _SFX_DIR / "fast-sword-whoosh.wav"
-    heavy_hit_metal = _SFX_DIR / "heavy-sword-smashes-metal.wav"
-    ting = _SFX_DIR / "woosh_sword_ting.wav"
-    blade_drop = _SFX_DIR / "blade_drop.wav"
+    fast_woosh = sound_path("fast-sword-whoosh")
+    heavy_hit_metal = sound_path("heavy-sword-smashes-metal")
+    ting = sound_path("woosh_sword_ting")
+    blade_drop = sound_path("blade_drop")
 
 @dataclass
 class PlayerSFX:
-    exhale = _SFX_DIR / "exhale.wav"
-    small_grunt = _SFX_DIR / "small_grunt.wav"
-    grunt = _SFX_DIR / "grunt.wav"
-    inhale_exhale_short = _SFX_DIR / "inhale_exhale_short.wav"
-    grunt_hurt = _SFX_DIR / "grunt_hurt.wav"
-    death_1 = _SFX_DIR / "death.wav"
-    death_2 = _SFX_DIR / "death_2.wav"
-    jump_landing = _SFX_DIR / "jump_landing.wav"
+    exhale = sound_path("exhale")
+    small_grunt = sound_path("small_grunt")
+    grunt = sound_path("grunt")
+    inhale_exhale_short = sound_path("inhale_exhale_short")
+    grunt_hurt = sound_path("grunt_hurt")
+    death_1 = sound_path("death")
+    death_2 = sound_path("death_2")
+    jump_landing = sound_path("jump_landing")
 
 @dataclass
 class ArmorSFX:
-    rustle_1 = _SFX_DIR / "armor_rustle.wav"
-    rustle_2 = _SFX_DIR / "armor_rustle_2.wav"
-    rustle_3 = _SFX_DIR / "armor_rustle_3.wav"
-    hit_soft = _SFX_DIR / "armor_hit_soft.wav"
+    rustle_1 = sound_path("armor_rustle")
+    rustle_2 = sound_path("armor_rustle_2")
+    rustle_3 = sound_path("armor_rustle_3")
+    hit_soft = sound_path("armor_hit_soft")
 
 @dataclass
 class ClothSFX:
-    rough_rustle = _SFX_DIR / "rough_cloth.wav"
-    clothes_drop = _SFX_DIR / "clothes_drop.wav"
+    rough_rustle = sound_path("rough_cloth")
+    clothes_drop = sound_path("clothes_drop")
 
 @dataclass
 class ItemsSFX:
-    keys_drop = _SFX_DIR / "drop_keys.wav"
+    keys_drop = sound_path("drop_keys")
 
 @dataclass
 class MagicSFX:
-    strike = _SFX_DIR / "magic_strike.wav"
+    strike = sound_path("magic_strike")
 
 @dataclass
 class EffectsSFX:
-    level_up_quirky = _SFX_DIR / "level_up_quirky.wav"
-    riser_end_up_swell = _SFX_DIR / "riser_end_up_swell.wav"
+    level_up_quirky = sound_path("level_up_quirky")
+    riser_end_up_swell = sound_path("riser_end_up_swell")
 
+@dataclass
+class EnemySFX:
+    boggart_hya = sound_path("boggart_hya")
+    boggart_dies = sound_path("boggart_dies")
+    boggart_woah = sound_path("boggart_woah")
+    boggart_grumble = sound_path("boggart_grumble")
+    goblin_cackle = sound_path("goblin_cackle")
+    goblin_death = sound_path("goblin_death")
+    goblin_hurt = sound_path("goblin_hurt")
+    goblin_scream = sound_path("goblin_scream")
+
+@dataclass
+class FootstepsSFX:
+    footstep_grass_1 = sound_path("footstep_grass_1")
+    footstep_grass_2 = sound_path("footstep_grass_2")
+
+@dataclass
+class ImpactsSFX:
+    flesh_impact_1 = sound_path("flesh_impact_1")
+    flesh_impact_2 = sound_path("flesh_impact_2")
+    axe_hit_flesh = sound_path("axe_hit_flesh")
+    landing_on_grass = sound_path("landing_on_grass")
 
 # * Main Sound Library
 @dataclass
@@ -60,4 +85,7 @@ class SFXLibrary:
     armor = ArmorSFX()
     magic = MagicSFX()
     effects = EffectsSFX()
+    enemy = EnemySFX()
+    footsteps = FootstepsSFX()
+    impacts = ImpactsSFX()
     

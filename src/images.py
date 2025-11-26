@@ -14,21 +14,21 @@ class Sprite(ft.Image):
             src=src, width=width, height=height, filter_quality=filter_quality,
             fit=fit, gapless_playback=gapless_playback, scale=scale, offset=offset
         )
-        
+    
+    def try_update(self):
+        try: self.update()
+        except RuntimeError: pass
+    
     def change_src(self, new_src: str, update_ctrl: bool = True):
         """Swap the `src` and optionally update."""
         self.src = new_src
-        if not update_ctrl: return
-        try: self.update()
-        except RuntimeError: pass
+        if update_ctrl: self.try_update()
     
     def flip_x(self, update_ctrl: bool = True):
         """Flip the image on the x-axis."""
         scale_x = self.scale.scale_x
         if scale_x > 0 or scale_x < 0: self.scale.scale_x *= -1
-        if not update_ctrl: return
-        try: self.update()
-        except RuntimeError: pass
+        if update_ctrl: self.try_update()
             
             
 # * Test for the Sprite class; a simple implementation
