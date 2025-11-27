@@ -1,5 +1,5 @@
 import flet as ft
-import asyncio
+import asyncio, random
 
 from audio.audio_manager import AudioManager
 from audio.music_data import MusicLibrary
@@ -79,18 +79,18 @@ class GameManager:
             value=self.audio_manager.directional_sfx,
             on_change=self._da_btn_on_change
         )
-        show_border_sw = ft.Switch(
+        self.show_border_sw = ft.Switch(
             adaptive=True, label="Show Bounding Boxes",
             value=False, on_change=self._sb_btn_on_change
         )
-        spawn_gobby_btn = ft.Button("Spawn Gobby", ft.Icons.PERSON_ADD, on_click=self._sg_btn_on_click)
+        spawn_gobby_btn = ft.Button("Spawn Gobby", ft.Icons.PERSON_ADD, on_click=lambda _: self.summon_gobby(1))
         buttons_row = ft.Row(
             controls=[
                 ft.Container(revive_btn, padding=16),
                 ft.Container(death_btn, padding=16),
                 ft.Container(damage_btn, padding=16),
                 ft.Container(directional_audio_btn, padding=16),
-                ft.Container(show_border_sw, padding=16),
+                ft.Container(self.show_border_sw, padding=16),
                 ft.Container(spawn_gobby_btn, padding=16),
             ], alignment=ft.MainAxisAlignment.CENTER, top=0, left=40
         )
@@ -108,19 +108,12 @@ class GameManager:
         await self.page.window.center()
         self.page.add(self.stage)
         
-    # * --- Event Handlers ---
+    # * === Event Handlers ===
     def _da_btn_on_change(self, e: ft.ControlEvent): self.audio_manager.directional_sfx = e.data
     def _sb_btn_on_change(self, e: ft.ControlEvent):
         for entity in self.entity_list:
-            container: ft.Container = entity.stack.controls[0]
-            if e.data: container.border = ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.WHITE))
-            else: container.border = None
-            self._safe_update(container)
-    def _sg_btn_on_click(self, _):
-        new_gobby = Goblin(self)
-        new_gobby._entity_list = self.entity_list
-        self.entity_list.append(new_gobby)
-        self.entity_stack.controls.append(new_gobby(center_spawn=False))
+            entity.toggle_show_border(e.data)
+            entity._atk_hb_show = e.data
     
     async def _player_die(self, _): await self.player.death()
     async def _player_revive(self, _): await self.player.revive()
@@ -131,8 +124,21 @@ class GameManager:
             case " ": self.player.jump()
             case "V": self.player.attack()
             case "Escape": await self.page.window.close()
-
-    # * --- Task Management ---
+    
+    # * === EVENTS ===
+    def summon_gobby(self, spawn_amount: int = None, center_spawn: bool = False):
+        if spawn_amount is None: spawn_amount = random.randint(1, 5)
+        elif spawn_amount == 0: return
+        else: spawn_amount = abs(spawn_amount)
+        for _ in range(spawn_amount):
+            new_gobby = Goblin(self)
+            new_gobby._entity_list = self.entity_list
+            new_gobby.toggle_show_border(self.show_border_sw.value)
+            new_gobby._atk_hb_show = self.show_border_sw.value
+            self.entity_list.append(new_gobby)
+            self.entity_stack.controls.append(new_gobby(center_spawn=center_spawn))
+    
+    # * === TASK MANAGEMENT ===
     def start_tasks(self):
         """Starts background loops."""
         async def run_light(): await light_mv_loop(self.background_stack)
@@ -143,17 +149,18 @@ class GameManager:
                 self.page,
                 self.player,
                 self.entity_list,
-                self.stage
+                self.stage,
+                self.summon_gobby
             )
             
         # Store tasks so we can cancel them later
         self.running_tasks.append(self.page.run_task(run_light))
         self.running_tasks.append(self.page.run_task(run_pan))
-
+        
     def cleanup(self):
         """Call this when exiting or changing levels."""
         for task in self.running_tasks: attempt_cancel(task)
-
+        
 class Goblin(Enemy):
     """Wrapped `Enemy` class to be used in the `GameMaker` class."""
     def __init__(self, game_manager: GameManager, *, debug = False):
@@ -164,3 +171,4 @@ class Goblin(Enemy):
             target=game_manager.player,
             debug=debug
         )
+        

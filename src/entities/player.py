@@ -36,7 +36,11 @@ class Player(Entity):
         self._attack_task: asyncio.Task = None
         self._take_hit_task: asyncio.Task = None
         self._animation_loop_task: asyncio.Task = None
-        self._entity_list: list[Entity] = None
+        self._make_atk_hitbox(
+            p1_r_left=70, p1_width=100, p1_height=150,
+            p2_r_left=120, p2_width=140, p2_height=160
+        )
+        self._make_self_hitbox(width=95, height=110, r_left=55, bottom=15)
     
     # * === LOOPING ANIMATIONS ===
     async def _animation_loop(self):
@@ -79,28 +83,80 @@ class Player(Entity):
         """Starts the animation loop and stores it in a variable."""
         self._animation_loop_task = self.page.run_task(self._animation_loop)
     
+    # * === DAMAGE DETECTION ===
+    async def _detect_damage(self):
+        """Checks if any hostile entity is attacking and colliding with the player."""
+        if self._entity_list is None or self.states.dead or self.states.taking_damage: return
+        
+        # Get Player's Body Rect
+        p_left, p_bottom, p_w, p_h = self._get_self_global_rect()
+        
+        for entity in self._entity_list:
+            if (
+                entity.faction != Factions.HUMAN 
+                and not entity.states.dead 
+                and entity.states.dealing_damage
+            ):
+                # Phase 1 -> Index 0, Phase 2 -> Index 1
+                phase_idx = entity.states.attack_phase - 1
+                
+                if hasattr(entity, "_atk_hitboxes") and entity._atk_hitboxes:
+                    atk_hb = entity._atk_hitboxes[phase_idx]
+                    
+                    # ? Calculate Global Position of Enemy's Hitbox
+                    # The hitbox .left is relative to the Enemy's Stack.
+                    e_hb_left = entity.stack.left + (atk_hb.left or 0)
+                    e_hb_bottom = entity.stack.bottom + (atk_hb.bottom or 0)
+                    
+                    if check_collision(
+                        r1_left=p_left, r1_bottom=p_bottom, r1_w=p_w, r1_h=p_h, # Player Body
+                        r2_left=e_hb_left, r2_bottom=e_hb_bottom, r2_w=atk_hb.width, r2_h=atk_hb.height # Enemy Weapon
+                    ):
+                        self._debug_msg(f"Hit by {entity.name}!")
+                        await self.take_damage(entity.stats.attack_damage)
+                        self._knockback_self(entity)
+                        return
+    
+    async def _detect_attack_hits(self):
+        """
+        Checks if the Player's active attack hitbox collides with any enemy.
+        """
+        if not self.states.dealing_damage or not self._entity_list: return
+        
+        # ... (Get Active Hitbox logic) ...
+        hb_index = self.states.attack_phase - 1
+        active_hb = self._atk_hitboxes[hb_index]
+        
+        # Player Weapon Global Coords
+        w_left = self.stack.left + (active_hb.left or 0)
+        w_bottom = self.stack.bottom + (active_hb.bottom or 0)
+        
+        for enemy in self._entity_list:
+            if enemy.faction == Factions.HUMAN or enemy.states.dead: continue
+            
+            # 1. Get Enemy's Body Rect (Using their new Hitbox!)
+            e_left, e_bottom, e_w, e_h = enemy._get_self_global_rect()
+
+            if check_collision(
+                r1_left=w_left, r1_bottom=w_bottom, r1_w=active_hb.width, r1_h=active_hb.height, # Player Weapon
+                r2_left=e_left, r2_bottom=e_bottom, r2_w=e_w, r2_h=e_h # Enemy Body
+            ):
+                self._debug_msg(f"Hit enemy: {enemy.name}")
+                self.page.run_task(enemy.take_damage, self.stats.attack_damage)
+    
     # * === CUSTOM MOVEMENT LOOP ===
     async def _movement_loop(self):
         """Handles player movements."""
         while True:
-            if self._entity_list is not None:
-                for entity in self._entity_list:
-                    if entity.faction != Factions.HUMAN and entity.states.dealing_damage:
-                        if check_collision(
-                            self.stack.left, self.stack.bottom, self.sprite.width, self.sprite.height,
-                            entity.stack.left, entity.stack.bottom, entity.sprite.width, entity.sprite.height
-                        ): await self.take_damage(entity.stats.attack_damage)
+            await self._detect_attack_hits()
+            await self._detect_damage()
             if not self.states.dead and not self.states.disable_movement:
                 is_shift_held = keyboard.Key.shift in self.held_keys
                 # is_ctrl_held = keyboard.Key.ctrl_l in keyboard_manager.held_keys # ? Enable if needed
-                # print(f"keyboard_manager.held_keys: {keyboard_manager.held_keys} | shift:{is_shift_held}, ctrl:{is_ctrl_held}")
                 if (
                     self.page.window.focused and
                     (not self.states.is_attacking and not self.states.taking_damage)
                 ):
-                    current_scale_x = self.sprite.scale.scale_x if hasattr(self.sprite.scale, "scale_x") else self.sprite.scale
-                    start_facing_sign = 1 if current_scale_x > 0 else -1
-                    
                     step = self.stats.movement_speed * 2 if is_shift_held else self.stats.movement_speed
                     dx, dy = 0, 0
                     
@@ -120,19 +176,10 @@ class Player(Entity):
                         self.stack.left += dx
                         self.stack.bottom -= dy
                         
-                        # ? Sprite flipping logic
-                        desired_sign = start_facing_sign
-                        if dx > 0: desired_sign = 1
-                        elif dx < 0: desired_sign = -1
-                        
-                        has_flipped = False
-                        if desired_sign != start_facing_sign:
-                            new_scale = abs(current_scale_x) * desired_sign
-                            self.sprite.scale = ft.Scale(scale_x=new_scale, scale_y=self.sprite.scale.scale_y)
-                            has_flipped = True
-                        
-                        if has_flipped: 
-                            self.sprite.try_update()
+                        # ? Facing Direction Flipping
+                        if self._flip_sprite_x(dx): 
+                            self._flip_atk_hb()
+                            self._flip_self_hb()
                             self._play_sfx(sfx.armor.rustle_1)
                     else: self.states.is_moving = False
                     
@@ -189,16 +236,26 @@ class Player(Entity):
         prefix = "attack-main" if self.states.attack_phase == 1 else "attack-secondary"
         for i in range(7):
             await asyncio.sleep(0.1)
-            if i == 2 and self.states.attack_phase == 1: # Upward slash
-                self._play_sfx(sfx.sword.fast_woosh)
-                self._play_sfx(sfx.player.small_grunt)
-            elif i == 1 and self.states.attack_phase == 2: # Downward slash
-                self._play_sfx(sfx.sword.ting)
-                self._play_sfx(sfx.player.grunt)
-            if i == 3 or i == 4: self.states.dealing_damage = True
-            else: self.states.dealing_damage = False
-            if i == 3 and self.states.attack_phase == 2: self._play_sfx(sfx.impacts.landing_on_grass)
+            if self.states.attack_phase == 1: # Upward slash
+                if i == 1: self._modify_self_hitbox(r_left=40)
+                if i == 2: # TODO: Optimize audio by combining into one SFX
+                    self._play_sfx(sfx.sword.fast_woosh)
+                    self._play_sfx(sfx.player.small_grunt)
+            elif self.states.attack_phase == 2: # Downward slash
+                if i == 1:
+                    self._play_sfx(sfx.sword.ting)
+                    self._play_sfx(sfx.player.grunt)
+                elif i == 3:
+                    self._modify_self_hitbox(r_left=100)
+                    self._play_sfx(sfx.impacts.landing_on_grass)
+            if i == 3 or i == 4: # Either attack
+                self.states.dealing_damage = True
+                self._toggle_atk_hb_border()
+            else:
+                self.states.dealing_damage = False
+                self._toggle_atk_hb_border()
             self.sprite.change_src(self._get_spr_path(prefix, i))
+        self._modify_self_hitbox(reset=True)
         self.states.is_attacking = False
         self._attack_task = None
     
@@ -258,6 +315,7 @@ class Player(Entity):
     async def take_damage(self, damage_amount: float):
         """Decrease player's health with logic."""
         if not super().take_damage(): return
+        self._toggle_atk_hb_border()
         self.stats.health -= damage_amount
         self._debug_msg(f"Took damage: {damage_amount}, health is now: {self.stats.health}")
         self.states.taking_damage = True
@@ -301,6 +359,7 @@ class Player(Entity):
     def _start_loops(self):
         self._start_animation_loop()
         self._start_movement_loop()
+        # self._start_hitbox_loop()
     
     def _interrupt_action(self):
         """
@@ -339,6 +398,8 @@ def test(page: ft.Page):
     async def player_dmg(_): await player.take_damage(5)
     
     player = Player(page, audio_manager, held_keys, debug=True)
+    player._atk_hb_show = True
+    player.toggle_show_border(True)
     take_dmg_btn = ft.Button(content="Take Damage", on_click=player_dmg, left=60, top=0)
     stage = ft.Stack(controls=[player(), take_dmg_btn], expand=True)
     
