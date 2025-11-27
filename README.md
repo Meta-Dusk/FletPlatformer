@@ -1,81 +1,25 @@
-# Fletplatformer app
+# FletPlatformer Game
 
-## Run the app
+An attempt at making a real-time (such as combat) game in Flet.
+As of now, I've included various buttons for testing some functionality that I have already implemented in the game.
 
-### uv
+## Feature List
 
-Run as a desktop app:
+| Feature | Description | Version Implemented |
+| ------- | ----------- | ------------------- |
+| **Background Panning** | The background pans to the right or left if the player is at the edge of the screen. | v0.2.X |
+| **Simple Enemy AI** | The current enemy (goblin) has this. | v0.3.X |
+| **Various Entity States** | Entities such as the player and the goblin, can die, move, attack, etc. | v0.3.X |
+| **Sounds** | There's music and various SFX implemented | v0.1.X |
 
-```
-uv run flet run
-```
+## Controls
 
-Run as a web app:
+The player can be controlled with the following mapped keys:
 
-```
-uv run flet run --web
-```
-
-### Poetry
-
-Install dependencies from `pyproject.toml`:
-
-```
-poetry install
-```
-
-Run as a desktop app:
-
-```
-poetry run flet run
-```
-
-Run as a web app:
-
-```
-poetry run flet run --web
-```
-
-For more details on running the app, refer to the [Getting Started Guide](https://flet.dev/docs/getting-started/).
-
-## Build the app
-
-### Android
-
-```
-flet build apk -v
-```
-
-For more details on building and signing `.apk` or `.aab`, refer to the [Android Packaging Guide](https://flet.dev/docs/publish/android/).
-
-### iOS
-
-```
-flet build ipa -v
-```
-
-For more details on building and signing `.ipa`, refer to the [iOS Packaging Guide](https://flet.dev/docs/publish/ios/).
-
-### macOS
-
-```
-flet build macos -v
-```
-
-For more details on building macOS package, refer to the [macOS Packaging Guide](https://flet.dev/docs/publish/macos/).
-
-### Linux
-
-```
-flet build linux -v
-```
-
-For more details on building Linux package, refer to the [Linux Packaging Guide](https://flet.dev/docs/publish/linux/).
-
-### Windows
-
-```
-flet build windows -v
-```
-
-For more details on building Windows package, refer to the [Windows Packaging Guide](https://flet.dev/docs/publish/windows/).
+| Key | Action |
+| --- | ------ |
+| **A** | Move left. |
+| **D** | Move right. |
+| **Space** | Jump. |
+| **V** | Attack. |
+| **Escape** | Exit the game. |

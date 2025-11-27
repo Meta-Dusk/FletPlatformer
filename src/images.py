@@ -24,10 +24,10 @@ class Sprite(ft.Image):
         self.src = new_src
         if update_ctrl: self.try_update()
     
-    def flip_x(self, update_ctrl: bool = True):
+    def flip_x(self, direction: int, update_ctrl: bool = True):
         """Flip the image on the x-axis."""
-        scale_x = self.scale.scale_x
-        if scale_x > 0 or scale_x < 0: self.scale.scale_x *= -1
+        new_scale = abs(self.scale.scale_x) * direction
+        self.scale = ft.Scale(scale_x=new_scale, scale_y=self.scale.scale_y)
         if update_ctrl: self.try_update()
             
             
