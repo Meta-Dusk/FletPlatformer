@@ -127,11 +127,17 @@ class GameManager:
     
     # * === EVENTS ===
     def summon_gobby(self, spawn_amount: int = None, center_spawn: bool = False):
+        """Summons a random gobby."""
+        def rnd_name():
+            names = ["Gobby", "Gibby", "Geeb", "Goob", "Gubby", "Gebby", "Gub", "Gerald", "Gibby", "Gib",
+                     "Gob", "Gobber", "Gob Lin", "Gob Gob", "Geb Geb", "Gub Gub", "Gib Gib", "Gibba", "Gibber"]
+            return random.choice(names)
+        
         if spawn_amount is None: spawn_amount = random.randint(1, 5)
         elif spawn_amount == 0: return
         else: spawn_amount = abs(spawn_amount)
         for _ in range(spawn_amount):
-            new_gobby = Goblin(self)
+            new_gobby = Goblin(game_manager=self, name=rnd_name())
             new_gobby._entity_list = self.entity_list
             new_gobby.toggle_show_border(self.show_border_sw.value)
             new_gobby._atk_hb_show = self.show_border_sw.value
@@ -163,12 +169,13 @@ class GameManager:
         
 class Goblin(Enemy):
     """Wrapped `Enemy` class to be used in the `GameMaker` class."""
-    def __init__(self, game_manager: GameManager, *, debug = False):
+    def __init__(self, game_manager: GameManager, name: str, *, debug = False):
         super().__init__(
             type=EnemyType.GOBLIN,
             page=game_manager.page,
             audio_manager=game_manager.audio_manager,
             target=game_manager.player,
+            name=name,
             debug=debug
         )
         

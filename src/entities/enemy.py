@@ -33,7 +33,7 @@ class Enemy(Entity):
     def __init__(
         self, type: EnemyType, page: ft.Page,
         audio_manager: AudioManager, target: Entity = None,
-        *, debug: bool = False
+        name: str = None, *, debug: bool = False
     ):
         """
         Important setup for the class. Starts setup with the
@@ -45,7 +45,7 @@ class Enemy(Entity):
             src=f"images/enemies/{self._enemy_name}/idle_0.png",
             width=type.value.width, height=type.value.height
         )
-        self.name = type.value.name
+        self.name = type.value.name if name is None else name
         super().__init__(
             sprite=_sprite, name=self.name, page=page,
             audio_manager=audio_manager, faction=Factions.NONHUMAN,
