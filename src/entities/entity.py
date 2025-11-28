@@ -3,7 +3,7 @@ import flet as ft
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from enum import Enum
-from typing import Self
+from typing import Self, Callable
 
 from images import Sprite
 from audio.audio_manager import AudioManager
@@ -68,7 +68,8 @@ class Entity:
     def __init__(
         self, sprite: Sprite, name: str, page: ft.Page,
         audio_manager: AudioManager = None, faction: Factions = None,
-        show_hud: bool = True, *, debug: bool = True, stats: EntityStats = None
+        entity_list: list[Self] = None,
+        *, show_hud: bool = True, debug: bool = False, stats: EntityStats = None
     ):
         self.sprite = sprite
         self.name = name
@@ -76,22 +77,24 @@ class Entity:
         self.audio_manager = audio_manager
         self.debug = debug
         self.faction: Factions = faction
+        self._entity_list = entity_list if entity_list is not None else []
         if stats is None: stats = EntityStats()
         self._handler_str: str = "Entity"
         self.states: EntityStates = EntityStates()
         self.stats: EntityStats = stats
-        self.stack: ft.Stack = self._make_stack()
         self._movement_loop_task: asyncio.Task = None
         self._spr_path: Path = pathify(sprite.src)
         self.health_bar: ft.ProgressBar = None
         self._health_bar_c: ft.Control = None
         self.nametag: ft.Control = None
-        self._entity_list: list[Entity] = []
         self._show_border: bool = False
         self._cleanup_ready: bool = False
-        self._atk_hb_show: bool = False
+        if not hasattr(self, "_atk_hb_show"):
+            self._atk_hb_show: bool = False
         self._atk_hitboxes: list[ft.Container] = []
         self._hitbox: ft.Container = None
+        self.ground_level: int = 0
+        self.stack: ft.Stack = self._make_stack()
         print(f"Making a {faction.value} entity, named; \"{name}\"")
         if show_hud:
             self._health_bar_c = self._make_health_bar()
@@ -171,9 +174,8 @@ class Entity:
         
         hitbox = ft.Container(
             width=width, height=height,
-            left=(self.stack.width / 2) - (width / 2),
-            bottom=bottom, data=hb_pos_data,
-            # visible=True, border=ft.Border.all(1, ft.Colors.BLUE) # Debug
+            left=r_left, bottom=bottom,
+            data=hb_pos_data,
         )
         
         self._hitbox = hitbox
@@ -182,7 +184,8 @@ class Entity:
     
     def _make_atk_hitbox(
         self, p1_r_left: int, p1_width: int, p1_height: int,
-        p2_r_left: int, p2_width: int, p2_height: int
+        p2_r_left: int, p2_width: int, p2_height: int,
+        bottom: int = 0
     ):
         """
         Makes the attack hitboxes for the various attack phases. Only supports two attack phases.\n
@@ -191,7 +194,7 @@ class Entity:
         Additionally, these offsets are _relative_ to the `self.stack`, which is where the hitboxes reside.\n
         These hitboxes must also have a `width` and a `height`.
         """
-        hb_bottom = 0
+        hb_bottom = bottom
         p1_l_left = self.sprite.width - p1_r_left - p1_width # Phase 1 Config
         p2_l_left = self.sprite.width - p2_r_left - p2_width # Phase 2 Config
         
@@ -226,18 +229,37 @@ class Entity:
         self._safe_update(self.stack)
     
     def _toggle_atk_hb_border(self):
-        """Toggles the border of the attack hitboxes."""
+        """
+        Toggles the border and attack frames of the attack hitboxes.
+        Also shows the next attack hitbox in the attack sequence.
+        """
         if not self._atk_hb_show: return
+        
+        hb_count = len(self._atk_hitboxes)
+        hb_next: int = 1 if hb_count == self.states.attack_phase else 2
+        bgcolor = ft.Colors.with_opacity(0.15, ft.Colors.RED)
+        border = ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.RED))
+        
         for atk_hb in self._atk_hitboxes:
-            if atk_hb.data:
-                data: Hitbox = atk_hb.data
-                if self.states.attack_phase == data.current_atk_phase and self.states.dealing_damage:
-                    atk_hb.border = ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.RED))
-                    atk_hb.bgcolor = ft.Colors.with_opacity(0.15, ft.Colors.RED)
+            if not atk_hb.data: continue
+            data: Hitbox = atk_hb.data
+            
+            if self.states.dead:
+                atk_hb.border = None
+                atk_hb.bgcolor = None
+                continue
+            
+            if self.states.is_attacking:
+                if self.states.attack_phase == data.current_atk_phase:
+                    atk_hb.border = border
+                    if self.states.dealing_damage: atk_hb.bgcolor = bgcolor
+                    else: atk_hb.bgcolor = None
+            else:
+                if data.current_atk_phase == hb_next: atk_hb.border = border
                 else:
                     atk_hb.border = None
                     atk_hb.bgcolor = None
-                self._safe_update(atk_hb)
+            self._safe_update(atk_hb)
     
     def _modify_self_hitbox(
         self, width: int = None, height: int = None, 
@@ -315,22 +337,51 @@ class Entity:
         self.audio_manager.play_sfx(sfx, left_vol, right_vol, volume)
     
     # * === MOVEMENT LOOP ===
-    async def _movement_loop(self):
-        """A simple implementation of what the movement loop should be."""
-        while not self.states.dead:
-            dx, dy = 0, 0
-            dx += self.stats.movement_speed * random.randint(-10, 10)
+    def _check_movement(
+        self, dx: int, dy: int,
+        primary_callback: Callable[[None], None] = None,
+        secondary_callback: Callable[[None], None] = None
+    ):
+        """
+        Checks for movement and applies them to the `self.stack`.
+        
+        Args:
+            primary_callback(Callable): This function is called if movement is detected.
+            secondary_callback(Callable): This function is called if the facing direction has changed.
+        """
+        if dx != 0 or dy != 0:
             self._debug_msg(f"Moving with: ({dx}, {dy})")
+            self.states.is_moving = True
             self.stack.left += dx
             self.stack.bottom += dy
+            if primary_callback: primary_callback()
             
-            if dx != 0 or dy != 0:
-                self.sprite.flip_x(dx)
+            if self._flip_sprite_x(dx):
                 self._flip_atk_hb()
                 self._flip_self_hb()
+                if secondary_callback: secondary_callback()
+        else: self.states.is_moving = False
+    
+    async def _movement_loop(self):
+        """A simple implementation of what the movement loop should be."""
+        base_mv_speed = self.stack.animate_position.duration
+        while not self.states.dead:
+            dx, dy = 0, 0
+            rand_m = random.randint(-10, 10)
             
+            if rand_m == 0 or random.randint(1, 10) > 8:
+                idle_time = round(random.uniform(1.0, 2.0), 3)
+                self._debug_msg(f"Idling for: {idle_time}s")
+                await asyncio.sleep(idle_time)
+                continue
+            
+            dx += self.stats.movement_speed * rand_m
+            self.stack.animate_position.duration = base_mv_speed * abs(rand_m)
+            idle_time = round(self.stack.animate_position.duration / 1000, 3)
+            
+            self._check_movement(dx, dy)
             self._safe_update(self.stack)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(idle_time)
     
     def _start_movement_loop(self):
         """Starts the movement loop and stores it in a variable."""
@@ -340,16 +391,24 @@ class Entity:
     # * === COMPONENT TOGGLES ===
     def toggle_show_border(self, show_border: bool = None):
         if show_border is not None: self._show_border = show_border
+        else: self._show_border = not self._show_border
+        
         container: ft.Container = self.stack.controls[0]
         if self._show_border:
             container.border = ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.WHITE))
-            self._hitbox.border = ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.BLUE))
-            self._hitbox.bgcolor = ft.Colors.with_opacity(0.15, ft.Colors.BLUE)
+            if self._hitbox:
+                self._hitbox.border = ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.BLUE))
+                self._hitbox.bgcolor = ft.Colors.with_opacity(0.15, ft.Colors.BLUE)
         else:
             container.border = None
-            self._hitbox.border = None
-            self._hitbox.bgcolor = None
-        self._show_border = not self._show_border
+            if self._hitbox:
+                self._hitbox.border = None
+                self._hitbox.bgcolor = None
+            if self._atk_hitboxes:
+                for atk_hb in self._atk_hitboxes:
+                    atk_hb.border = None
+                    atk_hb.bgcolor = None
+                    self._safe_update(atk_hb)
         self._safe_update(container, self._hitbox)
     
     def _knockback_self(self, entity: Self):
@@ -394,10 +453,7 @@ class Entity:
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 tight=True
-            ), top=-20, left=0, right=0,
-            # bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.WHITE),
-            # border=ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.WHITE)),
-            # padding=8
+            ), top=-20, left=0, right=0
         )
     
     def _make_nametag(self):
@@ -441,7 +497,7 @@ class Entity:
         self._debug_msg(f"Created Entity of faction: {self.faction}")
         return ft.Stack(
             controls=[ft.Container(self.sprite, data=self.faction)],
-            left=(self.page.width / 2) - (self.sprite.width / 2), bottom=0,
+            left=(self.page.width / 2) - (self.sprite.width / 2), bottom=self.ground_level,
             animate_position=ft.Animation(100, ft.AnimationCurve.EASE_IN_OUT),
             width=self.sprite.width, height=self.sprite.height,
             clip_behavior=ft.ClipBehavior.NONE
@@ -454,6 +510,7 @@ class Entity:
         will raise a `RuntimeError` exception.
         """
         for control in controls:
+            if control is None: continue
             try: control.update()
             except RuntimeError: pass
     
@@ -550,21 +607,3 @@ class Entity:
             return False
         return True
         # ? Implement the rest of the logic here
-
-
-# * Test for the Entity class; a simple implementation
-# ? Run with: uv run py -m src.entities.entity
-def test(page: ft.Page):
-    page.title = "Entity Class Test"
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    
-    entity_spr = Sprite("images/enemies/goblin/idle_0.png", width=150, height=150)
-    entity = Entity(entity_spr, "Gob", page)
-    stage = ft.Stack(controls=[entity()], expand=True)
-    
-    page.add(stage)
-    entity._start_movement_loop()
-    
-if __name__ == "__main__":
-    ft.run(test, assets_dir="../assets")
