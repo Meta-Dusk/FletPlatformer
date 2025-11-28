@@ -183,13 +183,16 @@ class Player(Entity):
             # ? Grounding
             if self.stack.bottom < self.ground_level:
                 self.stack.bottom += 10
-                if self.stack.bottom > self.ground_level: self.stack.bottom = 0
+                if self.stack.bottom > self.ground_level: self.stack.bottom = self.ground_level
                 
             # ? Gravity
             elif self.stack.bottom > self.ground_level and not self.states.jumped:
                 self.states.is_falling = True
                 self.stack.bottom -= 25
+                
+                # ? Landing Logic
                 if self.stack.bottom <= self.ground_level:
+                    self.stack.bottom = self.ground_level
                     self._play_sfx(sfx.player.jump_landing)
                     self._play_sfx(sfx.player.exhale)
                     self._play_sfx(sfx.impacts.landing_on_grass)
@@ -289,7 +292,7 @@ class Player(Entity):
     
     def jump(self):
         """Play jump action."""
-        if self.stack.bottom != 0 or self._interrupt_action(): return
+        if self.stack.bottom != self.ground_level or self._interrupt_action(): return
         self.stack.bottom += self._get_jump_dy()
         self._safe_update(self.stack)
         self.states.jumped = True

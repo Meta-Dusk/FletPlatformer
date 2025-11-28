@@ -29,7 +29,7 @@ class GameManager:
         self.running_tasks: list[asyncio.Task] = []
         
         # World Configuration
-        self.ground_level: int = 20
+        self.ground_level: int = 30
         # To be implemented
         # self.kill_count: int = 0
         # self.deaths: int = 0
@@ -168,10 +168,13 @@ class GameManagerMixin:
     """Mixin to bridge GameManager data into Entities."""
     def _configure_from_manager(self: Entity, game_manager: GameManager):
         """Run this **BEFORE** `super().__init__()` to setup attributes."""
-        # ? Only put setters such as game configurations, that are defined in the
-        # ? GameManagers' init.
-        self.ground_level = game_manager.ground_level
-        
+        self.game_manager = game_manager
+        self._atk_hb_show = game_manager.show_border_sw.value
+        self._entity_list = game_manager.entity_list
+    
+    @property
+    def ground_level(self) -> int: return self.game_manager.ground_level
+    
     def _get_base_kwargs(self, game_manager: GameManager, debug: bool):
         """Helper for common init arguments."""
         return {

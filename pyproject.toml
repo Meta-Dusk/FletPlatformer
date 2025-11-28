@@ -8,9 +8,9 @@ authors = [{ name = "MetaDusk", email = "andredcxxv@gmail.com" }]
 license = { text = "AGPL-3.0" }
 
 dependencies = [
-    "flet==0.70.0.dev6787",
-    "flet-cli==0.70.0.dev6787",
-    "flet-desktop==0.70.0.dev6787",
+    "flet==0.70.0.dev6845",
+    "flet-cli==0.70.0.dev6845",
+    "flet-desktop==0.70.0.dev6845",
     "pygame>=2.6.1",
     "pynput>=1.8.1",
 ]
@@ -26,7 +26,7 @@ cleanup_on_compile = true
 build_number = 1
 
 [tool.flet.assets]
-include = ["images/**", "audio/**"]
+include = ["assets/**"]
 
 [tool.flet.splash]
 color = "#ffffff"
@@ -37,11 +37,11 @@ path = "src"
 
 [tool.flet.app.boot_screen]
 show = true
-message = "Booting Up App... Please wait."
+message = "Booting Up Game... Please wait."
 
 [tool.flet.app.startup_screen]
 show = true
-message = "Starting App... Please wait."
+message = "Starting Game... Please wait."
 
 [dependency-groups]
 dev = ["tomlkit>=0.13.3"]

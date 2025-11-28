@@ -93,7 +93,8 @@ class Entity:
             self._atk_hb_show: bool = False
         self._atk_hitboxes: list[ft.Container] = []
         self._hitbox: ft.Container = None
-        self.ground_level: int = 0
+        if not hasattr(self, "ground_level"):
+            self.ground_level: int = 0
         self.stack: ft.Stack = self._make_stack()
         print(f"Making a {faction.value} entity, named; \"{name}\"")
         if show_hud:
@@ -522,6 +523,7 @@ class Entity:
         self._safe_update(self.health_bar)
     
     def _flip_sprite_x(self, dx: int):
+        """Flips the facing direction of the sprite."""
         current_scale_x = self.sprite.scale.scale_x if hasattr(self.sprite.scale, "scale_x") else self.sprite.scale
         start_facing_sign = 1 if current_scale_x > 0 else -1
         desired_sign = start_facing_sign
