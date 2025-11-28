@@ -237,7 +237,7 @@ class Player(Entity):
     
     async def _attack_anim(self):
         """Handles the player's attack animations with combos."""
-        prefix = "attack-main" if self.states.attack_phase == 1 else "attack-secondary"
+        prefix = f"attack-{self.states.attack_phase}"
         for i in range(7):
             await asyncio.sleep(0.1)
             if self.states.attack_phase == 1: # Upward slash

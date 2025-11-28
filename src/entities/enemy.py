@@ -21,7 +21,6 @@ class EnemyData:
 
 class EnemyType(Enum):
     """Available enemy types."""
-    # TODO: Finish processing the other enemy assets
     # FLYING_EYE = EnemyData("Flying Eye")
     GOBLIN = EnemyData("Gobby")
     # MUSHROOM = EnemyData("Mushy")
@@ -168,7 +167,7 @@ class Enemy(Entity):
     # * === ONE-SHOT ANIMATIONS ===
     async def _attack_anim(self):
         """Handles the enemy's attack animations with combos."""
-        prefix = "attack-main" if self.states.attack_phase == 1 else "attack-secondary"
+        prefix = f"attack-{self.states.attack_phase}"
         for i in range(8):
             await asyncio.sleep(0.1)
             if self.states.attack_phase == 1:
