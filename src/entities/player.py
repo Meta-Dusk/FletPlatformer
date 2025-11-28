@@ -16,21 +16,20 @@ class Player(Entity):
     """Handles the player's actions and states."""
     def __init__(
         self, page: ft.Page, audio_manager: AudioManager,
-        held_keys: set = set(), *,
-        debug: bool = False, restrict_traversal: bool = True
+        held_keys: set = set(), entity_list: list[Entity] = None,
+        *, debug: bool = False
     ):
         sprite = Sprite(
             src="images/player/idle_0.png", width=180, height=180,
-            offset=ft.Offset(0, 0.15)
+            offset=ft.Offset(0, 0.225)
         )
         self.name = "Hero Knight"
         super().__init__(
             sprite=sprite, name=self.name, page=page,
             audio_manager=audio_manager, faction=Factions.HUMAN,
-            debug=debug
+            entity_list=entity_list, debug=debug
         )
         self.held_keys = held_keys
-        self.restrict_traversal = restrict_traversal
         self._handler_str = "Player"
         self._jump_task: asyncio.Task = None
         self._attack_task: asyncio.Task = None
@@ -40,7 +39,7 @@ class Player(Entity):
             p1_r_left=70, p1_width=100, p1_height=150,
             p2_r_left=120, p2_width=140, p2_height=160
         )
-        self._make_self_hitbox(width=95, height=110, r_left=55, bottom=15)
+        self._make_self_hitbox(width=95, height=110, r_left=55)
     
     # * === LOOPING ANIMATIONS ===
     async def _animation_loop(self):
@@ -150,61 +149,52 @@ class Player(Entity):
         while True:
             await self._detect_attack_hits()
             await self._detect_damage()
-            if not self.states.dead and not self.states.disable_movement:
-                is_shift_held = keyboard.Key.shift in self.held_keys
-                # is_ctrl_held = keyboard.Key.ctrl_l in keyboard_manager.held_keys # ? Enable if needed
-                if (
-                    self.page.window.focused and
-                    (not self.states.is_attacking and not self.states.taking_damage)
-                ):
-                    step = self.stats.movement_speed * 2 if is_shift_held else self.stats.movement_speed
-                    dx, dy = 0, 0
-                    
-                    # if 'w' in keyboard_manager.held_keys: dy -= step # ? Use for flying upwards
-                    # if 's' in keyboard_manager.held_keys: dy += step # ? Use for flying downwards
-                    if 'a' in self.held_keys: dx -= step
-                    if 'd' in self.held_keys: dx += step
-                    if (self.stack.left + dx) <= 0 or (self.stack.left + dx + self.sprite.width) >= self.page.width: dx = 0
-                    
-                    # ? Movement
-                    if dx != 0 or dy != 0:
-                        self.states.is_moving = True
-                        if is_shift_held: self.states.sprint = True
-                        else: self.states.sprint = False
-                        
-                        self._debug_msg(f"Moving with: ({dx}, {dy})")
-                        self.stack.left += dx
-                        self.stack.bottom -= dy
-                        
-                        # ? Facing Direction Flipping
-                        if self._flip_sprite_x(dx): 
-                            self._flip_atk_hb()
-                            self._flip_self_hb()
-                            self._play_sfx(sfx.armor.rustle_1)
-                    else: self.states.is_moving = False
-                    
-                else:
-                    # ? Reset state if doing nothing or window not focused
-                    self.states.is_moving = False
-                    self.states.sprint = False
-                    
-            else: self.states.is_moving = False
+            if self.states.dead or self.states.disable_movement:
+                self.states.is_moving = False
+                await asyncio.sleep(0.1)
+                continue
+            
+            is_shift_held = keyboard.Key.shift in self.held_keys
+            # is_ctrl_held = keyboard.Key.ctrl_l in keyboard_manager.held_keys # ? Enable if needed
+            if self.page.window.focused and \
+            (not self.states.is_attacking and not self.states.taking_damage):
+                step = self.stats.movement_speed * 2 if is_shift_held else self.stats.movement_speed
+                dx, dy = 0, 0
+                
+                # if 'w' in keyboard_manager.held_keys: dy -= step # ? Use for flying upwards
+                # if 's' in keyboard_manager.held_keys: dy += step # ? Use for flying downwards
+                if 'a' in self.held_keys: dx -= step
+                if 'd' in self.held_keys: dx += step
+                if (self.stack.left + dx) <= 0 or (self.stack.left + dx + self.sprite.width) >= self.page.width: dx = 0
+                
+                # ? Movement
+                def primary_callback(): self.states.sprint = True if is_shift_held else False
+                
+                self._check_movement(
+                    dx, dy, primary_callback=primary_callback,
+                    secondary_callback=lambda: self._play_sfx(sfx.armor.rustle_1)
+                )
+                
+            else:
+                # ? Reset state if doing nothing or window not focused
+                self.states.is_moving = False
+                self.states.sprint = False
             
             # ? Grounding
-            if self.stack.bottom < 0:
+            if self.stack.bottom < self.ground_level:
                 self.stack.bottom += 10
-                if self.stack.bottom > 0: self.stack.bottom = 0
+                if self.stack.bottom > self.ground_level: self.stack.bottom = 0
                 
             # ? Gravity
-            elif self.stack.bottom > 0 and not self.states.jumped:
+            elif self.stack.bottom > self.ground_level and not self.states.jumped:
                 self.states.is_falling = True
                 self.stack.bottom -= 25
-                if self.stack.bottom <= 0:
+                if self.stack.bottom <= self.ground_level:
                     self._play_sfx(sfx.player.jump_landing)
                     self._play_sfx(sfx.player.exhale)
                     self._play_sfx(sfx.impacts.landing_on_grass)
                 
-            elif self.stack.bottom == 0: self.states.is_falling = False
+            elif self.stack.bottom == self.ground_level: self.states.is_falling = False
             if self.states.is_moving or self.states.is_falling: self._safe_update(self.stack)
             await asyncio.sleep(0.05) # ? Delay for logic just in case
     
@@ -248,16 +238,17 @@ class Player(Entity):
                 elif i == 3:
                     self._modify_self_hitbox(r_left=100)
                     self._play_sfx(sfx.impacts.landing_on_grass)
-            if i == 3 or i == 4: # Either attack
+            if i == 3: # Either attack
                 self.states.dealing_damage = True
                 self._toggle_atk_hb_border()
-            else:
+            elif i == 5:
                 self.states.dealing_damage = False
                 self._toggle_atk_hb_border()
             self.sprite.change_src(self._get_spr_path(prefix, i))
         self._modify_self_hitbox(reset=True)
         self.states.is_attacking = False
         self._attack_task = None
+        self._toggle_atk_hb_border()
     
     async def _death_anim(self):
         """Handles the player's death animation."""
@@ -294,6 +285,7 @@ class Player(Entity):
         attempt_cancel(self._animation_loop_task)
         self._cancel_temp_tasks()
         await self._death_anim()
+        self._toggle_atk_hb_border()
     
     def jump(self):
         """Play jump action."""
@@ -315,13 +307,15 @@ class Player(Entity):
     async def take_damage(self, damage_amount: float):
         """Decrease player's health with logic."""
         if not super().take_damage(): return
-        self._toggle_atk_hb_border()
         self.stats.health -= damage_amount
         self._debug_msg(f"Took damage: {damage_amount}, health is now: {self.stats.health}")
         self.states.taking_damage = True
         if (self.states.is_attacking and self.states.jumped) or self.states.is_attacking:
             attempt_cancel(self._attack_task)
             self.states.is_attacking = False
+            self.states.dealing_damage = False
+            self._toggle_atk_hb_border()
+            self._modify_self_hitbox(reset=True)
             self._safe_update(self.stack)
         if self.stats.health <= 0: await self.death()
         else: self._take_hit_task = self.page.run_task(self._take_hit_anim)
@@ -359,7 +353,6 @@ class Player(Entity):
     def _start_loops(self):
         self._start_animation_loop()
         self._start_movement_loop()
-        # self._start_hitbox_loop()
     
     def _interrupt_action(self):
         """
@@ -381,37 +374,3 @@ class Player(Entity):
         _str = self.stats.jump_strength
         return int(_dist * _str)
     
-
-# * Test for the Player class; a simple implementation
-# ? Run with: uv run py -m src.entities.player
-from utilities.keyboard_manager import start as km_start
-
-def test(page: ft.Page):
-    page.title = "Player Class Test"
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    
-    audio_manager = AudioManager(debug=False)
-    audio_manager.initialize()
-    km_start()
-    
-    async def player_dmg(_): await player.take_damage(5)
-    
-    player = Player(page, audio_manager, held_keys, debug=True)
-    player._atk_hb_show = True
-    player.toggle_show_border(True)
-    take_dmg_btn = ft.Button(content="Take Damage", on_click=player_dmg, left=60, top=0)
-    stage = ft.Stack(controls=[player(), take_dmg_btn], expand=True)
-    
-    async def on_keyboard_event(e: ft.KeyboardEvent):
-        """Handles 'on-press' events for the player."""
-        match e.key:
-            case " ": player.jump()
-            case "V": player.attack()
-            case "Escape": await page.window.close()
-    
-    page.add(stage)
-    page.on_keyboard_event = on_keyboard_event
-    
-if __name__ == "__main__":
-    ft.run(test, assets_dir="../assets")

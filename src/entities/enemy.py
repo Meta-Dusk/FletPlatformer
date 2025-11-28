@@ -33,6 +33,7 @@ class Enemy(Entity):
     def __init__(
         self, type: EnemyType, page: ft.Page,
         audio_manager: AudioManager, target: Entity = None,
+        name: str = None, entity_list: list[Entity] = None,
         *, debug: bool = False
     ):
         """
@@ -45,10 +46,11 @@ class Enemy(Entity):
             src=f"images/enemies/{self._enemy_name}/idle_0.png",
             width=type.value.width, height=type.value.height
         )
-        self.name = type.value.name
+        self.name = type.value.name if name is None else name
         super().__init__(
             sprite=_sprite, name=self.name, page=page,
             audio_manager=audio_manager, faction=Factions.NONHUMAN,
+            entity_list=entity_list,
             debug=debug, stats=EntityStats(movement_speed=12)
         )
         
@@ -68,7 +70,7 @@ class Enemy(Entity):
             p1_r_left=-15, p1_width=180, p1_height=100,
             p2_r_left=70, p2_width=140, p2_height=80
         )
-        self._make_self_hitbox(width=70, height=75, r_left=40, bottom=0)
+        self._make_self_hitbox(width=70, height=75, r_left=40)
     
     # * === LOOPING ANIMATIONS ===
     async def _animation_loop(self):
@@ -146,17 +148,7 @@ class Enemy(Entity):
                     if random.randint(1, 10) > 7: self._rnd_dx = 0
                     else: dx += self._rnd_dx
             
-            if dx != 0 or dy != 0:
-                self.states.is_moving = True
-                self._debug_msg(f"Moving with: ({dx}, {dy})")
-                
-                self.stack.left += dx
-                self.stack.bottom += dy
-                
-                if self._flip_sprite_x(dx):
-                    self._flip_atk_hb()
-                    self._flip_self_hb()
-            else: self.states.is_moving = False
+            self._check_movement(dx, dy)
             if self.states.is_moving:
                 self.states.dealing_damage = False
                 self._safe_update(self.stack)
@@ -177,16 +169,17 @@ class Enemy(Entity):
                 elif i == 2: self._modify_self_hitbox(r_left=-5, height=60)
                 elif i == 5: self._modify_self_hitbox(r_left=50, height=60)
             if i == 5: self._play_sfx(sfx.enemy.boggart_hya)
-            if i == 6:
+            elif i == 6:
                 self.states.dealing_damage = True
                 self._toggle_atk_hb_border()
-            else:
+            elif i == 7:
                 self.states.dealing_damage = False
                 self._toggle_atk_hb_border()
             self.sprite.change_src(self._get_spr_path(prefix, i))
         self._modify_self_hitbox(reset=True)
         self.states.is_attacking = False
         self._attack_task = None
+        self._toggle_atk_hb_border()
     
     async def _death_anim(self):
         """Handles the enemy's death animation."""
@@ -226,9 +219,13 @@ class Enemy(Entity):
     
     # * === CALLABLE PLAYER ACTIONS/EVENTS ===
     def __call__(self, *, start_loops: bool = True, center_spawn: bool = True):
+        """
+        Returns the `Stack` control, and starts the movement and
+        animation loops. Set `center_spawn` to make the enemy spawn
+        random across the x-axis.
+        """
         if not center_spawn:
-            new_left = random.randint(0, int(self.page.width))
-            new_left -= self.sprite.width / 2
+            new_left = random.randint(0, int(self.page.width)) - self.sprite.width
             self.stack.left = new_left
         if start_loops:
             self._start_animation_loop()
@@ -248,6 +245,7 @@ class Enemy(Entity):
         attempt_cancel(self._animation_loop_task)
         self._cancel_temp_tasks()
         await self._death_anim()
+        self._toggle_atk_hb_border()
         self.states.revivable = True
         await asyncio.sleep(1) # A bit of delay before despawning
         
@@ -275,15 +273,16 @@ class Enemy(Entity):
     async def take_damage(self, damage_amount: float):
         """Decrease enemy's health with logic."""
         if not super().take_damage(): return
-        self._toggle_atk_hb_border()
         self.stats.health -= damage_amount
         self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(-{damage_amount})")
         self.states.taking_damage = True
-        self.states.dealing_damage = False
         self.states.is_moving = False
         if self.states.is_attacking:
             attempt_cancel(self._attack_task)
             self.states.is_attacking = False
+            self.states.dealing_damage = False
+            self._toggle_atk_hb_border()
+            self._modify_self_hitbox(reset=True)
             self._safe_update(self.stack)
         if self.stats.health <= 0: await self.death()
         else: self._take_hit_task = self.page.run_task(self._take_hit_anim)
@@ -330,50 +329,3 @@ class Enemy(Entity):
         stack.animate_opacity = ft.Animation(2000, ft.AnimationCurve.EASE_IN_OUT)
         stack.opacity = 0
         return stack
-
-
-# * Test for the Enemy class; a simple implementation
-# ? Run with: uv run py -m src.entities.enemy
-def test(page: ft.Page):
-    page.title = "Enemy Class Test"
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.padding = 0
-    
-    audio_manager = AudioManager()
-    audio_manager.initialize()
-    
-    async def on_death(_): await enemy.death()
-    async def on_damage(_): await enemy.take_damage(5)
-    def on_player(_): dummy_player.states.dead = not dummy_player.states.dead
-    
-    attack_btn = ft.Button("Attack", on_click=lambda _: enemy.attack())
-    death_btn = ft.Button("Death", on_click=on_death)
-    damage_btn = ft.Button("Take Damage", on_click=on_damage)
-    toggle_player_btn = ft.Button("Toggle Player", on_click=on_player)
-    buttons_row = ft.Row(
-        controls=[attack_btn, death_btn, damage_btn, toggle_player_btn],
-        left=60, top=30
-    )
-    
-    player_spr = Sprite("images/player/idle_0.png", width=180, height=180)
-    dummy_player = Entity(player_spr, "Hero", page, audio_manager, Factions.HUMAN)
-    dummy_player.stack.left += 200
-    enemy = Enemy(EnemyType.GOBLIN, page, audio_manager, dummy_player, debug=True)
-    enemy.toggle_show_border(True)
-    enemy._atk_hb_show = True
-    
-    stage = ft.Stack(
-        controls=[
-            dummy_player(),
-            enemy(),
-            buttons_row
-        ],
-        expand=True
-    )
-    # dummy_player._start_movement_loop()
-    
-    page.add(stage)
-    
-if __name__ == "__main__":
-    ft.run(test, assets_dir="../assets")

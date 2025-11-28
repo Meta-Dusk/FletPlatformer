@@ -33,12 +33,13 @@ async def stage_panning_loop(
     player: Player,
     entity_list: list[Entity],
     stage: ft.Stack,
-    optional_callable: Callable[[None], None] = None
+    post_callback: Callable[[None], None] = None
 ):
     """
     Handles the stage panning to either left or right.
     Pass this directly in the `page.run_task()` method.\n
-    Example: `page.run_task(stage_panning_loop)`
+    Example: `page.run_task(stage_panning_loop)`\n
+    `post_callback()` is called after panning the stage.
     """
     # Constants for configuration
     PAN_STEP = 928 / 2
@@ -76,7 +77,7 @@ async def stage_panning_loop(
         for entity in entity_list:
             entity.states.disable_movement = False
             entity.stack.animate_position.duration = 100
-        if optional_callable is not None: optional_callable()
+        if post_callback: post_callback()
         stage.update()
         
     while True:

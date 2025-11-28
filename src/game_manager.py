@@ -27,6 +27,12 @@ class GameManager:
         
         # Task Management
         self.running_tasks: list[asyncio.Task] = []
+        
+        # World Configuration
+        self.ground_level: int = 20
+        # To be implemented
+        # self.kill_count: int = 0
+        # self.deaths: int = 0
     
     async def __call__(self):
         """An alternative way to get the main entry point."""
@@ -53,16 +59,10 @@ class GameManager:
     
     async def _setup_ui(self):
         """Initializes Player, Stacks, and HUD."""
-        # Player
-        self.player = Player(self.page, self.audio_manager, held_keys)
-        self.player._entity_list = self.entity_list
-        self.entity_list.append(self.player)
-        
         # Stacks (BG/FG)
         self.background_stack = ft.Stack(expand=True)
         self.foreground_stack = ft.Stack(expand=True)
         self.entity_stack = ft.Stack(expand=True)
-        self.entity_stack.controls.append(self.player())
         
         def bg_forest(index: int): return bg_image_forest(index, self.page)
         
@@ -105,6 +105,9 @@ class GameManager:
             ], expand=True
         )
         
+        # Player
+        self.player = NewPlayer(self)
+        
         await self.page.window.center()
         self.page.add(self.stage)
         
@@ -127,16 +130,16 @@ class GameManager:
     
     # * === EVENTS ===
     def summon_gobby(self, spawn_amount: int = None, center_spawn: bool = False):
+        """Summons a random gobby."""
+        def rnd_name():
+            names = ["Gobby", "Gibby", "Geeb", "Goob", "Gubby", "Gebby", "Gub", "Gerald", "Gibby", "Gib",
+                     "Gob", "Gobber", "Gob Lin", "Gob Gob", "Geb Geb", "Gub Gub", "Gib Gib", "Gibba", "Gibber"]
+            return random.choice(names)
+        
         if spawn_amount is None: spawn_amount = random.randint(1, 5)
         elif spawn_amount == 0: return
         else: spawn_amount = abs(spawn_amount)
-        for _ in range(spawn_amount):
-            new_gobby = Goblin(self)
-            new_gobby._entity_list = self.entity_list
-            new_gobby.toggle_show_border(self.show_border_sw.value)
-            new_gobby._atk_hb_show = self.show_border_sw.value
-            self.entity_list.append(new_gobby)
-            self.entity_stack.controls.append(new_gobby(center_spawn=center_spawn))
+        for _ in range(spawn_amount): NewGoblin(game_manager=self, name=rnd_name(), center_spawn=center_spawn)
     
     # * === TASK MANAGEMENT ===
     def start_tasks(self):
@@ -160,15 +163,70 @@ class GameManager:
     def cleanup(self):
         """Call this when exiting or changing levels."""
         for task in self.running_tasks: attempt_cancel(task)
+
+class GameManagerMixin:
+    """Mixin to bridge GameManager data into Entities."""
+    def _configure_from_manager(self: Entity, game_manager: GameManager):
+        """Run this **BEFORE** `super().__init__()` to setup attributes."""
+        # ? Only put setters such as game configurations, that are defined in the
+        # ? GameManagers' init.
+        self.ground_level = game_manager.ground_level
         
-class Goblin(Enemy):
+    def _get_base_kwargs(self, game_manager: GameManager, debug: bool):
+        """Helper for common init arguments."""
+        return {
+            "page": game_manager.page,
+            "audio_manager": game_manager.audio_manager,
+            "entity_list": game_manager.entity_list,
+            "debug": debug
+        }
+        
+    def _spawn_into_scene(self: Entity, game_manager: GameManager, **call_kwargs):
+        """
+        Run this **AFTER** `super().__init__()` to add to the game world.
+        
+        Args:
+            game_manager: The `GameManager` instance.
+            **call_kwargs: Arguments passed to `self.__call__()` (i.e., `center_spawn=True`)
+        """
+        if not isinstance(self, Entity):
+            print("Class instance is not an Entity!")
+            return
+        
+        # Apply visual settings that required the stack to exist
+        self.toggle_show_border(game_manager.show_border_sw.value)
+        self._atk_hb_show = game_manager.show_border_sw.value
+        
+        # Add to Logic List (if not already there)
+        if self not in game_manager.entity_list: game_manager.entity_list.append(self)
+        
+        # Add to Visual Stack
+        # ? This calls self.__call__(**kwargs), getting the control and starting loops
+        game_manager.entity_stack.controls.append(self.__call__(**call_kwargs))
+        
+class NewGoblin(Enemy, GameManagerMixin):
     """Wrapped `Enemy` class to be used in the `GameMaker` class."""
-    def __init__(self, game_manager: GameManager, *, debug = False):
+    def __init__(
+        self, game_manager: GameManager, name: str,
+        *, center_spawn: bool = True, debug = False
+    ):
+        self._configure_from_manager(game_manager)
         super().__init__(
             type=EnemyType.GOBLIN,
-            page=game_manager.page,
-            audio_manager=game_manager.audio_manager,
             target=game_manager.player,
-            debug=debug
+            name=name,
+            **self._get_base_kwargs(game_manager, debug)
         )
-        
+        self._spawn_into_scene(game_manager, center_spawn=center_spawn)
+
+class NewPlayer(Player, GameManagerMixin):
+    """Wrapped `Player` class to be used in the `GameMaker` class."""
+    def __init__(
+        self, game_manager: GameManager, *, debug = False
+    ):
+        self._configure_from_manager(game_manager)
+        super().__init__(
+            held_keys=held_keys,
+            **self._get_base_kwargs(game_manager, debug)
+        )
+        self._spawn_into_scene(game_manager)
