@@ -30,9 +30,8 @@ class GameManager:
         
         # World Configuration
         self.ground_level: int = 30
-        # To be implemented
-        # self.kill_count: int = 0
-        # self.deaths: int = 0
+        self.kill_count: int = 0
+        self.death_count: int = 0
     
     async def __call__(self):
         """An alternative way to get the main entry point."""
@@ -169,22 +168,22 @@ class GameManagerMixin:
     def _configure_from_manager(self: Entity, game_manager: GameManager):
         """Run this **BEFORE** `super().__init__()` to setup attributes."""
         self.game_manager = game_manager
-        self._atk_hb_show = game_manager.show_border_sw.value
-        self._entity_list = game_manager.entity_list
+        self._atk_hb_show = self.game_manager.show_border_sw.value
+        self._entity_list = self.game_manager.entity_list
     
     @property
     def ground_level(self) -> int: return self.game_manager.ground_level
     
-    def _get_base_kwargs(self, game_manager: GameManager, debug: bool):
+    def _get_base_kwargs(self, debug: bool):
         """Helper for common init arguments."""
         return {
-            "page": game_manager.page,
-            "audio_manager": game_manager.audio_manager,
-            "entity_list": game_manager.entity_list,
+            "page": self.game_manager.page,
+            "audio_manager": self.game_manager.audio_manager,
+            "entity_list": self.game_manager.entity_list,
             "debug": debug
         }
         
-    def _spawn_into_scene(self: Entity, game_manager: GameManager, **call_kwargs):
+    def _spawn_into_scene(self: Entity, **call_kwargs):
         """
         Run this **AFTER** `super().__init__()` to add to the game world.
         
@@ -197,15 +196,15 @@ class GameManagerMixin:
             return
         
         # Apply visual settings that required the stack to exist
-        self.toggle_show_border(game_manager.show_border_sw.value)
-        self._atk_hb_show = game_manager.show_border_sw.value
+        self.toggle_show_border(self.game_manager.show_border_sw.value)
+        self._atk_hb_show = self.game_manager.show_border_sw.value
         
         # Add to Logic List (if not already there)
-        if self not in game_manager.entity_list: game_manager.entity_list.append(self)
+        if self not in self.game_manager.entity_list: self.game_manager.entity_list.append(self)
         
         # Add to Visual Stack
         # ? This calls self.__call__(**kwargs), getting the control and starting loops
-        game_manager.entity_stack.controls.append(self.__call__(**call_kwargs))
+        self.game_manager.entity_stack.controls.append(self.__call__(**call_kwargs))
         
 class NewGoblin(Enemy, GameManagerMixin):
     """Wrapped `Enemy` class to be used in the `GameMaker` class."""
@@ -218,9 +217,9 @@ class NewGoblin(Enemy, GameManagerMixin):
             type=EnemyType.GOBLIN,
             target=game_manager.player,
             name=name,
-            **self._get_base_kwargs(game_manager, debug)
+            **self._get_base_kwargs(debug)
         )
-        self._spawn_into_scene(game_manager, center_spawn=center_spawn)
+        self._spawn_into_scene(center_spawn=center_spawn)
 
 class NewPlayer(Player, GameManagerMixin):
     """Wrapped `Player` class to be used in the `GameMaker` class."""
@@ -230,6 +229,6 @@ class NewPlayer(Player, GameManagerMixin):
         self._configure_from_manager(game_manager)
         super().__init__(
             held_keys=held_keys,
-            **self._get_base_kwargs(game_manager, debug)
+            **self._get_base_kwargs(debug)
         )
-        self._spawn_into_scene(game_manager)
+        self._spawn_into_scene()

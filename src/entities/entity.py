@@ -96,7 +96,7 @@ class Entity:
         if not hasattr(self, "ground_level"):
             self.ground_level: int = 0
         self.stack: ft.Stack = self._make_stack()
-        print(f"Making a {faction.value} entity, named; \"{name}\"")
+        print(f"Making a {faction.value} entity, named; \"{name}\", with stats of: {self.stats}")
         if show_hud:
             self._health_bar_c = self._make_health_bar()
             self.nametag = self._make_nametag()
@@ -426,7 +426,7 @@ class Entity:
     # * === COMPONENT METHODS ===
     def _get_self_global_rect(self) -> tuple[float, float, float, float]:
         """
-        Returns the GLOBAL (Screen) definition of the entity's body/hurtbox.
+        Returns the **GLOBAL** (Screen) definition of the entity's body/hurtbox.
         Format: (left, bottom, width, height)
         """
         if self._hitbox:
@@ -515,10 +515,9 @@ class Entity:
             try: control.update()
             except RuntimeError: pass
     
-    async def _update_health_bar(self):
+    def _update_health_bar(self):
         """Updates the health bar if provided."""
         if self.health_bar is None: return
-        await asyncio.sleep(0.1)
         self.health_bar.value = abs((self.stats.health / self.stats.max_health) - 1)
         self._safe_update(self.health_bar)
     
@@ -571,10 +570,11 @@ class Entity:
         return True
         # ? Implement the rest of the logic here
     
-    def take_damage(self):
+    async def take_damage(self, damage_amount: float) -> bool:
         """
-        Simple spam-proof implementation for `take_damage()`.
-        Returns `False` if action is interrupted.
+        Base implementation for taking damage.
+        Handles: Checks, Health Subtraction, and Safety Reset.
+        Returns True if damage was successfully applied.
         """
         if self.states.dead:
             self._debug_msg(f"{self.name} is already dead")
@@ -582,8 +582,11 @@ class Entity:
         if self.states.taking_damage:
             self._debug_msg(f"{self.name} cannot be damaged again yet")
             return False
+            
+        self.states.taking_damage = True
+        self.stats.health -= damage_amount
+        self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(-{damage_amount})")
         return True
-        # ? Implement the rest of the logic here
     
     def death(self):
         """

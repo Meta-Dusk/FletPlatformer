@@ -47,11 +47,21 @@ class Enemy(Entity):
             width=type.value.width, height=type.value.height
         )
         self.name = type.value.name if name is None else name
+        
+        rnd_health_range = (10, 20)
+        mv_speed_min = 10
+        rnd_health = random.randint(*rnd_health_range)
+        k = rnd_health_range[1] * mv_speed_min
+        rnd_mv_speed = round(k / rnd_health)
+        self._init_stats = EntityStats(
+            movement_speed=rnd_mv_speed,
+            health=rnd_health, max_health=rnd_health
+        )
+        
         super().__init__(
             sprite=_sprite, name=self.name, page=page,
             audio_manager=audio_manager, faction=Factions.NONHUMAN,
-            entity_list=entity_list,
-            debug=debug, stats=EntityStats(movement_speed=12)
+            entity_list=entity_list, debug=debug, stats=self._init_stats
         )
         
         # ? Internal class setup
@@ -183,9 +193,9 @@ class Enemy(Entity):
     
     async def _death_anim(self):
         """Handles the enemy's death animation."""
-        if self.type == EnemyType.GOBLIN:
-            self._play_sfx(sfx.enemy.goblin_scream)
-            self._play_sfx(sfx.impacts.flesh_impact_2)
+        self._update_health_bar()
+        self._play_sfx(sfx.enemy.goblin_scream)
+        self._play_sfx(sfx.impacts.flesh_impact_2)
         for i in range(4):
             await asyncio.sleep(0.1)
             self.sprite.change_src(self._get_spr_path("death", i))
@@ -196,10 +206,11 @@ class Enemy(Entity):
         for i in range(4):
             await asyncio.sleep(0.1)
             self.sprite.change_src(self._get_spr_path("take-hit", i))
-            if i == 1 and self.type == EnemyType.GOBLIN:
+            if i == 1:
+                self._update_health_bar()
                 self._play_sfx(sfx.enemy.goblin_hurt)
                 if self.target.states.attack_phase == 1: self._play_sfx(sfx.impacts.flesh_impact_1)
-                if self.target.states.attack_phase == 2: self._play_sfx(sfx.impacts.axe_hit_flesh)
+                elif self.target.states.attack_phase == 2: self._play_sfx(sfx.impacts.axe_hit_flesh)
             if i == 2: self._knockback_self(self.target)
         self.states.taking_damage = False
         self._take_hit_task = None
@@ -225,7 +236,8 @@ class Enemy(Entity):
         random across the x-axis.
         """
         if not center_spawn:
-            new_left = random.randint(0, int(self.page.width)) - self.sprite.width
+            width = self.sprite.width
+            new_left = random.randint(width, int(self.page.width)) - width
             self.stack.left = new_left
         if start_loops:
             self._start_animation_loop()
@@ -237,9 +249,9 @@ class Enemy(Entity):
         if not super().death(): return
         # ? Death states and stats
         self._reset_states(EntityStates(dead=True))
-        self._reset_stats(EntityStats(health=0))
+        self._reset_stats(self._init_stats)
         self._debug_msg(f"{self.name} has died!")
-        await self._update_health_bar()
+        self._update_health_bar()
         
         # ? Animation handling
         attempt_cancel(self._animation_loop_task)
@@ -271,11 +283,9 @@ class Enemy(Entity):
         self._attack_task = self.page.run_task(self._attack_anim)
     
     async def take_damage(self, damage_amount: float):
-        """Decrease enemy's health with logic."""
-        if not super().take_damage(): return
-        self.stats.health -= damage_amount
-        self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(-{damage_amount})")
-        self.states.taking_damage = True
+        """Decrease enemy's health with logic. Returns `True` if entity has died."""
+        if not await super().take_damage(damage_amount): return False
+        
         self.states.is_moving = False
         if self.states.is_attacking:
             attempt_cancel(self._attack_task)
@@ -284,9 +294,14 @@ class Enemy(Entity):
             self._toggle_atk_hb_border()
             self._modify_self_hitbox(reset=True)
             self._safe_update(self.stack)
-        if self.stats.health <= 0: await self.death()
-        else: self._take_hit_task = self.page.run_task(self._take_hit_anim)
-        await self._update_health_bar()
+            
+        if self.stats.health <= 0:
+            self.page.run_task(self.death)
+            return True
+        else:
+            if self._take_hit_task: attempt_cancel(self._take_hit_task)
+            self._take_hit_task = self.page.run_task(self._take_hit_anim)
+            return False
     
     # * === OTHER HELPERS ===
     def _cancel_temp_tasks(self):
