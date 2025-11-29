@@ -93,24 +93,25 @@ async def stage_panning_loop(
         
         # Check Left Edge
         if player_x <= EDGE_THRESHOLD:
-            print("Panning to the left!")
+            print("[stage_panning_loop] Panning to the left!")
             # If hitting left wall, world moves RIGHT (Positive)
             step_to_take = abs(PAN_STEP)
             is_panning = True
             
         # Check Right Edge
         elif player_right_edge >= screen_right_edge:
-            print("Panning to the right!")
+            print("[stage_panning_loop] Panning to the right!")
             # If hitting right wall, world moves LEFT (Negative)
             step_to_take = -abs(PAN_STEP)
             is_panning = True
-        
-        # Entity Cleanup
-        if is_panning:
-            for entity in entity_list:
-                if entity._cleanup_ready and isinstance(entity, Enemy):
-                    enemy: Enemy = entity
-                    enemy.remove_selves()
             
         # Execute only if a step was calculated
         if step_to_take != 0: await perform_pan(step_to_take)
+        
+        # Entity Cleanup
+        for entity in entity_list:
+            if not is_panning: break
+            if entity._cleanup_ready and isinstance(entity, Enemy):
+                enemy: Enemy = entity
+                print(f"[stage_panning_loop] Cleaning up {enemy.name}")
+                enemy.remove_selves()

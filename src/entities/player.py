@@ -36,8 +36,8 @@ class Player(Entity):
         self._take_hit_task: asyncio.Task = None
         self._animation_loop_task: asyncio.Task = None
         self._make_atk_hitbox(
-            p1_r_left=70, p1_width=100, p1_height=150,
-            p2_r_left=120, p2_width=140, p2_height=160
+            p1_r_left=60, p1_width=110, p1_height=130,
+            p2_r_left=120, p2_width=140, p2_height=162
         )
         self._make_self_hitbox(width=95, height=110, r_left=55)
         self._has_dashed: bool = False
@@ -159,14 +159,14 @@ class Player(Entity):
         while True:
             await self._detect_attack_hits()
             await self._detect_damage()
-            if self.states.dead or self.states.disable_movement:
-                self.states.is_moving = False
-                await asyncio.sleep(0.1)
-                continue
-            
-            is_shift_held = keyboard.Key.shift in self.held_keys
-            if self.page.window.focused and \
-            not self.states.is_attacking and not self.states.taking_damage:
+            if (
+                self.page.window.focused and
+                not self.states.is_attacking and
+                not self.states.taking_damage and
+                not self.states.dead and
+                not self.states.disable_movement
+            ):
+                is_shift_held = keyboard.Key.shift in self.held_keys
                 step = self.stats.movement_speed * 2 if is_shift_held else self.stats.movement_speed
                 dx, dy = 0, 0
                 
@@ -194,7 +194,7 @@ class Player(Entity):
                 if self.stack.bottom > self.ground_level: self.stack.bottom = self.ground_level
                 
             # ? Gravity
-            elif self.stack.bottom > self.ground_level and not self.states.jumped and not self.states.stunned:
+            elif self.stack.bottom > self.ground_level and not self.states.jumped:
                 self.states.is_falling = True
                 self.stack.bottom -= 25
                 
@@ -238,11 +238,12 @@ class Player(Entity):
         for i in range(7):
             await asyncio.sleep(0.1)
             if self.states.attack_phase == 1: # Upward slash
-                if i == 1: self._modify_self_hitbox(r_left=40)
+                if i == 0: self._modify_self_hitbox(r_left=45, width=85)
                 if i == 2: # TODO: Optimize audio by combining into one SFX
                     self._play_sfx(sfx.sword.fast_woosh)
                     self._play_sfx(sfx.player.small_grunt)
             elif self.states.attack_phase == 2: # Downward slash
+                if i == 0: self._modify_self_hitbox(width=75, r_left=75)
                 if i == 1:
                     self._play_sfx(sfx.sword.ting)
                     self._play_sfx(sfx.player.grunt)
@@ -290,6 +291,7 @@ class Player(Entity):
         self.states.taking_damage = False
         self.states.stunned = False
         self._take_hit_task = None
+        self._reset_tint()
     
     # * === CALLABLE PLAYER ACTIONS/EVENTS ===
     async def death(self):
@@ -316,20 +318,17 @@ class Player(Entity):
         self._debug_msg(f"Dashing to the {"left" if dx < 0 else "right"}!")
         self._has_dashed = True
         self.states.invincible = True
-        self.sprite.color = ft.Colors.with_opacity(0.3, ft.Colors.ORANGE)
-        self.sprite.color_blend_mode = ft.BlendMode.SRC_A_TOP
+        self._apply_tint(ft.Colors.PURPLE)
         
         if dx > 0: self.stack.left += 100
         else: self.stack.left -= 100
         self._play_sfx(sfx.whoosh.motion, 0.5)
-        self._safe_update(self.stack, self.sprite)
+        self._safe_update(self.stack)
         
         async def timer():
             await asyncio.sleep(0.3)
-            self.sprite.color = None
-            self.sprite.color_blend_mode = ft.BlendMode.DST
+            self._reset_tint()
             self.states.invincible = False
-            self._safe_update(self.sprite)
             await asyncio.sleep(0.7)
             self._has_dashed = False
         self.page.run_task(timer)
@@ -354,15 +353,13 @@ class Player(Entity):
     async def take_damage(self, damage_amount: float):
         """Decrease player's health with logic."""
         if not await super().take_damage(damage_amount): return
-        
         if self.states.is_attacking:
             attempt_cancel(self._attack_task)
             self.states.is_attacking = False
             self.states.dealing_damage = False
             self._toggle_atk_hb_border()
             self._modify_self_hitbox(reset=True)
-            self._safe_update(self.stack)
-            
+        self._apply_tint(ft.Colors.RED)
         if self.stats.health <= 0: await self.death()
         else:
             if self._take_hit_task: attempt_cancel(self._take_hit_task)
@@ -375,6 +372,7 @@ class Player(Entity):
         await self._revive_anim()
         self._reset_states()
         self._reset_stats()
+        self._reset_tint()
         attempt_cancel(self._movement_loop_task)
         self._update_health_bar()
         self._start_loops()
@@ -401,7 +399,7 @@ class Player(Entity):
         self._start_animation_loop()
         self._start_movement_loop()
     
-    def _interrupt_action(self):
+    def _interrupt_action(self, cancel_temp_tasks: bool = True):
         """
         Returns `False` if there are no interrupting actions occurring.
         """
@@ -412,7 +410,7 @@ class Player(Entity):
             or self.states.dead
         ): return True
         else:
-            self._cancel_temp_tasks()
+            if cancel_temp_tasks: self._cancel_temp_tasks()
             return False
     
     def _get_jump_dy(self):

@@ -30,6 +30,7 @@ class EntityStates:
     dealing_damage: bool = False
     stunned: bool = False
     invincible: bool = False
+    stun_immune: bool = False
 
 @dataclass
 class EntityStats:
@@ -358,10 +359,7 @@ class Entity:
             self.stack.left += dx
             self.stack.bottom += dy
             if primary_callback: primary_callback()
-            
-            if self._flip_sprite_x(dx):
-                self._flip_atk_hb()
-                self._flip_self_hb()
+            if self._flip_char(dx):
                 if secondary_callback: secondary_callback()
         else: self.states.is_moving = False
     
@@ -392,6 +390,13 @@ class Entity:
         self._movement_loop_task = self.page.run_task(self._movement_loop)
     
     # * === COMPONENT TOGGLES ===
+    def _flip_char(self, dx: int):
+        if self._flip_sprite_x(dx):
+            self._flip_atk_hb()
+            self._flip_self_hb()
+            return True
+        return False
+    
     def toggle_show_border(self, show_border: bool = None):
         if show_border is not None: self._show_border = show_border
         else: self._show_border = not self._show_border
@@ -414,18 +419,17 @@ class Entity:
                     self._safe_update(atk_hb)
         self._safe_update(container, self._hitbox)
     
-    def _knockback_self(self, entity: Self):
-        """Applies a knockback to self based from the provided `entity`."""
-        if self.states.dead: return
-        knockback: int = 0
-        if entity.stack.left > self.stack.left:
-            knockback = -entity.stats.attack_knockback * self.stats.knockback_resistance
-        elif entity.stack.left < self.stack.left:
-            knockback = entity.stats.attack_knockback * self.stats.knockback_resistance
-        self.stack.left += knockback
-        self._safe_update(self.stack)
-    
     # * === COMPONENT METHODS ===
+    def _reset_tint(self):
+        self.sprite.color = None
+        self.sprite.color_blend_mode = ft.BlendMode.DST
+        self._safe_update(self.sprite)
+    
+    def _apply_tint(self, color: ft.ColorValue):
+        self.sprite.color = ft.Colors.with_opacity(0.3, color)
+        self.sprite.color_blend_mode = ft.BlendMode.SRC_A_TOP
+        self._safe_update(self.sprite)
+    
     def _get_self_global_rect(self) -> tuple[float, float, float, float]:
         """
         Returns the **GLOBAL** (Screen) definition of the entity's body/hurtbox.
@@ -536,8 +540,8 @@ class Entity:
             has_flipped = True
         return has_flipped
     
-    def _get_center_point(self, entity: Self):
-        return entity.stack.left + (entity.sprite.width / 2)
+    def _get_center_point(self, entity: Self) -> int:
+        return entity.stack.left + (entity.stack.width / 2)
     
     # * === OTHER HELPERS ===
     def _reset_states(self, new_states: EntityStates = None):
@@ -557,6 +561,17 @@ class Entity:
         always put this in another stack.
         """
         return self.stack
+    
+    def _knockback_self(self, entity: Self):
+        """Applies a knockback to self away from the provided `entity`."""
+        if self.states.dead: return
+        knockback: int = 0
+        if entity.stack.left > self.stack.left:
+            knockback = -entity.stats.attack_knockback * self.stats.knockback_resistance
+        elif entity.stack.left < self.stack.left:
+            knockback = entity.stats.attack_knockback * self.stats.knockback_resistance
+        self.stack.left += knockback
+        self._safe_update(self.stack)
     
     def attack(self):
         """

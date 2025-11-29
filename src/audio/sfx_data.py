@@ -73,6 +73,7 @@ class ImpactsSFX:
     flesh_impact_2 = sound_path("flesh_impact_2")
     axe_hit_flesh = sound_path("axe_hit_flesh")
     landing_on_grass = sound_path("landing_on_grass")
+    shield_block_shortsword = sound_path("shield_block_shortsword")
 
 @dataclass
 class WhooshSFX:

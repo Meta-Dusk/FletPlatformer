@@ -119,39 +119,45 @@ class Enemy(Entity):
         self.stack.opacity = 1
         self._safe_update(self.stack)
         await asyncio.sleep(round(self.stack.animate_opacity.duration / 1000, 3))
+        logic_delay: float = 0.05
         
         while not self.states.dead:
-            if self.states.disable_movement or self.states.disable_movement:
+            if self.states.disable_movement:
                 self.states.is_moving = False
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(logic_delay)
                 continue
             
             dx, dy = 0, 0
             
-            # ? Chase Player (if out of range)
-            if not self._is_player_in_range():
+            # ? Chase Target (if out of range)
+            if not self._is_target_in_range():
                 if self.target and not self.target.states.dead:
                     self._debug_msg(f"Chasing {self.target.name}", end=" -> ")
                     if self._get_center_point(self.target) > self._get_center_point(self):
-                        dx = self.stats.movement_speed
+                        if self.target.states.dealing_damage:
+                            dx = -self.stats.movement_speed
+                        else: dx = self.stats.movement_speed
                     elif self._get_center_point(self.target) < self._get_center_point(self):
-                        dx = -self.stats.movement_speed
+                        if self.target.states.dealing_damage:
+                            dx = self.stats.movement_speed
+                        else: dx = -self.stats.movement_speed
                     self.is_idling = False
                 else: self.is_idling = True
                 
-            else: # ? Attack Player (if in range)
+            else: # ? Attack Target (if in range)
                 if self.target and not self.target.states.dead:
-                    self._debug_msg("Attacking player")
+                    self._debug_msg("Attacking target")
                     
-                    # Predict player if player is jumping
-                    if self.target.stack.bottom > self.stack.bottom:
-                        self.states.attack_phase = 1
+                    # Predict target if target is jumping
+                    if self.target.states.jumped:
+                        if self.target.states.is_attacking:
+                            self.states.attack_phase = 0
+                        else: self.states.attack_phase = 1
                         if self._get_center_point(self.target) > self._get_center_point(self):
-                            dx = -self.stats.movement_speed
+                            self._flip_char(-1)
                         elif self._get_center_point(self.target) < self._get_center_point(self):
-                            dx = self.stats.movement_speed
-                        self._check_movement(dx, dy)
-                        
+                            self._flip_char(1)
+                    
                     self.attack()
                     await asyncio.sleep(1)
                     continue
@@ -169,7 +175,7 @@ class Enemy(Entity):
             if self.states.is_moving:
                 self.states.dealing_damage = False
                 self._safe_update(self.stack)
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(logic_delay)
         
     
     # * === ONE-SHOT ANIMATIONS ===
@@ -177,13 +183,21 @@ class Enemy(Entity):
         """Handles the enemy's attack animations with combos."""
         prefix = f"attack-{self.states.attack_phase}"
         for i in range(8):
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.15 if self.states.stun_immune else 0.1)
             if self.states.attack_phase == 1:
-                if i == 6: self._modify_self_hitbox(width=80, height=80, r_left=10)
+                if i == 2 and random.randint(1, 2) > 1:
+                    self._apply_tint(ft.Colors.YELLOW)
+                    self.states.stun_immune = True
+                elif i == 5:
+                    self._reset_tint()
+                    self.states.stun_immune = False
+                elif i == 6: self._modify_self_hitbox(width=80, height=80, r_left=10)
             elif self.states.attack_phase == 2:
                 if i == 0: self._modify_self_hitbox(r_left=30)
                 elif i == 1: self._modify_self_hitbox(r_left=0)
                 elif i == 2: self._modify_self_hitbox(r_left=-5, height=60)
+                elif i in {2, 3, 4}:
+                    if self.target.states.is_attacking: await asyncio.sleep(0.05)
                 elif i == 5: self._modify_self_hitbox(r_left=50, height=60)
             if i == 5: self._play_sfx(sfx.enemy.boggart_hya)
             elif i == 6:
@@ -208,11 +222,11 @@ class Enemy(Entity):
             self.sprite.change_src(self._get_spr_path("death", i))
         self.states.revivable = True
     
-    async def _take_hit_anim(self):
+    async def _take_hit_anim(self, play_animation: bool = True):
         """Handles the enemy's taking damage animation."""
         for i in range(4):
             await asyncio.sleep(0.1)
-            self.sprite.change_src(self._get_spr_path("take-hit", i))
+            if play_animation: self.sprite.change_src(self._get_spr_path("take-hit", i))
             if i == 1:
                 self._update_health_bar()
                 self._play_sfx(sfx.enemy.goblin_hurt)
@@ -221,6 +235,7 @@ class Enemy(Entity):
             if i == 2: self._knockback_self(self.target)
         self.states.taking_damage = False
         self._take_hit_task = None
+        self._reset_tint()
     
     # * === CLEANUP ===
     def remove_selves(self):
@@ -259,13 +274,14 @@ class Enemy(Entity):
         self._reset_stats(self._init_stats)
         self._debug_msg(f"{self.name} has died!")
         self._update_health_bar()
+        self._apply_tint(ft.Colors.RED)
         
         # ? Animation handling
         attempt_cancel(self._animation_loop_task)
         self._cancel_temp_tasks()
         await self._death_anim()
         self._toggle_atk_hb_border()
-        self.states.revivable = True
+        self.states.revivable = True # ? Possibility of revival soon
         await asyncio.sleep(1) # A bit of delay before despawning
         
         # ? Despawn and cleanup
@@ -292,22 +308,27 @@ class Enemy(Entity):
     async def take_damage(self, damage_amount: float):
         """Decrease enemy's health with logic. Returns `True` if entity has died."""
         if not await super().take_damage(damage_amount): return False
-        
         self.states.is_moving = False
-        if self.states.is_attacking and random.randint(1, 2) > 1:
-            attempt_cancel(self._attack_task)
-            self.states.is_attacking = False
-            self.states.dealing_damage = False
-            self._toggle_atk_hb_border()
-            self._modify_self_hitbox(reset=True)
-            self._safe_update(self.stack)
-            
+        
+        if self.states.is_attacking:
+            if self.states.stun_immune and self.stats.health > 0:
+                self._play_sfx(sfx.impacts.shield_block_shortsword, 1.0)
+            elif not self.states.stun_immune:
+                attempt_cancel(self._attack_task)
+                self.states.is_attacking = False
+                self.states.dealing_damage = False
+                self._toggle_atk_hb_border()
+                self._modify_self_hitbox(reset=True)
+                
+        self._apply_tint(ft.Colors.RED)
         if self.stats.health <= 0:
             self.page.run_task(self.death)
             return True
         else:
             if self._take_hit_task: attempt_cancel(self._take_hit_task)
-            self._take_hit_task = self.page.run_task(self._take_hit_anim)
+            if self.states.stun_immune:
+                self._take_hit_task = self.page.run_task(self._take_hit_anim, False)
+            else: self._take_hit_task = self.page.run_task(self._take_hit_anim)
             return False
     
     # * === OTHER HELPERS ===
@@ -327,11 +348,11 @@ class Enemy(Entity):
         ]
         for task in tasks: attempt_cancel(task)
     
-    def _is_player_in_range(self):
-        """Checks if the specifically targeted player is in range."""
+    def _is_target_in_range(self, threshold: float = None):
+        """Checks if the specifically targeted `Entity` is in range."""
         if self.target is None: return False
         
-        # We assume the target (Player) has a sprite and stack
+        # We assume the target (i.e., Player) has a sprite and stack
         p_w = self.target.sprite.width
         
         return is_in_x_range(
@@ -339,7 +360,7 @@ class Enemy(Entity):
             entity1_w=self.sprite.width,
             entity2_stack=self.target.stack,
             entity2_w=p_w,
-            threshold=self.melee_range
+            threshold=self.melee_range if threshold is None else threshold
         )
         
     # * === COMPONENT METHODS ===
