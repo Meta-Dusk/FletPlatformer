@@ -8,7 +8,7 @@ from images import Sprite
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
 from utilities.tasks import attempt_cancel
-from utilities.collisions import is_in_range
+from utilities.collisions import is_in_x_range
 
 sfx = SFXLibrary()
 
@@ -22,7 +22,7 @@ class EnemyData:
 class EnemyType(Enum):
     """Available enemy types."""
     # FLYING_EYE = EnemyData("Flying Eye")
-    GOBLIN = EnemyData("Gobby")
+    GOBLIN = EnemyData("Gobby", melee_range=120)
     # MUSHROOM = EnemyData("Mushy")
     # SKELETON = EnemyData("Skelly")
 
@@ -115,15 +115,10 @@ class Enemy(Entity):
     async def _movement_loop(self):
         """Handles the enemy's movements."""
         await asyncio.sleep(0.1)
+        self._play_sfx(sfx.enemy.goblin_cackle)
         self.stack.opacity = 1
         self._safe_update(self.stack)
         await asyncio.sleep(round(self.stack.animate_opacity.duration / 1000, 3))
-        self.is_idling = True
-        self._play_sfx(sfx.enemy.goblin_cackle)
-        wait_time = round(random.randint(2000, 4000) / 1000, 3)
-        self._debug_msg(f"Idling for {wait_time}")
-        await asyncio.sleep(wait_time - 2.0)
-        self.is_idling = False
         
         while not self.states.dead:
             if self.states.disable_movement or self.states.disable_movement:
@@ -133,17 +128,30 @@ class Enemy(Entity):
             
             dx, dy = 0, 0
             
+            # ? Chase Player (if out of range)
             if not self._is_player_in_range():
-                if self.target and not self.target.states.dead: # ? Chase Player (if out of range)
+                if self.target and not self.target.states.dead:
                     self._debug_msg(f"Chasing {self.target.name}", end=" -> ")
-                    if self.target.stack.left > self.stack.left: dx = self.stats.movement_speed
-                    elif self.target.stack.left < self.stack.left: dx = -self.stats.movement_speed
+                    if self._get_center_point(self.target) > self._get_center_point(self):
+                        dx = self.stats.movement_speed
+                    elif self._get_center_point(self.target) < self._get_center_point(self):
+                        dx = -self.stats.movement_speed
                     self.is_idling = False
                 else: self.is_idling = True
                 
             else: # ? Attack Player (if in range)
                 if self.target and not self.target.states.dead:
                     self._debug_msg("Attacking player")
+                    
+                    # Predict player if player is jumping
+                    if self.target.stack.bottom > self.stack.bottom:
+                        self.states.attack_phase = 1
+                        if self._get_center_point(self.target) > self._get_center_point(self):
+                            dx = -self.stats.movement_speed
+                        elif self._get_center_point(self.target) < self._get_center_point(self):
+                            dx = self.stats.movement_speed
+                        self._check_movement(dx, dy)
+                        
                     self.attack()
                     await asyncio.sleep(1)
                     continue
@@ -286,7 +294,7 @@ class Enemy(Entity):
         if not await super().take_damage(damage_amount): return False
         
         self.states.is_moving = False
-        if self.states.is_attacking:
+        if self.states.is_attacking and random.randint(1, 2) > 1:
             attempt_cancel(self._attack_task)
             self.states.is_attacking = False
             self.states.dealing_damage = False
@@ -325,21 +333,19 @@ class Enemy(Entity):
         
         # We assume the target (Player) has a sprite and stack
         p_w = self.target.sprite.width
-        p_h = self.target.sprite.height
         
-        return is_in_range(
-            entity1_stack=self.stack, 
-            entity1_w=self.sprite.width, 
-            entity1_h=self.sprite.height,
-            entity2_stack=self.target.stack, 
-            entity2_w=p_w, 
-            entity2_h=p_h,
+        return is_in_x_range(
+            entity1_stack=self.stack,
+            entity1_w=self.sprite.width,
+            entity2_stack=self.target.stack,
+            entity2_w=p_w,
             threshold=self.melee_range
         )
         
     # * === COMPONENT METHODS ===
     def _make_stack(self):
         stack = super()._make_stack()
-        stack.animate_opacity = ft.Animation(2000, ft.AnimationCurve.EASE_IN_OUT)
+        rnd_duration = random.randint(1000, 2000)
+        stack.animate_opacity = ft.Animation(rnd_duration, ft.AnimationCurve.EASE_IN_OUT)
         stack.opacity = 0
         return stack

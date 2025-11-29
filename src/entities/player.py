@@ -197,7 +197,7 @@ class Player(Entity):
                 if self.stack.bottom > self.ground_level: self.stack.bottom = self.ground_level
                 
             # ? Gravity
-            elif self.stack.bottom > self.ground_level and not self.states.jumped:
+            elif self.stack.bottom > self.ground_level and not self.states.jumped and not self.states.stunned:
                 self.states.is_falling = True
                 self.stack.bottom -= 25
                 
@@ -291,6 +291,7 @@ class Player(Entity):
                 self._update_health_bar()
             self.sprite.change_src(self._get_spr_path("take-hit", i))
         self.states.taking_damage = False
+        self.states.stunned = False
         self._take_hit_task = None
     
     # * === CALLABLE PLAYER ACTIONS/EVENTS ===

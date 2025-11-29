@@ -33,6 +33,7 @@ class GameManager:
         self.ground_level: int = 30
         self.kill_count: int = 0
         self.death_count: int = 0
+        self.time: float = 7
     
     async def __call__(self):
         """An alternative way to get the main entry point."""
@@ -59,10 +60,15 @@ class GameManager:
     
     async def _setup_ui(self):
         """Initializes Player, Stacks, and HUD."""
-        # Stacks (BG/FG)
+        # Stacks/Layers
         self.background_stack = ft.Stack(expand=True)
         self.foreground_stack = ft.Stack(expand=True)
         self.entity_stack = ft.Stack(expand=True)
+        self.ui_stack = ft.Stack(expand=True)
+        self.day_night_overlay = ft.Container(
+            bgcolor=ft.Colors.with_opacity(0.0, ft.Colors.BLACK), expand=True,
+            animate=ft.Animation(5000, ft.AnimationCurve.LINEAR)
+        )
         
         def bg_forest(index: int): return bg_image_forest(index, self.page)
         
@@ -95,14 +101,16 @@ class GameManager:
             ], alignment=ft.MainAxisAlignment.CENTER, top=0, left=40
         )
         
+        self.ui_stack.controls.extend([buttons_row, LupsCounter(top=10, right=10)])
+        
         # Composition
         self.stage = ft.Stack(
             controls=[
                 self.background_stack,
                 self.entity_stack,
                 self.foreground_stack,
-                buttons_row,
-                LupsCounter(top=10, right=10)
+                ft.TransparentPointer(self.day_night_overlay),
+                self.ui_stack,
             ], expand=True
         )
         
@@ -128,8 +136,62 @@ class GameManager:
             case " ": self.player.jump()
             case "V": self.player.attack()
             case "Escape": await self.page.window.close()
+            case "`":
+                self.time += 1
+                print(f"Time is now: {self.time}")
+                await self.set_time_of_day(self.time)
     
     # * === EVENTS ===
+    async def set_time_of_day(self, hour: float):
+        TIME_SENSITIVE_LAYERS = {5, 7}
+        LIGHT_LAYERS = {3, 6}
+        
+        # 1. Determine Target State based on Hour
+        if 6 <= hour <= 18:
+            is_day = True
+            target_overlay_opacity = 0.0 # Clear
+            overlay_color = ft.Colors.INDIGO_900
+        else:
+            is_day = False
+            target_overlay_opacity = 0.6 # Dark
+            overlay_color = ft.Colors.BLACK
+            
+        # 2. "The Curtain" - Fade to full darkness to hide the asset swap
+        # We temporarily change the animation speed to be faster for the transition
+        self.day_night_overlay.animate = ft.Animation(1500, ft.AnimationCurve.EASE_IN)
+        self.day_night_overlay.bgcolor = ft.Colors.with_opacity(1.0, ft.Colors.BLACK)
+        self.day_night_overlay.update()
+
+        # Wait for the darkness to fully cover the screen
+        await asyncio.sleep(1.6)
+
+        # 3. Swap Assets (Hidden behind the curtain)
+        for bg in self.background_stack.controls:
+            if not isinstance(bg, ft.Image): continue
+
+            # Swap Trees (Texture Change)
+            if bg.data in TIME_SENSITIVE_LAYERS:
+                if is_day:
+                    # Switch to Day variant
+                    bg.src = f"images/backgrounds/night_forest/{bg.data}.png"
+                else:
+                    # Switch to Night variant
+                    if "-dark" not in bg.src:
+                        bg.src = f"images/backgrounds/night_forest/{bg.data}-dark.png"
+                bg.update()
+            
+            # Toggle Lights (Opacity Change)
+            # Since we added 'animate_opacity' in Step 1, this will fade nicely
+            elif bg.data in LIGHT_LAYERS:
+                bg.opacity = 1 if is_day else 0
+                bg.update()
+
+        # 4. Fade to Target (Reveal the new world)
+        # Slow down the animation for a gentle reveal
+        self.day_night_overlay.animate = ft.Animation(3000, ft.AnimationCurve.EASE_OUT)
+        self.day_night_overlay.bgcolor = ft.Colors.with_opacity(target_overlay_opacity, overlay_color)
+        self.day_night_overlay.update()
+    
     def summon_gobby(self, spawn_amount: int = None, center_spawn: bool = False):
         """Summons a random gobby."""
         def rnd_name():

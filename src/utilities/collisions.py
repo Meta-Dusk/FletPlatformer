@@ -4,14 +4,33 @@ def get_center(left: float, bottom: float, width: float, height: float) -> tuple
     """Returns the (x, y) center of an entity."""
     return (left + (width / 2), bottom + (height / 2))
 
+def is_in_x_range(
+    entity1_stack: ft.Stack, entity1_w: float,
+    entity2_stack: ft.Stack, entity2_w: float,
+    threshold: float
+) -> bool:
+    """
+    Checks if two stacks are within a certain X-axis distance of each other,
+    ignoring their vertical (Y) positions.
+    Useful for triggering aggro even if the target is jumping or on a different platform.
+    """
+    # 1. Get Center X Points
+    # Center X = Left + (Width / 2)
+    c1_x = entity1_stack.left + (entity1_w / 2)
+    c2_x = entity2_stack.left + (entity2_w / 2)
+
+    # 2. Calculate Distance (Absolute difference)
+    dx = abs(c1_x - c2_x)
+
+    # 3. Compare
+    return dx <= threshold
+
 def is_in_range(
     entity1_stack: ft.Stack, entity1_w: float, entity1_h: float,
     entity2_stack: ft.Stack, entity2_w: float, entity2_h: float,
     threshold: float
 ) -> bool:
-    """
-    Checks if two stacks are within a certain distance (threshold) of each other.
-    """
+    """Checks if two stacks are within a certain distance (threshold) of each other."""
     # 1. Get Center Points
     c1_x, c1_y = get_center(entity1_stack.left, entity1_stack.bottom, entity1_w, entity1_h)
     c2_x, c2_y = get_center(entity2_stack.left, entity2_stack.bottom, entity2_w, entity2_h)

@@ -17,14 +17,14 @@ def before_main_ui(page: ft.Page):
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.padding = 0
-    page.bgcolor = "#7693b3"
+    page.bgcolor = ft.Colors.BLACK
     page.window.width = WINDOW_WIDTH
     page.window.height = WINDOW_HEIGHT
     page.fonts = {
         FontStyles.INTER: "font_styles/Inter-VariableFont_opsz,wght.ttf",
         FontStyles.LIBRE_CASLON: "font_styles/LibreCaslonText-Regular.ttf"
     }
-    page.theme = ft.Theme(font_family=FontStyles.INTER, color_scheme_seed="#7693b3")
+    page.theme = ft.Theme(font_family=FontStyles.INTER, color_scheme_seed=ft.Colors.BLACK)
     # page.window.title_bar_hidden = True
     
 async def fix_stretched_window(page: ft.Page, *, center_page: bool = False):

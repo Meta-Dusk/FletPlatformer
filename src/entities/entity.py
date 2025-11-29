@@ -28,6 +28,7 @@ class EntityStates:
     disable_movement: bool = False
     revivable: bool = False
     dealing_damage: bool = False
+    stunned: bool = False
 
 @dataclass
 class EntityStats:
@@ -96,7 +97,7 @@ class Entity:
         if not hasattr(self, "ground_level"):
             self.ground_level: int = 0
         self.stack: ft.Stack = self._make_stack()
-        print(f"Making a {faction.value} entity, named; \"{name}\", with stats of: {self.stats}")
+        print(f"Making a {faction.value} entity, named; \"{name}\", with {self.stats}")
         if show_hud:
             self._health_bar_c = self._make_health_bar()
             self.nametag = self._make_nametag()
@@ -534,6 +535,9 @@ class Entity:
             has_flipped = True
         return has_flipped
     
+    def _get_center_point(self, entity: Self):
+        return entity.stack.left + (entity.sprite.width / 2)
+    
     # * === OTHER HELPERS ===
     def _reset_states(self, new_states: EntityStates = None):
         """Reset entity state values back to their defaults."""
@@ -584,6 +588,7 @@ class Entity:
             return False
             
         self.states.taking_damage = True
+        self.states.stunned = True
         self.stats.health -= damage_amount
         self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(-{damage_amount})")
         return True
