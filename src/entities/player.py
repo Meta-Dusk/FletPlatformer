@@ -1,12 +1,12 @@
 import asyncio, random
 import flet as ft
 from pynput import keyboard
+from typing import Literal
 
 from entities.entity import Entity, EntityStates, EntityStats, Factions
 from images import Sprite
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
-from utilities.keyboard_manager import held_keys
 from utilities.tasks import attempt_cancel
 from utilities.collisions import check_collision
 
@@ -40,6 +40,7 @@ class Player(Entity):
             p2_r_left=120, p2_width=140, p2_height=160
         )
         self._make_self_hitbox(width=95, height=110, r_left=55)
+        self._has_dashed: bool = False
     
     # * === LOOPING ANIMATIONS ===
     async def _animation_loop(self):
@@ -117,17 +118,15 @@ class Player(Entity):
                         return
     
     async def _handle_hit_logic(self, target_enemy: Entity):
-        """
-        Applies damage to a specific enemy and updates game stats if they die.
-        """
+        """Applies damage to a specific enemy and updates game stats if they die."""
         # Apply Damage
         did_die = await target_enemy.take_damage(self.stats.attack_damage)
         
         # Check Result
-        if did_die:
-            if hasattr(self, "game_manager"):
-                self.game_manager.kill_count += 1
-                print(f"[GameManager] Kill Count: {self.game_manager.kill_count}")
+        if not did_die: return
+        if hasattr(self, "game_manager"):
+            self.game_manager.kill_count += 1
+            print(f"[GameManager] Kill Count: {self.game_manager.kill_count}")
     
     async def _detect_attack_hits(self):
         """Checks if the Player's active attack hitbox collides with any enemy."""
@@ -166,17 +165,15 @@ class Player(Entity):
                 continue
             
             is_shift_held = keyboard.Key.shift in self.held_keys
-            # is_ctrl_held = keyboard.Key.ctrl_l in keyboard_manager.held_keys # ? Enable if needed
             if self.page.window.focused and \
-            (not self.states.is_attacking and not self.states.taking_damage):
+            not self.states.is_attacking and not self.states.taking_damage:
                 step = self.stats.movement_speed * 2 if is_shift_held else self.stats.movement_speed
                 dx, dy = 0, 0
                 
-                # if 'w' in keyboard_manager.held_keys: dy -= step # ? Use for flying upwards
-                # if 's' in keyboard_manager.held_keys: dy += step # ? Use for flying downwards
                 if 'a' in self.held_keys: dx -= step
                 if 'd' in self.held_keys: dx += step
-                if (self.stack.left + dx) <= 0 or (self.stack.left + dx + self.sprite.width) >= self.page.width: dx = 0
+                if ('a' or 'd') and 'c' in self.held_keys: await self.dash(dx)
+                if self.stack.left <= 0 or self.stack.left + self.sprite.width >= self.page.width: dx = 0
                 
                 # ? Movement
                 def primary_callback(): self.states.sprint = True if is_shift_held else False
@@ -312,8 +309,33 @@ class Player(Entity):
         await self._death_anim()
         self._toggle_atk_hb_border()
     
+    async def dash(self, dx: int):
+        if self._has_dashed: return
+        elif dx == 0: return
+        
+        self._debug_msg(f"Dashing to the {"left" if dx < 0 else "right"}!")
+        self._has_dashed = True
+        self.states.invincible = True
+        self.sprite.color = ft.Colors.with_opacity(0.3, ft.Colors.ORANGE)
+        self.sprite.color_blend_mode = ft.BlendMode.SRC_A_TOP
+        
+        if dx > 0: self.stack.left += 100
+        else: self.stack.left -= 100
+        self._play_sfx(sfx.whoosh.motion, 0.5)
+        self._safe_update(self.stack, self.sprite)
+        
+        async def timer():
+            await asyncio.sleep(0.3)
+            self.sprite.color = None
+            self.sprite.color_blend_mode = ft.BlendMode.DST
+            self.states.invincible = False
+            self._safe_update(self.sprite)
+            await asyncio.sleep(0.7)
+            self._has_dashed = False
+        self.page.run_task(timer)
+    
     def jump(self):
-        """Play jump action."""
+        """Player jump action."""
         if self.stack.bottom != self.ground_level or self._interrupt_action(): return
         self.stack.bottom += self._get_jump_dy()
         self._safe_update(self.stack)

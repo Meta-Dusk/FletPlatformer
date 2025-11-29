@@ -29,6 +29,7 @@ class EntityStates:
     revivable: bool = False
     dealing_damage: bool = False
     stunned: bool = False
+    invincible: bool = False
 
 @dataclass
 class EntityStats:
@@ -565,10 +566,10 @@ class Entity:
         if self.states.is_attacking:
             self._debug_msg(f"{self.name} is already attacking")
             return False
-        if self.states.dead:
+        elif self.states.dead:
             self._debug_msg(f"{self.name} cannot attack while dead")
             return False
-        if self.states.taking_damage:
+        elif self.states.taking_damage:
             self._debug_msg(f"{self.name} cannot attack while being damaged")
             return False
         return True
@@ -578,15 +579,18 @@ class Entity:
         """
         Base implementation for taking damage.
         Handles: Checks, Health Subtraction, and Safety Reset.
-        Returns True if damage was successfully applied.
+        Returns `True` if damage was successfully applied.
         """
         if self.states.dead:
             self._debug_msg(f"{self.name} is already dead")
             return False
-        if self.states.taking_damage:
+        elif self.states.taking_damage:
             self._debug_msg(f"{self.name} cannot be damaged again yet")
             return False
-            
+        elif self.states.invincible:
+            self._debug_msg(f"{self.name} cannot be damaged during i-frames")
+            return False
+        
         self.states.taking_damage = True
         self.states.stunned = True
         self.stats.health -= damage_amount

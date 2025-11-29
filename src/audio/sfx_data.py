@@ -74,6 +74,11 @@ class ImpactsSFX:
     axe_hit_flesh = sound_path("axe_hit_flesh")
     landing_on_grass = sound_path("landing_on_grass")
 
+@dataclass
+class WhooshSFX:
+    cape = sound_path("whoosh_cape")
+    motion = sound_path("whoosh_motion")
+
 # * Main Sound Library
 @dataclass
 class SFXLibrary:
@@ -88,4 +93,5 @@ class SFXLibrary:
     enemy = EnemySFX()
     footsteps = FootstepsSFX()
     impacts = ImpactsSFX()
+    whoosh = WhooshSFX()
     
