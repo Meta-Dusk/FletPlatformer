@@ -3,6 +3,7 @@ import asyncio, random
 
 from audio.audio_manager import AudioManager
 from audio.music_data import MusicLibrary
+from components.lups_counter import LupsCounter
 from utilities.keyboard_manager import held_keys, start as km_start
 from utilities.tasks import attempt_cancel
 from entities.player import Player
@@ -100,7 +101,8 @@ class GameManager:
                 self.background_stack,
                 self.entity_stack,
                 self.foreground_stack,
-                buttons_row
+                buttons_row,
+                LupsCounter(top=10, right=10)
             ], expand=True
         )
         
