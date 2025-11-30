@@ -8,6 +8,7 @@ from typing import Self, Callable
 from images import Sprite
 from audio.audio_manager import AudioManager
 from utilities.values import pathify
+from components.popup_text import DamageText
 
 
 class Factions(Enum):
@@ -88,7 +89,7 @@ class Entity:
         self._movement_loop_task: asyncio.Task = None
         self._spr_path: Path = pathify(sprite.src)
         self.health_bar: ft.ProgressBar = None
-        self._health_bar_c: ft.Control = None
+        self._health_bar_stack: ft.Stack = None
         self.nametag: ft.Control = None
         self._show_border: bool = False
         self._cleanup_ready: bool = False
@@ -101,7 +102,7 @@ class Entity:
         self.stack: ft.Stack = self._make_stack()
         print(f"Making a {faction.value} entity, named; \"{name}\", with {self.stats}")
         if show_hud:
-            self._health_bar_c = self._make_health_bar()
+            self._health_bar_stack = self._make_health_bar()
             self.nametag = self._make_nametag()
             self.stack.controls.append(self._make_hud())
             self._safe_update(self.stack)
@@ -452,11 +453,11 @@ class Entity:
     def _make_hud(self):
         if self.nametag is None:
             print("Missing nametag!")
-        if self.health_bar is None or self._health_bar_c is None:
+        if self.health_bar is None or self._health_bar_stack is None:
             print("Missing healthbar!")
         return ft.Container(
             ft.Column(
-                controls=[self.nametag, self._health_bar_c],
+                controls=[self.nametag, self._health_bar_stack],
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 tight=True
@@ -485,11 +486,21 @@ class Entity:
             color=ft.Colors.GREY_800, bgcolor=ft.Colors.TRANSPARENT, height=15
         )
         self.health_bar = healthbar
-        return ft.Container(
+        
+        healthbar_container = ft.Container(
             width=120, height=15, border=ft.Border.all(2, ft.Colors.BLACK),
             border_radius=5, content=healthbar,
             bgcolor=ft.Colors.RED if self.faction == Factions.NONHUMAN else ft.Colors.GREEN
         )
+        healthbar_label = ft.Text(
+            color=ft.Colors.BLACK, size=10,
+            spans=[
+                ft.TextSpan(self.stats.health),
+                ft.TextSpan("/"),
+                ft.TextSpan(self.stats.max_health)
+            ], left=2
+        )
+        return ft.Stack([healthbar_container, healthbar_label])
     
     def _get_spr_path(self, state: str, index: int, *, debug: bool = False):
         """Returns a formatted str path for sprites."""
@@ -525,7 +536,9 @@ class Entity:
         """Updates the health bar if provided."""
         if self.health_bar is None: return
         self.health_bar.value = abs((self.stats.health / self.stats.max_health) - 1)
-        self._safe_update(self.health_bar)
+        label: ft.Text = self._health_bar_stack.controls[1]
+        label.spans[0].text = self.stats.health
+        self._safe_update(self.health_bar, label)
     
     def _flip_sprite_x(self, dx: int):
         """Flips the facing direction of the sprite."""
@@ -610,6 +623,14 @@ class Entity:
         self.states.stunned = True
         self.stats.health -= damage_amount
         self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(-{damage_amount})")
+        self.stack.controls.append(
+            DamageText(
+                left=self.stack.width / 2,
+                bottom=self.stack.height - 60,
+                value=damage_amount
+            )
+        )
+        self._safe_update(self.stack)
         return True
     
     def death(self):

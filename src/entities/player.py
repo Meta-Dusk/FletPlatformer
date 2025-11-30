@@ -1,7 +1,6 @@
 import asyncio, random
 import flet as ft
 from pynput import keyboard
-from typing import Literal
 
 from entities.entity import Entity, EntityStates, EntityStats, Factions
 from images import Sprite
@@ -9,6 +8,7 @@ from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
 from utilities.tasks import attempt_cancel
 from utilities.collisions import check_collision
+from components.popup_text import DamageText
 
 sfx = SFXLibrary()
 
@@ -353,13 +353,16 @@ class Player(Entity):
     async def take_damage(self, damage_amount: float):
         """Decrease player's health with logic."""
         if not await super().take_damage(damage_amount): return
+        
         if self.states.is_attacking:
             attempt_cancel(self._attack_task)
             self.states.is_attacking = False
             self.states.dealing_damage = False
             self._toggle_atk_hb_border()
             self._modify_self_hitbox(reset=True)
+            
         self._apply_tint(ft.Colors.RED)
+        
         if self.stats.health <= 0: await self.death()
         else:
             if self._take_hit_task: attempt_cancel(self._take_hit_task)
