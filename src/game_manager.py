@@ -9,6 +9,7 @@ from utilities.tasks import attempt_cancel
 from entities.player import Player
 from entities.enemy import Enemy, EnemyType
 from entities.entity import Entity
+from entities.goblin import Goblin
 from bg_loops import light_mv_loop, stage_panning_loop
 from backgrounds import bg_image_forest
 
@@ -89,7 +90,10 @@ class GameManager:
             adaptive=True, label="Show Bounding Boxes",
             value=False, on_change=self._sb_btn_on_change
         )
-        spawn_gobby_btn = ft.Button("Spawn Gobby", ft.Icons.PERSON_ADD, on_click=lambda _: self.summon_gobby(1))
+        spawn_gobby_btn = ft.Button(
+            "Spawn Gobby", ft.Icons.PERSON_ADD,
+            on_click=lambda _: self.summon_enemy(EnemyType.GOBLIN, 1)
+        )
         buttons_row = ft.Row(
             controls=[
                 ft.Container(revive_btn, padding=16),
@@ -192,23 +196,28 @@ class GameManager:
         self.day_night_overlay.bgcolor = ft.Colors.with_opacity(target_overlay_opacity, overlay_color)
         self.day_night_overlay.update()
     
-    def summon_gobby(self, spawn_amount: int = None, center_spawn: bool = False):
-        """Summons a random gobby."""
-        def rnd_name():
-            names = ["Gobby", "Gibby", "Geeb", "Goob", "Gubby", "Gebby", "Gub", "Gerald", "Gibby", "Gib",
-                     "Gob", "Gobber", "Gob Lin", "Gob Gob", "Geb Geb", "Gub Gub", "Gib Gib", "Gibba", "Gibber"]
-            return random.choice(names)
-        
+    def summon_enemy(
+        self, enemy_type: EnemyType = None,
+        spawn_amount: int = None, center_spawn: bool = False
+    ):
+        """Summons a random enemy."""
+        if enemy_type is None:
+            print("Provide an enemy type to summon.")
+            return
         if spawn_amount is None: spawn_amount = random.randint(1, 5)
         elif spawn_amount == 0: return
         else: spawn_amount = abs(spawn_amount)
-        for _ in range(spawn_amount): NewGoblin(game_manager=self, name=rnd_name(), center_spawn=center_spawn)
+        for _ in range(spawn_amount):
+            match enemy_type:
+                case EnemyType.GOBLIN: NewGoblin(game_manager=self, center_spawn=center_spawn)
+                case _: raise NotImplementedError("Other enemy types are not yet implemented!")
     
     # * === TASK MANAGEMENT ===
     def start_tasks(self):
         """Starts background loops."""
         async def run_light(): await light_mv_loop(self.background_stack)
         async def run_pan():
+            def summon_gobby(): self.summon_enemy(EnemyType.GOBLIN)
             await stage_panning_loop(
                 self.background_stack,
                 self.foreground_stack,
@@ -216,7 +225,7 @@ class GameManager:
                 self.player,
                 self.entity_list,
                 self.stage,
-                self.summon_gobby
+                summon_gobby
             )
             
         # Store tasks so we can cancel them later
@@ -239,7 +248,10 @@ class GameManagerMixin:
     def ground_level(self) -> int: return self.game_manager.ground_level
     
     def _get_base_kwargs(self, debug: bool):
-        """Helper for common init arguments."""
+        """
+        Helper for common init arguments. Currently returns the following:
+        \n`page`, `audio_manager`, `entity_list`, `debug`.
+        """
         return {
             "page": self.game_manager.page,
             "audio_manager": self.game_manager.audio_manager,
@@ -270,15 +282,14 @@ class GameManagerMixin:
         # ? This calls self.__call__(**kwargs), getting the control and starting loops
         self.game_manager.entity_stack.controls.append(self.__call__(**call_kwargs))
         
-class NewGoblin(Enemy, GameManagerMixin):
+class NewGoblin(Goblin, GameManagerMixin):
     """Wrapped `Enemy` class to be used in the `GameMaker` class."""
     def __init__(
-        self, game_manager: GameManager, name: str,
+        self, game_manager: GameManager, name: str = None,
         *, center_spawn: bool = True, debug = False
     ):
         self._configure_from_manager(game_manager)
         super().__init__(
-            type=EnemyType.GOBLIN,
             target=game_manager.player,
             name=name,
             **self._get_base_kwargs(debug)
