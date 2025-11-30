@@ -6,9 +6,9 @@ from entities.entity import Entity, EntityStates, EntityStats, Factions
 from images import Sprite
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
-from utilities.keyboard_manager import held_keys
 from utilities.tasks import attempt_cancel
 from utilities.collisions import check_collision
+from components.popup_text import DamageText
 
 sfx = SFXLibrary()
 
@@ -36,10 +36,11 @@ class Player(Entity):
         self._take_hit_task: asyncio.Task = None
         self._animation_loop_task: asyncio.Task = None
         self._make_atk_hitbox(
-            p1_r_left=70, p1_width=100, p1_height=150,
-            p2_r_left=120, p2_width=140, p2_height=160
+            p1_r_left=60, p1_width=110, p1_height=130,
+            p2_r_left=120, p2_width=140, p2_height=162
         )
         self._make_self_hitbox(width=95, height=110, r_left=55)
+        self._has_dashed: bool = False
     
     # * === LOOPING ANIMATIONS ===
     async def _animation_loop(self):
@@ -116,10 +117,19 @@ class Player(Entity):
                         self._knockback_self(entity)
                         return
     
+    async def _handle_hit_logic(self, target_enemy: Entity):
+        """Applies damage to a specific enemy and updates game stats if they die."""
+        # Apply Damage
+        did_die = await target_enemy.take_damage(self.stats.attack_damage)
+        
+        # Check Result
+        if not did_die: return
+        if hasattr(self, "game_manager"):
+            self.game_manager.kill_count += 1
+            print(f"[GameManager] Kill Count: {self.game_manager.kill_count}")
+    
     async def _detect_attack_hits(self):
-        """
-        Checks if the Player's active attack hitbox collides with any enemy.
-        """
+        """Checks if the Player's active attack hitbox collides with any enemy."""
         if not self.states.dealing_damage or not self._entity_list: return
         
         # ... (Get Active Hitbox logic) ...
@@ -133,7 +143,7 @@ class Player(Entity):
         for enemy in self._entity_list:
             if enemy.faction == Factions.HUMAN or enemy.states.dead: continue
             
-            # 1. Get Enemy's Body Rect (Using their new Hitbox!)
+            # Get Enemy's Body Rect
             e_left, e_bottom, e_w, e_h = enemy._get_self_global_rect()
 
             if check_collision(
@@ -141,7 +151,7 @@ class Player(Entity):
                 r2_left=e_left, r2_bottom=e_bottom, r2_w=e_w, r2_h=e_h # Enemy Body
             ):
                 self._debug_msg(f"Hit enemy: {enemy.name}")
-                self.page.run_task(enemy.take_damage, self.stats.attack_damage)
+                self.page.run_task(self._handle_hit_logic, enemy)
     
     # * === CUSTOM MOVEMENT LOOP ===
     async def _movement_loop(self):
@@ -149,23 +159,21 @@ class Player(Entity):
         while True:
             await self._detect_attack_hits()
             await self._detect_damage()
-            if self.states.dead or self.states.disable_movement:
-                self.states.is_moving = False
-                await asyncio.sleep(0.1)
-                continue
-            
-            is_shift_held = keyboard.Key.shift in self.held_keys
-            # is_ctrl_held = keyboard.Key.ctrl_l in keyboard_manager.held_keys # ? Enable if needed
-            if self.page.window.focused and \
-            (not self.states.is_attacking and not self.states.taking_damage):
+            if (
+                self.page.window.focused and
+                not self.states.is_attacking and
+                not self.states.taking_damage and
+                not self.states.dead and
+                not self.states.disable_movement
+            ):
+                is_shift_held = keyboard.Key.shift in self.held_keys
                 step = self.stats.movement_speed * 2 if is_shift_held else self.stats.movement_speed
                 dx, dy = 0, 0
                 
-                # if 'w' in keyboard_manager.held_keys: dy -= step # ? Use for flying upwards
-                # if 's' in keyboard_manager.held_keys: dy += step # ? Use for flying downwards
                 if 'a' in self.held_keys: dx -= step
                 if 'd' in self.held_keys: dx += step
-                if (self.stack.left + dx) <= 0 or (self.stack.left + dx + self.sprite.width) >= self.page.width: dx = 0
+                if ('a' or 'd') and 'c' in self.held_keys: await self.dash(dx)
+                if self.stack.left <= 0 or self.stack.left + self.sprite.width >= self.page.width: dx = 0
                 
                 # ? Movement
                 def primary_callback(): self.states.sprint = True if is_shift_held else False
@@ -183,13 +191,16 @@ class Player(Entity):
             # ? Grounding
             if self.stack.bottom < self.ground_level:
                 self.stack.bottom += 10
-                if self.stack.bottom > self.ground_level: self.stack.bottom = 0
+                if self.stack.bottom > self.ground_level: self.stack.bottom = self.ground_level
                 
             # ? Gravity
             elif self.stack.bottom > self.ground_level and not self.states.jumped:
                 self.states.is_falling = True
                 self.stack.bottom -= 25
+                
+                # ? Landing Logic
                 if self.stack.bottom <= self.ground_level:
+                    self.stack.bottom = self.ground_level
                     self._play_sfx(sfx.player.jump_landing)
                     self._play_sfx(sfx.player.exhale)
                     self._play_sfx(sfx.impacts.landing_on_grass)
@@ -223,15 +234,16 @@ class Player(Entity):
     
     async def _attack_anim(self):
         """Handles the player's attack animations with combos."""
-        prefix = "attack-main" if self.states.attack_phase == 1 else "attack-secondary"
+        prefix = f"attack-{self.states.attack_phase}"
         for i in range(7):
             await asyncio.sleep(0.1)
             if self.states.attack_phase == 1: # Upward slash
-                if i == 1: self._modify_self_hitbox(r_left=40)
+                if i == 0: self._modify_self_hitbox(r_left=45, width=85)
                 if i == 2: # TODO: Optimize audio by combining into one SFX
                     self._play_sfx(sfx.sword.fast_woosh)
                     self._play_sfx(sfx.player.small_grunt)
             elif self.states.attack_phase == 2: # Downward slash
+                if i == 0: self._modify_self_hitbox(width=75, r_left=75)
                 if i == 1:
                     self._play_sfx(sfx.sword.ting)
                     self._play_sfx(sfx.player.grunt)
@@ -254,11 +266,14 @@ class Player(Entity):
         """Handles the player's death animation."""
         death_sfx = [sfx.player.death_1, sfx.player.death_2]
         for i in range(11):
+            if i == 1: continue
             await asyncio.sleep(0.1)
-            if i == 3: self._play_sfx(random.choice(death_sfx))
+            if i == 3:
+                self._play_sfx(random.choice(death_sfx))
+                self._update_health_bar()
             if i == 4: self._play_sfx(sfx.cloth.clothes_drop)
             if i == 5: self._play_sfx(sfx.armor.hit_soft)
-            if i == 6: 
+            if i == 6:
                 self._play_sfx(sfx.item.keys_drop)
                 self._play_sfx(sfx.sword.blade_drop)
             self.sprite.change_src(self._get_spr_path("death", i))
@@ -267,11 +282,16 @@ class Player(Entity):
     async def _take_hit_anim(self):
         """Handles the player's taking damage animation."""
         for i in range(4):
+            if i == 0: continue
             await asyncio.sleep(0.1)
-            if i == 1: self._play_sfx(sfx.player.grunt_hurt)
+            if i == 1:
+                self._play_sfx(sfx.player.grunt_hurt)
+                self._update_health_bar()
             self.sprite.change_src(self._get_spr_path("take-hit", i))
         self.states.taking_damage = False
+        self.states.stunned = False
         self._take_hit_task = None
+        self._reset_tint()
     
     # * === CALLABLE PLAYER ACTIONS/EVENTS ===
     async def death(self):
@@ -280,16 +300,42 @@ class Player(Entity):
         self._debug_msg(f"{self.name} has died!")
         self._reset_states(EntityStates(dead=True))
         self._reset_stats(EntityStats(health=0))
-        await self._update_health_bar()
         
         attempt_cancel(self._animation_loop_task)
         self._cancel_temp_tasks()
+        if hasattr(self, "game_manager"):
+            count_str = "times" if self.game_manager.death_count > 0 else "time"
+            self.game_manager.death_count += 1
+            print(f"[GameManager] You have died {self.game_manager.death_count} {count_str}.")
+            
         await self._death_anim()
         self._toggle_atk_hb_border()
     
+    async def dash(self, dx: int):
+        if self._has_dashed: return
+        elif dx == 0: return
+        
+        self._debug_msg(f"Dashing to the {"left" if dx < 0 else "right"}!")
+        self._has_dashed = True
+        self.states.invincible = True
+        self._apply_tint(ft.Colors.PURPLE)
+        
+        if dx > 0: self.stack.left += 100
+        else: self.stack.left -= 100
+        self._play_sfx(sfx.whoosh.motion, 0.5)
+        self._safe_update(self.stack)
+        
+        async def timer():
+            await asyncio.sleep(0.3)
+            self._reset_tint()
+            self.states.invincible = False
+            await asyncio.sleep(0.7)
+            self._has_dashed = False
+        self.page.run_task(timer)
+    
     def jump(self):
-        """Play jump action."""
-        if self.stack.bottom != 0 or self._interrupt_action(): return
+        """Player jump action."""
+        if self.stack.bottom != self.ground_level or self._interrupt_action(): return
         self.stack.bottom += self._get_jump_dy()
         self._safe_update(self.stack)
         self.states.jumped = True
@@ -306,20 +352,21 @@ class Player(Entity):
         
     async def take_damage(self, damage_amount: float):
         """Decrease player's health with logic."""
-        if not super().take_damage(): return
-        self.stats.health -= damage_amount
-        self._debug_msg(f"Took damage: {damage_amount}, health is now: {self.stats.health}")
-        self.states.taking_damage = True
-        if (self.states.is_attacking and self.states.jumped) or self.states.is_attacking:
+        if not await super().take_damage(damage_amount): return
+        
+        if self.states.is_attacking:
             attempt_cancel(self._attack_task)
             self.states.is_attacking = False
             self.states.dealing_damage = False
             self._toggle_atk_hb_border()
             self._modify_self_hitbox(reset=True)
-            self._safe_update(self.stack)
+            
+        self._apply_tint(ft.Colors.RED)
+        
         if self.stats.health <= 0: await self.death()
-        else: self._take_hit_task = self.page.run_task(self._take_hit_anim)
-        await self._update_health_bar()
+        else:
+            if self._take_hit_task: attempt_cancel(self._take_hit_task)
+            self._take_hit_task = self.page.run_task(self._take_hit_anim)
     
     async def revive(self):
         if not super().revive(): return
@@ -328,8 +375,9 @@ class Player(Entity):
         await self._revive_anim()
         self._reset_states()
         self._reset_stats()
+        self._reset_tint()
         attempt_cancel(self._movement_loop_task)
-        await self._update_health_bar()
+        self._update_health_bar()
         self._start_loops()
     
     def __call__(self, start_loops: bool = True):
@@ -354,7 +402,7 @@ class Player(Entity):
         self._start_animation_loop()
         self._start_movement_loop()
     
-    def _interrupt_action(self):
+    def _interrupt_action(self, cancel_temp_tasks: bool = True):
         """
         Returns `False` if there are no interrupting actions occurring.
         """
@@ -365,7 +413,7 @@ class Player(Entity):
             or self.states.dead
         ): return True
         else:
-            self._cancel_temp_tasks()
+            if cancel_temp_tasks: self._cancel_temp_tasks()
             return False
     
     def _get_jump_dy(self):

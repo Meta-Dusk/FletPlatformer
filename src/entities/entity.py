@@ -8,6 +8,7 @@ from typing import Self, Callable
 from images import Sprite
 from audio.audio_manager import AudioManager
 from utilities.values import pathify
+from components.popup_text import DamageText
 
 
 class Factions(Enum):
@@ -28,6 +29,9 @@ class EntityStates:
     disable_movement: bool = False
     revivable: bool = False
     dealing_damage: bool = False
+    stunned: bool = False
+    invincible: bool = False
+    stun_immune: bool = False
 
 @dataclass
 class EntityStats:
@@ -85,7 +89,7 @@ class Entity:
         self._movement_loop_task: asyncio.Task = None
         self._spr_path: Path = pathify(sprite.src)
         self.health_bar: ft.ProgressBar = None
-        self._health_bar_c: ft.Control = None
+        self._health_bar_stack: ft.Stack = None
         self.nametag: ft.Control = None
         self._show_border: bool = False
         self._cleanup_ready: bool = False
@@ -93,11 +97,12 @@ class Entity:
             self._atk_hb_show: bool = False
         self._atk_hitboxes: list[ft.Container] = []
         self._hitbox: ft.Container = None
-        self.ground_level: int = 0
+        if not hasattr(self, "ground_level"):
+            self.ground_level: int = 0
         self.stack: ft.Stack = self._make_stack()
-        print(f"Making a {faction.value} entity, named; \"{name}\"")
+        print(f"Making a {faction.value} entity, named; \"{name}\", with {self.stats}")
         if show_hud:
-            self._health_bar_c = self._make_health_bar()
+            self._health_bar_stack = self._make_health_bar()
             self.nametag = self._make_nametag()
             self.stack.controls.append(self._make_hud())
             self._safe_update(self.stack)
@@ -326,9 +331,9 @@ class Entity:
     # * === FUNCTIONAL WRAPPERS ===
     def _debug_msg(self, msg: str, *, end: str = None, include_handler: bool = True):
         """A simple debug message for simple logging."""
-        if self.debug:
-            if include_handler: print(f"[{self._handler_str}] {msg}", end=end)
-            else: print(msg, end=end)
+        if not self.debug: return
+        if include_handler: print(f"[{self._handler_str}] {msg}", end=end)
+        else: print(msg, end=end)
     
     def _play_sfx(self, sfx: Path, volume: float = None):
         """Play an SFX with support for directional playback."""
@@ -355,10 +360,7 @@ class Entity:
             self.stack.left += dx
             self.stack.bottom += dy
             if primary_callback: primary_callback()
-            
-            if self._flip_sprite_x(dx):
-                self._flip_atk_hb()
-                self._flip_self_hb()
+            if self._flip_char(dx):
                 if secondary_callback: secondary_callback()
         else: self.states.is_moving = False
     
@@ -389,6 +391,13 @@ class Entity:
         self._movement_loop_task = self.page.run_task(self._movement_loop)
     
     # * === COMPONENT TOGGLES ===
+    def _flip_char(self, dx: int):
+        if self._flip_sprite_x(dx):
+            self._flip_atk_hb()
+            self._flip_self_hb()
+            return True
+        return False
+    
     def toggle_show_border(self, show_border: bool = None):
         if show_border is not None: self._show_border = show_border
         else: self._show_border = not self._show_border
@@ -411,21 +420,20 @@ class Entity:
                     self._safe_update(atk_hb)
         self._safe_update(container, self._hitbox)
     
-    def _knockback_self(self, entity: Self):
-        """Applies a knockback to self based from the provided `entity`."""
-        if self.states.dead: return
-        knockback: int = 0
-        if entity.stack.left > self.stack.left:
-            knockback = -entity.stats.attack_knockback * self.stats.knockback_resistance
-        elif entity.stack.left < self.stack.left:
-            knockback = entity.stats.attack_knockback * self.stats.knockback_resistance
-        self.stack.left += knockback
-        self._safe_update(self.stack)
-    
     # * === COMPONENT METHODS ===
+    def _reset_tint(self):
+        self.sprite.color = None
+        self.sprite.color_blend_mode = ft.BlendMode.DST
+        self._safe_update(self.sprite)
+    
+    def _apply_tint(self, color: ft.ColorValue):
+        self.sprite.color = ft.Colors.with_opacity(0.3, color)
+        self.sprite.color_blend_mode = ft.BlendMode.SRC_A_TOP
+        self._safe_update(self.sprite)
+    
     def _get_self_global_rect(self) -> tuple[float, float, float, float]:
         """
-        Returns the GLOBAL (Screen) definition of the entity's body/hurtbox.
+        Returns the **GLOBAL** (Screen) definition of the entity's body/hurtbox.
         Format: (left, bottom, width, height)
         """
         if self._hitbox:
@@ -445,11 +453,11 @@ class Entity:
     def _make_hud(self):
         if self.nametag is None:
             print("Missing nametag!")
-        if self.health_bar is None or self._health_bar_c is None:
+        if self.health_bar is None or self._health_bar_stack is None:
             print("Missing healthbar!")
         return ft.Container(
             ft.Column(
-                controls=[self.nametag, self._health_bar_c],
+                controls=[self.nametag, self._health_bar_stack],
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 tight=True
@@ -475,14 +483,23 @@ class Entity:
     def _make_health_bar(self):
         healthbar = ft.ProgressBar(
             value=0.0, scale=ft.Scale(scale_x=-1, scale_y=1),
-            color=ft.Colors.GREY_800, bgcolor=ft.Colors.TRANSPARENT, height=15
+            color=ft.Colors.GREY_800, bgcolor=ft.Colors.TRANSPARENT, height=18
         )
         self.health_bar = healthbar
-        return ft.Container(
-            width=120, height=15, border=ft.Border.all(2, ft.Colors.BLACK),
-            border_radius=5, content=healthbar,
+        
+        healthbar_container = ft.Container(
+            width=120, border=ft.Border.all(2, ft.Colors.BLACK), border_radius=5, content=healthbar,
             bgcolor=ft.Colors.RED if self.faction == Factions.NONHUMAN else ft.Colors.GREEN
         )
+        healthbar_label = ft.Text(
+            color=ft.Colors.BLACK, size=18,
+            spans=[
+                ft.TextSpan(self.stats.health),
+                ft.TextSpan("/"),
+                ft.TextSpan(self.stats.max_health)
+            ], left=5, top=-2
+        )
+        return ft.Stack([healthbar_container, healthbar_label])
     
     def _get_spr_path(self, state: str, index: int, *, debug: bool = False):
         """Returns a formatted str path for sprites."""
@@ -514,14 +531,16 @@ class Entity:
             try: control.update()
             except RuntimeError: pass
     
-    async def _update_health_bar(self):
+    def _update_health_bar(self):
         """Updates the health bar if provided."""
         if self.health_bar is None: return
-        await asyncio.sleep(0.1)
         self.health_bar.value = abs((self.stats.health / self.stats.max_health) - 1)
-        self._safe_update(self.health_bar)
+        label: ft.Text = self._health_bar_stack.controls[1]
+        label.spans[0].text = self.stats.health
+        self._safe_update(self.health_bar, label)
     
     def _flip_sprite_x(self, dx: int):
+        """Flips the facing direction of the sprite."""
         current_scale_x = self.sprite.scale.scale_x if hasattr(self.sprite.scale, "scale_x") else self.sprite.scale
         start_facing_sign = 1 if current_scale_x > 0 else -1
         desired_sign = start_facing_sign
@@ -532,6 +551,9 @@ class Entity:
             self.sprite.flip_x(desired_sign)
             has_flipped = True
         return has_flipped
+    
+    def _get_center_point(self, entity: Self) -> int:
+        return entity.stack.left + (entity.stack.width / 2)
     
     # * === OTHER HELPERS ===
     def _reset_states(self, new_states: EntityStates = None):
@@ -552,6 +574,17 @@ class Entity:
         """
         return self.stack
     
+    def _knockback_self(self, entity: Self):
+        """Applies a knockback to self away from the provided `entity`."""
+        if self.states.dead: return
+        knockback: int = 0
+        if entity.stack.left > self.stack.left:
+            knockback = -entity.stats.attack_knockback * self.stats.knockback_resistance
+        elif entity.stack.left < self.stack.left:
+            knockback = entity.stats.attack_knockback * self.stats.knockback_resistance
+        self.stack.left += knockback
+        self._safe_update(self.stack)
+    
     def attack(self):
         """
         Simple spam-proof implementation for `attack()`.
@@ -560,28 +593,38 @@ class Entity:
         if self.states.is_attacking:
             self._debug_msg(f"{self.name} is already attacking")
             return False
-        if self.states.dead:
+        elif self.states.dead:
             self._debug_msg(f"{self.name} cannot attack while dead")
             return False
-        if self.states.taking_damage:
+        elif self.states.taking_damage:
             self._debug_msg(f"{self.name} cannot attack while being damaged")
             return False
         return True
         # ? Implement the rest of the logic here
     
-    def take_damage(self):
+    async def take_damage(self, damage_amount: float) -> bool:
         """
-        Simple spam-proof implementation for `take_damage()`.
-        Returns `False` if action is interrupted.
+        Base implementation for taking damage.
+        Handles: Checks, Health Subtraction, and Safety Reset.
+        Returns `True` if damage was successfully applied.
         """
         if self.states.dead:
             self._debug_msg(f"{self.name} is already dead")
             return False
-        if self.states.taking_damage:
+        elif self.states.taking_damage:
             self._debug_msg(f"{self.name} cannot be damaged again yet")
             return False
+        elif self.states.invincible:
+            self._debug_msg(f"{self.name} cannot be damaged during i-frames")
+            return False
+        
+        self.states.taking_damage = True
+        self.states.stunned = True
+        self.stats.health -= damage_amount
+        self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(-{damage_amount})")
+        self.stack.controls.append(DamageText(left=(self.stack.width / 2) + 35, top=16, value=damage_amount))
+        self._safe_update(self.stack)
         return True
-        # ? Implement the rest of the logic here
     
     def death(self):
         """

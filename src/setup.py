@@ -10,6 +10,8 @@ class FontStyles(Enum):
     """Available font styles."""
     INTER = "Inter"
     LIBRE_CASLON = "Libre Caslon"
+    BLRRPIXS = "Blrr Pixs"
+    MEDODICA = "Medodica Regular"
 
 def before_main_ui(page: ft.Page):
     """Call before rendering the main UI."""
@@ -17,15 +19,21 @@ def before_main_ui(page: ft.Page):
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.padding = 0
-    page.bgcolor = "#7693b3"
-    page.window.width = WINDOW_WIDTH
-    page.window.height = WINDOW_HEIGHT
+    page.bgcolor = ft.Colors.BLACK
     page.fonts = {
         FontStyles.INTER: "font_styles/Inter-VariableFont_opsz,wght.ttf",
-        FontStyles.LIBRE_CASLON: "font_styles/LibreCaslonText-Regular.ttf"
+        FontStyles.LIBRE_CASLON: "font_styles/LibreCaslonText-Regular.ttf",
+        FontStyles.BLRRPIXS: "font_styles/blrrpixs016.ttf",
+        FontStyles.MEDODICA: "font_styles/MedodicaRegular.otf"
     }
-    page.theme = ft.Theme(font_family=FontStyles.INTER, color_scheme_seed="#7693b3")
-    # page.window.title_bar_hidden = True
+    page.theme = ft.Theme(font_family=FontStyles.BLRRPIXS, color_scheme_seed=ft.Colors.BLACK)
+    
+    page.window.title_bar_hidden = True
+    page.window.width = WINDOW_WIDTH
+    page.window.height = WINDOW_HEIGHT
+    page.window.full_screen = False
+    page.window.minimized = False
+    page.window.maximized = False
     
 async def fix_stretched_window(page: ft.Page, *, center_page: bool = False):
     """

@@ -18,6 +18,8 @@ def test(page: ft.Page):
     audio_manager.initialize()
     
     entity_spr = Sprite("images/enemies/goblin/idle_0.png", width=150, height=150)
+    entity_spr.color = ft.Colors.with_opacity(0.2, ft.Colors.RED)
+    entity_spr.color_blend_mode = ft.BlendMode.SRC_A_TOP
     entity = Entity(entity_spr, "Dummy Gob", page, audio_manager, Factions.NONHUMAN, debug=True)
     entity.toggle_show_border(True)
     

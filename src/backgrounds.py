@@ -50,4 +50,6 @@ def bg_image_forest(index: int, page: ft.Page) -> ft.Image:
         repeat=ft.ImageRepeat.REPEAT if index == 0 else ft.ImageRepeat.REPEAT_X,
         # Animation
         animate_position=anim,
+        animate_opacity=ft.Animation(2500, ft.AnimationCurve.LINEAR),
+        opacity=1
     )

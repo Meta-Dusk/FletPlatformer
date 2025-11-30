@@ -10,10 +10,13 @@ from utilities.events import silence_event_loop_closed
 # ? It will fix the import complications
 
 async def main(page: ft.Page):
+    # Called here as supplying this in `ft.run` somehow doesn't work anymore
+    before_main_ui(page)
+    
     # Attach the typed handler to the running loop
     loop = asyncio.get_running_loop()
     loop.set_exception_handler(silence_event_loop_closed)
     game = GameManager(page)
     await game()
-    
-if __name__ == "__main__": ft.run(main=main, before_main=before_main_ui)
+
+ft.run(main)
