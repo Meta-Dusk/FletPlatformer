@@ -1,6 +1,8 @@
 import flet as ft
 from typing import Optional
 
+from setup import FontStyles
+
 
 class MainMenu(ft.Container):
     def __init__(
@@ -12,7 +14,7 @@ class MainMenu(ft.Container):
             expand=True, bgcolor=ft.Colors.BLACK, alignment=ft.Alignment.CENTER,
             content=ft.Column(
                 controls=[
-                    ft.Text("Flet Platformer", size=50, weight=ft.FontWeight.BOLD),
+                    ft.Text("Flet Platformer", size=50, weight=ft.FontWeight.BOLD, font_family=FontStyles.MEDODICA),
                     ft.Button("Start Game", on_click=on_start),
                     ft.Button("Quit", on_click=on_quit),
                 ], alignment=ft.MainAxisAlignment.CENTER,
@@ -32,7 +34,7 @@ class PauseMenu(ft.Container):
             alignment=ft.Alignment.CENTER,
             content=ft.Column(
                 controls=[
-                    ft.Text("PAUSED", size=40),
+                    ft.Text("PAUSED", size=40, font_family=FontStyles.MEDODICA),
                     ft.Button("Resume", on_click=on_resume),
                     ft.Button("Quit to Title", on_click=on_quit),
                 ], alignment=ft.MainAxisAlignment.CENTER,

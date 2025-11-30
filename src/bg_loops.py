@@ -1,10 +1,11 @@
 import asyncio
 import flet as ft
+from typing import Callable
 
 from entities.player import Player
 from entities.entity import Entity
 from entities.enemy import Enemy
-from typing import Callable
+from components.popup_text import DamageText
 
 
 async def light_mv_loop(background_stack: ft.Stack):
@@ -113,5 +114,9 @@ async def stage_panning_loop(
             if not is_panning: break
             if entity._cleanup_ready and isinstance(entity, Enemy):
                 enemy: Enemy = entity
-                print(f"[stage_panning_loop] Cleaning up {enemy.name}")
+                print(f"[stage_panning_loop] Cleaning up: {enemy.name}")
                 enemy.remove_selves()
+        else:
+            print(f"[stage_panning_loop] entity_list is now: {len(entity_list)}")
+            print(f"[stage_panning_loop] Entities: {entity_list}")
+        

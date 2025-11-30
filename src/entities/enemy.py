@@ -73,7 +73,6 @@ class Enemy(Entity):
         self.is_idling: bool = False
         self.melee_range: int = type.value.melee_range
         self._cached_player_stack = None
-        self._damage_detection_task: asyncio.Task = None
         self._rnd_dx: int = 0
         self._make_atk_hitbox(
             p1_r_left=-15, p1_width=180, p1_height=100,
@@ -240,11 +239,13 @@ class Enemy(Entity):
     # * === CLEANUP ===
     def remove_selves(self):
         """Removes `self` from `stage` and `_entity_list`."""
-        stage = self._get_parent()
+        entity_stack = self._get_parent()
         
-        self._debug_msg(f"Attempting to remove self from stage: {len(stage.controls)} -> ", end="")
-        if self in stage.controls: stage.controls.remove(self.stack)
-        self._debug_msg(len(stage.controls), include_handler=False)
+        self._debug_msg(f"Attempting to remove self from entity_stack: {len(entity_stack.controls)} -> ", end="")
+        if self.stack in entity_stack.controls:
+            entity_stack.controls.remove(self.stack)
+            self._safe_update(entity_stack)
+        self._debug_msg(len(entity_stack.controls), include_handler=False)
         
         self._debug_msg(f"Attempting to remove self from _entity_list: {len(self._entity_list)} -> ", end="")
         if self._entity_list is not None and self in self._entity_list: self._entity_list.remove(self)
@@ -344,7 +345,7 @@ class Enemy(Entity):
         """Cancels all running looping tasks."""
         tasks = [
             self._movement_loop_task,
-            self._damage_detection_task
+            self._animation_loop_task
         ]
         for task in tasks: attempt_cancel(task)
     

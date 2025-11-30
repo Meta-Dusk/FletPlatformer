@@ -182,10 +182,10 @@ class GameManager:
             case "V": self.player.attack()
             case "Escape": self.toggle_pause(e)
             case "F11": self.page.window.maximized = not self.page.window.maximized
-            case "`":
-                self.time += 1
-                print(f"Time is now: {self.time}")
-                await self.set_time_of_day(self.time)
+            # case "`":
+            #     self.time += 1
+            #     print(f"Time is now: {self.time}")
+            #     await self.set_time_of_day(self.time)
     
     # * === EVENTS ===
     async def start_game(self, _):
@@ -288,10 +288,12 @@ entity_stack: {len(self.entity_stack.controls)}
         if spawn_amount is None: spawn_amount = random.randint(1, 5)
         elif spawn_amount == 0: return
         else: spawn_amount = abs(spawn_amount)
+        print(f"[GameManager] Initial entity_stack size: {len(self.entity_stack.controls)}")
         for _ in range(spawn_amount):
             match enemy_type:
                 case EnemyType.GOBLIN: NewGoblin(game_manager=self, center_spawn=center_spawn)
                 case _: raise NotImplementedError("Other enemy types are not yet implemented!")
+        print(f"[GameManager] New entity_stack size: {len(self.entity_stack.controls)}")
     
     # * === TASK MANAGEMENT ===
     def start_tasks(self):

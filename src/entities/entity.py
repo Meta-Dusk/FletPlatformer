@@ -331,9 +331,9 @@ class Entity:
     # * === FUNCTIONAL WRAPPERS ===
     def _debug_msg(self, msg: str, *, end: str = None, include_handler: bool = True):
         """A simple debug message for simple logging."""
-        if self.debug:
-            if include_handler: print(f"[{self._handler_str}] {msg}", end=end)
-            else: print(msg, end=end)
+        if not self.debug: return
+        if include_handler: print(f"[{self._handler_str}] {msg}", end=end)
+        else: print(msg, end=end)
     
     def _play_sfx(self, sfx: Path, volume: float = None):
         """Play an SFX with support for directional playback."""
@@ -483,22 +483,21 @@ class Entity:
     def _make_health_bar(self):
         healthbar = ft.ProgressBar(
             value=0.0, scale=ft.Scale(scale_x=-1, scale_y=1),
-            color=ft.Colors.GREY_800, bgcolor=ft.Colors.TRANSPARENT, height=15
+            color=ft.Colors.GREY_800, bgcolor=ft.Colors.TRANSPARENT, height=18
         )
         self.health_bar = healthbar
         
         healthbar_container = ft.Container(
-            width=120, height=15, border=ft.Border.all(2, ft.Colors.BLACK),
-            border_radius=5, content=healthbar,
+            width=120, border=ft.Border.all(2, ft.Colors.BLACK), border_radius=5, content=healthbar,
             bgcolor=ft.Colors.RED if self.faction == Factions.NONHUMAN else ft.Colors.GREEN
         )
         healthbar_label = ft.Text(
-            color=ft.Colors.BLACK, size=10,
+            color=ft.Colors.BLACK, size=18,
             spans=[
                 ft.TextSpan(self.stats.health),
                 ft.TextSpan("/"),
                 ft.TextSpan(self.stats.max_health)
-            ], left=2
+            ], left=5, top=-2
         )
         return ft.Stack([healthbar_container, healthbar_label])
     
@@ -623,13 +622,7 @@ class Entity:
         self.states.stunned = True
         self.stats.health -= damage_amount
         self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(-{damage_amount})")
-        self.stack.controls.append(
-            DamageText(
-                left=self.stack.width / 2,
-                bottom=self.stack.height - 60,
-                value=damage_amount
-            )
-        )
+        self.stack.controls.append(DamageText(left=(self.stack.width / 2) + 35, top=16, value=damage_amount))
         self._safe_update(self.stack)
         return True
     
