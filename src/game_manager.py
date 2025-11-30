@@ -4,10 +4,12 @@ import asyncio, random
 from audio.audio_manager import AudioManager
 from audio.music_data import MusicLibrary
 from components.lups_counter import LupsCounter
+from components.ui_elements import preset_appbar, exit_button, minimize_button, fullscreen_button
+from components.menus import MainMenu, PauseMenu
 from utilities.keyboard_manager import held_keys, start as km_start
 from utilities.tasks import attempt_cancel
 from entities.player import Player
-from entities.enemy import Enemy, EnemyType
+from entities.enemy import EnemyType, Enemy
 from entities.entity import Entity
 from entities.goblin import Goblin
 from bg_loops import light_mv_loop, stage_panning_loop
@@ -35,6 +37,13 @@ class GameManager:
         self.kill_count: int = 0
         self.death_count: int = 0
         self.time: float = 7
+        self.is_game_running: bool = False
+        
+        # Scenes
+        async def exit(_): await self.page.window.close()
+        self.main_menu = MainMenu(self.start_game, exit)
+        self.pause_menu = PauseMenu(self.toggle_pause, self.quit_to_menu)
+        self.game_layer = ft.Container(visible=False) # Placeholder for the game stack
     
     async def __call__(self):
         """An alternative way to get the main entry point."""
@@ -47,20 +56,49 @@ class GameManager:
         self.audio_manager.initialize()
         self.audio_manager.play_music(music.ambience.forest)
         km_start()
-        await self._setup_ui()
         
         # --- Event Handlers ---
         self.page.on_keyboard_event = self._on_keyboard_event
         
-        # --- Start Loops ---
-        self.start_tasks()
+        # Setup UI: Stack all layers
+        self.stage = ft.Stack(
+            controls=[
+                # Layer 0: The Game (Hidden initially)
+                self.game_layer,
+                
+                # Layer 1: Main Menu (Visible initially)
+                self.main_menu,
+                
+                # Layer 2: Pause Menu (Hidden)
+                self.pause_menu
+            ], expand=True
+        )
+        self.page.add(self.stage)
+        await self.page.window.center()
     
-    def _safe_update(self, ctrl: ft.Control):
-        try: ctrl.update()
-        except RuntimeError: pass
+    def _safe_update(self, *controls: ft.Control):
+        """
+        Updates multiple controls safely.\n
+        As of Flet version `0.70.0.dev6787`, accessing the `.page` property
+        will raise a `RuntimeError` exception.
+        """
+        for control in controls:
+            if control is None: continue
+            try: control.update()
+            except RuntimeError: pass
     
-    async def _setup_ui(self):
+    def _setup_game_ui(self):
         """Initializes Player, Stacks, and HUD."""
+        # App Bar
+        appbar = preset_appbar(
+            title="Flet Platformer",
+            actions=[
+                minimize_button(self.page),
+                fullscreen_button(self.page),
+                exit_button(self.page)
+            ]
+        )
+        
         # Stacks/Layers
         self.background_stack = ft.Stack(expand=True)
         self.foreground_stack = ft.Stack(expand=True)
@@ -96,19 +134,19 @@ class GameManager:
         )
         buttons_row = ft.Row(
             controls=[
-                ft.Container(revive_btn, padding=16),
-                ft.Container(death_btn, padding=16),
-                ft.Container(damage_btn, padding=16),
-                ft.Container(directional_audio_btn, padding=16),
-                ft.Container(self.show_border_sw, padding=16),
-                ft.Container(spawn_gobby_btn, padding=16),
-            ], alignment=ft.MainAxisAlignment.CENTER, top=0, left=40
+                ft.Container(revive_btn, padding=8),
+                ft.Container(death_btn, padding=8),
+                ft.Container(damage_btn, padding=8),
+                ft.Container(directional_audio_btn, padding=8),
+                ft.Container(self.show_border_sw, padding=8),
+                ft.Container(spawn_gobby_btn, padding=8),
+            ], alignment=ft.MainAxisAlignment.CENTER, top=0, left=0
         )
         
         self.ui_stack.controls.extend([buttons_row, LupsCounter(top=10, right=10)])
         
         # Composition
-        self.stage = ft.Stack(
+        self.game_stage = ft.Stack(
             controls=[
                 self.background_stack,
                 self.entity_stack,
@@ -118,13 +156,15 @@ class GameManager:
             ], expand=True
         )
         
+        form = ft.WindowDragArea(self.game_stage, expand=True, maximizable=False)
+        
         # Player
         self.player = NewPlayer(self)
         
-        await self.page.window.center()
-        self.page.add(self.stage)
+        self.page.appbar = appbar
+        return form
         
-    # * === Event Handlers ===
+    # * === EVENT HANDLERS ===
     def _da_btn_on_change(self, e: ft.ControlEvent): self.audio_manager.directional_sfx = e.data
     def _sb_btn_on_change(self, e: ft.ControlEvent):
         for entity in self.entity_list:
@@ -136,21 +176,65 @@ class GameManager:
     async def _player_damage(self, _): await self.player.take_damage(5)
     
     async def _on_keyboard_event(self, e: ft.KeyboardEvent):
+        if not self.is_game_running: return
         match e.key:
             case " ": self.player.jump()
             case "V": self.player.attack()
-            case "Escape": await self.page.window.close()
+            case "Escape": self.toggle_pause(e)
+            case "F11": self.page.window.maximized = not self.page.window.maximized
             case "`":
                 self.time += 1
                 print(f"Time is now: {self.time}")
                 await self.set_time_of_day(self.time)
     
     # * === EVENTS ===
+    async def start_game(self, _):
+        """Switch from Menu to Game"""
+        self.main_menu.visible = False
+        
+        self.game_layer.visible = True
+        self.game_layer.content = self._setup_game_ui()
+        
+        self.is_game_running = True
+        self.page.update()
+        self.start_tasks()
+        print("[GameManager] Starting Game!")
+        
+    def toggle_pause(self, _):
+        """Toggle Pause Overlay"""
+        if not self.is_game_running: return
+        
+        self.pause_menu.visible = not self.pause_menu.visible
+        self.page.update()
+        print("[GameManager] Pausing the game!")
+        
+    def quit_to_menu(self, _):
+        """Cleanup game and show menu"""
+        self.cleanup()
+        
+        self.game_layer.content = None
+        self.game_layer.visible = False
+        self.entity_stack.controls.clear()
+        self.entity_list.clear()
+        self.game_stage.controls.clear()
+        print(f"""
+[GameManager] Quitting to Main Menu! Clearing Entities...
+entity_list: {len(self.entity_list)}
+entity_stack: {len(self.entity_stack.controls)}
+            """)
+        
+        self.pause_menu.visible = False
+        self.main_menu.visible = True
+        
+        self.is_game_running = False
+        self.page.update()
+    
+    # * === GAME EVENTS ===
     async def set_time_of_day(self, hour: float):
         TIME_SENSITIVE_LAYERS = {5, 7}
         LIGHT_LAYERS = {3, 6}
         
-        # 1. Determine Target State based on Hour
+        # Determine Target State based on Hour
         if 6 <= hour <= 18:
             is_day = True
             target_overlay_opacity = 0.0 # Clear
@@ -160,41 +244,38 @@ class GameManager:
             target_overlay_opacity = 0.6 # Dark
             overlay_color = ft.Colors.BLACK
             
-        # 2. "The Curtain" - Fade to full darkness to hide the asset swap
+        # "The Curtain" - Fade to full darkness to hide the asset swap
         # We temporarily change the animation speed to be faster for the transition
         self.day_night_overlay.animate = ft.Animation(1500, ft.AnimationCurve.EASE_IN)
         self.day_night_overlay.bgcolor = ft.Colors.with_opacity(1.0, ft.Colors.BLACK)
         self.day_night_overlay.update()
-
+        
         # Wait for the darkness to fully cover the screen
         await asyncio.sleep(1.6)
-
-        # 3. Swap Assets (Hidden behind the curtain)
+        
+        # Swap Assets (Hidden behind the curtain)
+        def get_bg(file: str):
+            return f"images/backgrounds/night_forest/{file}.png"
         for bg in self.background_stack.controls:
             if not isinstance(bg, ft.Image): continue
-
+            
             # Swap Trees (Texture Change)
             if bg.data in TIME_SENSITIVE_LAYERS:
-                if is_day:
-                    # Switch to Day variant
-                    bg.src = f"images/backgrounds/night_forest/{bg.data}.png"
-                else:
-                    # Switch to Night variant
-                    if "-dark" not in bg.src:
-                        bg.src = f"images/backgrounds/night_forest/{bg.data}-dark.png"
-                bg.update()
+                if is_day: bg.src = get_bg(bg.data)
+                elif not is_day and "-dark" not in bg.src: bg.src = get_bg(f"{bg.data}-dark")
+                self._safe_update(bg)
             
             # Toggle Lights (Opacity Change)
             # Since we added 'animate_opacity' in Step 1, this will fade nicely
             elif bg.data in LIGHT_LAYERS:
                 bg.opacity = 1 if is_day else 0
-                bg.update()
-
-        # 4. Fade to Target (Reveal the new world)
+                self._safe_update(bg)
+                
+        # Fade to Target (Reveal the new world)
         # Slow down the animation for a gentle reveal
         self.day_night_overlay.animate = ft.Animation(3000, ft.AnimationCurve.EASE_OUT)
         self.day_night_overlay.bgcolor = ft.Colors.with_opacity(target_overlay_opacity, overlay_color)
-        self.day_night_overlay.update()
+        self._safe_update(self.day_night_overlay)
     
     def summon_enemy(
         self, enemy_type: EnemyType = None,
@@ -235,7 +316,11 @@ class GameManager:
     def cleanup(self):
         """Call this when exiting or changing levels."""
         for task in self.running_tasks: attempt_cancel(task)
-
+        for entity in self.entity_list:
+            if isinstance(entity, Enemy):
+                entity._cancel_loop_tasks()
+                entity._cancel_temp_tasks()
+                
 class GameManagerMixin:
     """Mixin to bridge GameManager data into Entities."""
     def _configure_from_manager(self: Entity, game_manager: GameManager):
