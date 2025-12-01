@@ -497,7 +497,7 @@ class Entity:
                 ft.TextSpan(self.stats.health),
                 ft.TextSpan("/"),
                 ft.TextSpan(self.stats.max_health)
-            ], left=5, top=-2
+            ], left=5, top=-3
         )
         return ft.Stack([healthbar_container, healthbar_label])
     
