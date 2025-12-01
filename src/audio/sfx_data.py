@@ -80,6 +80,16 @@ class WhooshSFX:
     cape = sound_path("whoosh_cape")
     motion = sound_path("whoosh_motion")
 
+@dataclass
+class ButtonSFX:
+    click_1 = sound_path("button_click")
+    hover_1 = sound_path("button_hover")
+    item_select = sound_path("item_select")
+
+@dataclass
+class UISounds:
+    buttons = ButtonSFX()
+
 # * Main Sound Library
 @dataclass
 class SFXLibrary:
@@ -95,4 +105,5 @@ class SFXLibrary:
     footsteps = FootstepsSFX()
     impacts = ImpactsSFX()
     whoosh = WhooshSFX()
+    ui = UISounds()
     

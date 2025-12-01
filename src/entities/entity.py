@@ -8,6 +8,7 @@ from typing import Self, Callable
 from images import Sprite
 from audio.audio_manager import AudioManager
 from utilities.values import pathify
+from utilities.components import try_update
 from components.popup_text import DamageText
 
 
@@ -105,7 +106,7 @@ class Entity:
             self._health_bar_stack = self._make_health_bar()
             self.nametag = self._make_nametag()
             self.stack.controls.append(self._make_hud())
-            self._safe_update(self.stack)
+            try_update(self.stack)
     
     # * === DAMAGE HITBOXES ===
     def _flip_atk_hb(self):
@@ -128,7 +129,7 @@ class Entity:
                 # hb.bottom = pos_config.l_bottom
 
         # Force visual update
-        self._safe_update(*self._atk_hitboxes)
+        try_update(*self._atk_hitboxes)
     
     def _flip_self_hb(self):
         """Updates self hitbox positions based on facing direction."""
@@ -151,7 +152,7 @@ class Entity:
             self._hitbox.bottom = pos.l_bottom
         
         # 4. Visual Update
-        self._safe_update(self._hitbox)
+        try_update(self._hitbox)
     
     def _make_self_hitbox(
         self, width: int = None, height: int = None,
@@ -185,7 +186,7 @@ class Entity:
         
         self._hitbox = hitbox
         self.stack.controls.append(self._hitbox)
-        self._safe_update(self.stack)
+        try_update(self.stack)
     
     def _make_atk_hitbox(
         self, p1_r_left: int, p1_width: int, p1_height: int,
@@ -231,7 +232,7 @@ class Entity:
         
         self._atk_hitboxes = [atk_hitbox_1, atk_hitbox_2]
         self.stack.controls.extend(self._atk_hitboxes)
-        self._safe_update(self.stack)
+        try_update(self.stack)
     
     def _toggle_atk_hb_border(self):
         """
@@ -264,7 +265,7 @@ class Entity:
                 else:
                     atk_hb.border = None
                     atk_hb.bgcolor = None
-            self._safe_update(atk_hb)
+            try_update(atk_hb)
     
     def _modify_self_hitbox(
         self, width: int = None, height: int = None, 
@@ -326,7 +327,7 @@ class Entity:
             self._hitbox.left = pos.l_left
             self._hitbox.bottom = pos.l_bottom
             
-        self._safe_update(self._hitbox)
+        try_update(self._hitbox)
     
     # * === FUNCTIONAL WRAPPERS ===
     def _debug_msg(self, msg: str, *, end: str = None, include_handler: bool = True):
@@ -382,7 +383,7 @@ class Entity:
             idle_time = round(self.stack.animate_position.duration / 1000, 3)
             
             self._check_movement(dx, dy)
-            self._safe_update(self.stack)
+            try_update(self.stack)
             await asyncio.sleep(idle_time)
     
     def _start_movement_loop(self):
@@ -417,19 +418,19 @@ class Entity:
                 for atk_hb in self._atk_hitboxes:
                     atk_hb.border = None
                     atk_hb.bgcolor = None
-                    self._safe_update(atk_hb)
-        self._safe_update(container, self._hitbox)
+                    try_update(atk_hb)
+        try_update(container, self._hitbox)
     
     # * === COMPONENT METHODS ===
     def _reset_tint(self):
         self.sprite.color = None
         self.sprite.color_blend_mode = ft.BlendMode.DST
-        self._safe_update(self.sprite)
+        try_update(self.sprite)
     
     def _apply_tint(self, color: ft.ColorValue):
         self.sprite.color = ft.Colors.with_opacity(0.3, color)
         self.sprite.color_blend_mode = ft.BlendMode.SRC_A_TOP
-        self._safe_update(self.sprite)
+        try_update(self.sprite)
     
     def _get_self_global_rect(self) -> tuple[float, float, float, float]:
         """
@@ -520,24 +521,13 @@ class Entity:
             clip_behavior=ft.ClipBehavior.NONE
         )
     
-    def _safe_update(self, *controls: ft.Control):
-        """
-        Updates multiple controls safely.\n
-        As of Flet version `0.70.0.dev6787`, accessing the `.page` property
-        will raise a `RuntimeError` exception.
-        """
-        for control in controls:
-            if control is None: continue
-            try: control.update()
-            except RuntimeError: pass
-    
     def _update_health_bar(self):
         """Updates the health bar if provided."""
         if self.health_bar is None: return
         self.health_bar.value = abs((self.stats.health / self.stats.max_health) - 1)
         label: ft.Text = self._health_bar_stack.controls[1]
         label.spans[0].text = self.stats.health
-        self._safe_update(self.health_bar, label)
+        try_update(self.health_bar, label)
     
     def _flip_sprite_x(self, dx: int):
         """Flips the facing direction of the sprite."""
@@ -567,6 +557,10 @@ class Entity:
         self.stats = new_stats
     
     # * === CALLABLE ACTIONS/EVENTS ===
+    def __repr__(self):
+        # type(self).__name__ dynamically grabs "Enemy", "Player", etc.
+        return f"{type(self).__name__}: {self.name}"
+    
     def __call__(self):
         """
         Returns the `Stack` control. Make sure to
@@ -583,7 +577,7 @@ class Entity:
         elif entity.stack.left < self.stack.left:
             knockback = entity.stats.attack_knockback * self.stats.knockback_resistance
         self.stack.left += knockback
-        self._safe_update(self.stack)
+        try_update(self.stack)
     
     def attack(self):
         """
@@ -622,8 +616,8 @@ class Entity:
         self.states.stunned = True
         self.stats.health -= damage_amount
         self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(-{damage_amount})")
-        self.stack.controls.append(DamageText(left=(self.stack.width / 2) + 35, top=16, value=damage_amount))
-        self._safe_update(self.stack)
+        self.stack.controls.append(DamageText(left=(self.stack.width / 2) + 35, top=18, value=damage_amount))
+        try_update(self.stack)
         return True
     
     def death(self):

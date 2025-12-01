@@ -1,65 +1,124 @@
+import asyncio
 import flet as ft
 from typing import Optional
-from pathlib import Path
 
 from setup import FontStyles
-from components.custom_buttons import NinePatchButton
+from components.buttons import SimpleButton
+from backgrounds import add_infinite_layer
+from bg_loops import light_mv_loop
+from utilities.components import try_update
 
-
-SCRIPT_DIR = Path(__file__).parent.parent.resolve()
-BTN_IMG_PATH = SCRIPT_DIR / "assets" / "images" / "ui" / "buttons" / "UI_Flat_Button02a_4.png"
-
-def pixel_button(text: str, on_click: ft.ControlEventHandler = None):
-    pixel_btn_txt = ft.Text(
-        value=text, font_family=FontStyles.ADAPA,
-        size=40, color=ft.Colors.BLACK
-    )
-    return NinePatchButton(
-        src=BTN_IMG_PATH, width=240, height=80,
-        content=pixel_btn_txt, on_click=on_click,
-        color=ft.Colors.ORANGE
-    )
-
-def btn_txt(text: str):
-    return ft.Text(
-        value=text, size=30, font_family=FontStyles.ADAPA
+def new_button(
+    text: str, width: ft.Number = 250, height: ft.Number = 50,
+    on_click: ft.ControlEventHandler[ft.Button] = None,
+):
+    """Just a preset for making a `SimpleButton` instance."""
+    return SimpleButton(
+        content=ft.Text(value=text),
+        width=width, height=height,
+        on_click=on_click
     )
 
-class MainMenu(ft.Container):
+class MainMenu(ft.WindowDragArea):
+    """A control representing the Main Menu."""
     def __init__(
         self,
         on_start: Optional[ft.ControlEventHandler[ft.Button]] = None,
-        on_quit: Optional[ft.ControlEventHandler[ft.Button]] = None
+        on_quit: Optional[ft.ControlEventHandler[ft.Button]] = None,
+        on_settings: Optional[ft.ControlEventHandler[ft.Button]] = None
     ):
-        super().__init__(
-            expand=True, bgcolor=ft.Colors.BLACK, alignment=ft.Alignment.CENTER,
-            content=ft.Column(
-                controls=[
-                    ft.Text("Flet Platformer", size=80, font_family=FontStyles.DUNGEON),
-                    ft.Container(height=10),
-                    ft.Button(btn_txt("Start Game"), on_click=on_start),
-                    ft.Button(btn_txt("Quit"), on_click=on_quit),
-                ], alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        """Provide callbacks for the Main Menu buttons."""
+        title = ft.Text("Fushi: The Beckoning", size=80, font_family=FontStyles.LIEF)
+        version = ft.Text("v0.4.8", size=30, font_family=FontStyles.MEDODICA, offset=ft.Offset(0.0, -1.0))
+        
+        self.bg_stack = ft.Stack(expand=True)
+        bg_container = ft.Container(self.bg_stack, expand=True, alignment=ft.Alignment.CENTER)
+        
+        ui_elements = ft.Column(
+            controls=[
+                title,
+                version,
+                new_button("Start Game", on_click=on_start),
+                new_button("Settings", on_click=on_settings),
+                new_button("Quit", on_click=on_quit),
+            ], alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        )
+        
+        ui_stack = ft.Stack([bg_container, ui_elements], alignment=ft.Alignment.CENTER)
+        main_container = ft.Container(
+            content=ui_stack, expand=True, alignment=ft.Alignment.CENTER,
+            animate_opacity=ft.Animation(1000, ft.AnimationCurve.LINEAR),
+            opacity=0
+        )
+        
+        super().__init__(content=main_container, maximizable=False, expand=True)
+        
+        self.light_mv_task: asyncio.Task = None
+    
+    def stop_loop(self):
+        """Stops the looping animation for the background."""
+        self.light_mv_task.cancel()
+        self.light_mv_task = None
+    
+    def start_loop(self):
+        """Looping animation for the background."""
+        self.light_mv_task = self.page.run_task(light_mv_loop, self.bg_stack)
+    
+    async def start_up_anim(self):
+        """Animation when starting up the game."""
+        await asyncio.sleep(0.1)
+        self.content.opacity = 1
+        try_update(self.content)
+    
+    def did_mount(self):
+        """Runs automatically once attached to a page control."""
+        for i in range(1, 11):
+            add_infinite_layer(self.bg_stack, i, self.page)
+        self.bg_stack.controls.append(
+            ft.Container(
+                bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
+                expand=True
             )
         )
+        self.start_loop()
+        try_update(self.bg_stack)
+        self.page.run_task(self.start_up_anim)
 
-class PauseMenu(ft.Container):
+class PauseMenu(ft.WindowDragArea):
+    """A control representing the Pause Menu."""
     def __init__(
         self,
         on_resume: Optional[ft.ControlEventHandler[ft.Button]] = None,
         on_quit: Optional[ft.ControlEventHandler[ft.Button]] = None
     ):
-        super().__init__(
-            expand=True, visible=False,
-            bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
+        """Provide callbacks for the Pause Menu buttons."""
+        title = ft.Text("PAUSED", size=80, font_family=FontStyles.MEDODICA)
+        subtitle = ft.Text(
+            "Game is still running!", size=20, font_family=FontStyles.LIEF,
+            offset=ft.Offset(0.0, -1.0), color=ft.Colors.RED
+        )
+        
+        main_container = ft.Container(
+            expand=True, opacity=1,
+            animate_opacity=ft.Animation(1000, ft.AnimationCurve.LINEAR),
+            bgcolor=ft.Colors.with_opacity(0.65, ft.Colors.BLACK),
             alignment=ft.Alignment.CENTER,
             content=ft.Column(
                 controls=[
-                    ft.Text("PAUSED", size=80, font_family=FontStyles.MEDODICA),
-                    ft.Button(btn_txt("Resume"), on_click=on_resume),
-                    ft.Button(btn_txt("Quit to Title"), on_click=on_quit),
+                    title, subtitle,
+                    new_button("Resume", on_click=on_resume),
+                    new_button("Quit to Title", on_click=on_quit),
                 ], alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER
             )
         )
+        super().__init__(content=main_container, maximizable=False, expand=True, visible=False)
+        
+# TODO: Implement the Settings Menu
+class SettingsMenu(ft.WindowDragArea):
+    """A control representing the Settings Menu."""
+    def __init__(self):
+        """Provide callbacks for the Settings Menu buttons."""
+        
+        super().__init__()

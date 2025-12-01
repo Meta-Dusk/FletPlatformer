@@ -17,9 +17,10 @@ class NinePatchButton(ft.Container):
         color_blend_mode: ft.BlendMode = ft.BlendMode.MODULATE
     ):
         super().__init__(
-            width=width, height=height, border_radius=8, padding=2,
+            width=width, height=height, border_radius=8,
+            # padding=2,
             # border=ft.Border.all(1, ft.Colors.with_opacity(0.2, color)),
-            bgcolor=ft.Colors.with_opacity(0.2, ft.Colors.WHITE)
+            # bgcolor=ft.Colors.with_opacity(0.2, ft.Colors.WHITE)
         )
         
         self.slice_size = slice_size
@@ -219,7 +220,7 @@ def main(page: ft.Page):
     )
     pixel_btn = NinePatchButton(
         src=btn_img_path, width=200, height=100,
-        content=pixel_btn_txt, color=ft.Colors.ORANGE,
+        content=pixel_btn_txt,
         on_click=lambda _: print("Game Started!")
     )
     

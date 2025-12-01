@@ -1,6 +1,8 @@
 import flet as ft
 from typing import Literal
 
+from utilities.components import try_update
+
 
 class Sprite(ft.Image):
     """All sprites will have twice their scale for better visuals."""
@@ -24,14 +26,10 @@ class Sprite(ft.Image):
             if include_handler: print(f"[{self._handler_str}] {msg}", end=end)
             else: print(msg, end=end)
     
-    def try_update(self):
-        try: self.update()
-        except RuntimeError: pass
-    
     def change_src(self, new_src: str, update_ctrl: bool = True):
         """Swap the `src` and optionally update."""
         self.src = new_src
-        if update_ctrl: self.try_update()
+        if update_ctrl: try_update(self)
     
     def flip_x(self, direction: Literal[-1, 1] = None, update_ctrl: bool = True):
         """Flip the image on the x-axis."""
@@ -41,7 +39,7 @@ class Sprite(ft.Image):
             self._debug_msg(direction, include_handler=False)
         new_scale = abs(self.scale.scale_x) * direction
         self.scale = ft.Scale(scale_x=new_scale, scale_y=self.scale.scale_y)
-        if update_ctrl: self.try_update()
+        if update_ctrl: try_update(self)
             
             
 # * Test for the Sprite class; a simple implementation

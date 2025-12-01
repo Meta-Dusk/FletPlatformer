@@ -8,7 +8,7 @@ from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
 from utilities.tasks import attempt_cancel
 from utilities.collisions import check_collision
-from components.popup_text import DamageText
+from utilities.components import try_update
 
 sfx = SFXLibrary()
 
@@ -206,7 +206,7 @@ class Player(Entity):
                     self._play_sfx(sfx.impacts.landing_on_grass)
                 
             elif self.stack.bottom == self.ground_level: self.states.is_falling = False
-            if self.states.is_moving or self.states.is_falling: self._safe_update(self.stack)
+            if self.states.is_moving or self.states.is_falling: try_update(self.stack)
             await asyncio.sleep(0.05) # ? Delay for logic just in case
     
     # * === ONE-SHOT ANIMATIONS ===
@@ -323,7 +323,7 @@ class Player(Entity):
         if dx > 0: self.stack.left += 100
         else: self.stack.left -= 100
         self._play_sfx(sfx.whoosh.motion, 0.5)
-        self._safe_update(self.stack)
+        try_update(self.stack)
         
         async def timer():
             await asyncio.sleep(0.3)
@@ -337,7 +337,7 @@ class Player(Entity):
         """Player jump action."""
         if self.stack.bottom != self.ground_level or self._interrupt_action(): return
         self.stack.bottom += self._get_jump_dy()
-        self._safe_update(self.stack)
+        try_update(self.stack)
         self.states.jumped = True
         self._jump_task = self.page.run_task(self._jump_anim)
     

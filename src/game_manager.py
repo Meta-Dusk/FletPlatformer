@@ -13,7 +13,7 @@ from entities.enemy import EnemyType, Enemy
 from entities.entity import Entity
 from entities.goblin import Goblin
 from bg_loops import light_mv_loop, stage_panning_loop
-from backgrounds import bg_image_forest
+from backgrounds import bg_image_forest, add_infinite_layer
 
 music = MusicLibrary()
 
@@ -43,7 +43,10 @@ class GameManager:
         async def exit(_): await self.page.window.close()
         self.main_menu = MainMenu(self.start_game, exit)
         self.pause_menu = PauseMenu(self.toggle_pause, self.quit_to_menu)
-        self.game_layer = ft.Container(visible=False) # Placeholder for the game stack
+        self.game_layer = ft.Container(
+            opacity=0, animate_opacity=ft.Animation(1000, ft.AnimationCurve.LINEAR),
+            visible=False
+        )
     
     async def __call__(self):
         """An alternative way to get the main entry point."""
@@ -87,6 +90,9 @@ class GameManager:
             try: control.update()
             except RuntimeError: pass
     
+    def _get_dur(self, control: ft.LayoutControl):
+        return round(control.animate_opacity.duration / 1000, 3)
+    
     def _setup_game_ui(self):
         """Initializes Player, Stacks, and HUD."""
         # App Bar
@@ -109,11 +115,13 @@ class GameManager:
             animate=ft.Animation(5000, ft.AnimationCurve.LINEAR)
         )
         
-        def bg_forest(index: int): return bg_image_forest(index, self.page)
+        def inf_layer(stack: ft.Stack, index: int):
+            add_infinite_layer(stack=stack, index=index, page=self.page)
         
-        for i in range(1, 7): self.background_stack.controls.append(bg_forest(i))
-        self.background_stack.controls.append(bg_forest(9))
-        self.foreground_stack.controls.extend([bg_forest(8), bg_forest(10)])
+        for i in range(1, 8): inf_layer(self.background_stack, i)
+        inf_layer(self.background_stack, 9)
+        inf_layer(self.foreground_stack, 8)
+        inf_layer(self.foreground_stack, 10)
         
         # Buttons / HUD
         death_btn = ft.Button("KYS", ft.Icons.PERSON_OFF, on_click=self._player_die)
@@ -151,7 +159,7 @@ class GameManager:
                 self.background_stack,
                 self.entity_stack,
                 self.foreground_stack,
-                ft.TransparentPointer(self.day_night_overlay),
+                # ft.TransparentPointer(self.day_night_overlay),
                 self.ui_stack,
             ], expand=True
         )
@@ -180,7 +188,7 @@ class GameManager:
         match e.key:
             case " ": self.player.jump()
             case "V": self.player.attack()
-            case "Escape": self.toggle_pause(e)
+            case "Escape": await self.toggle_pause(e)
             case "F11": self.page.window.maximized = not self.page.window.maximized
             # case "`":
             #     self.time += 1
@@ -190,30 +198,49 @@ class GameManager:
     # * === EVENTS ===
     async def start_game(self, _):
         """Switch from Menu to Game"""
+        self.main_menu.content.opacity = 0
+        self._safe_update(self.main_menu)
+        await asyncio.sleep(self._get_dur(self.main_menu.content))
         self.main_menu.visible = False
+        self.main_menu.stop_loop()
         
+        self.game_layer.opacity = 0
         self.game_layer.visible = True
+        self._safe_update(self.game_layer)
+        await asyncio.sleep(0.1)
+        self.game_layer.opacity = 1
         self.game_layer.content = self._setup_game_ui()
+        self._safe_update(self.game_layer)
+        await asyncio.sleep(self._get_dur(self.game_layer))
         
         self.is_game_running = True
         self.page.update()
         self.start_tasks()
         print("[GameManager] Starting Game!")
         
-    def toggle_pause(self, _):
+    async def toggle_pause(self, _):
         """Toggle Pause Overlay"""
         if not self.is_game_running: return
         
         self.pause_menu.visible = not self.pause_menu.visible
-        self.page.update()
-        print("[GameManager] Pausing the game!")
+        self._safe_update(self.pause_menu)
+        msg = "Game paused" if self.pause_menu.visible else "Unpausing game"
+        print(f"[GameManager] {msg}!")
         
-    def quit_to_menu(self, _):
+    async def quit_to_menu(self, _):
         """Cleanup game and show menu"""
         self.cleanup()
         
+        self.game_layer.opacity = 0
+        self.pause_menu.content.opacity = 0
+        self._safe_update(self.page)
+        await asyncio.sleep(self._get_dur(self.game_layer))
         self.game_layer.content = None
         self.game_layer.visible = False
+        self.pause_menu.visible = False
+        self.pause_menu.content.opacity = 1
+        self._safe_update(self.page)
+        
         self.entity_stack.controls.clear()
         self.entity_list.clear()
         self.game_stage.controls.clear()
@@ -223,8 +250,14 @@ entity_list: {len(self.entity_list)}
 entity_stack: {len(self.entity_stack.controls)}
             """)
         
-        self.pause_menu.visible = False
+        self.main_menu.content.opacity = 0
         self.main_menu.visible = True
+        self._safe_update(self.main_menu)
+        await asyncio.sleep(0.1)
+        self.main_menu.content.opacity = 1
+        self._safe_update(self.main_menu)
+        await asyncio.sleep(self._get_dur(self.main_menu.content))
+        self.main_menu.start_loop()
         
         self.is_game_running = False
         self.page.update()
@@ -308,7 +341,7 @@ entity_stack: {len(self.entity_stack.controls)}
                 self.player,
                 self.entity_list,
                 self.stage,
-                summon_gobby
+                post_callback=summon_gobby
             )
             
         # Store tasks so we can cancel them later
