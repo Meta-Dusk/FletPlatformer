@@ -23,6 +23,10 @@ It's a somewhat difficult side-scroller genre of a game (which is basically just
 
 ## Controls
 
+Keybinds as of now are not yet possible to be rebinded.
+
+### Player
+
 The player can be controlled with the following mapped keys:
 
 | Key | Action |
@@ -30,7 +34,13 @@ The player can be controlled with the following mapped keys:
 | **A** | Move left. |
 | **D** | Move right. |
 | **V** | Attack. |
-| **C** | Dash in a direction (left/right). |
-| **Space** | Jump. |
-| **Escape** | Pauses the game. |
+| **C** | Dash in a direction (left/right). Also can be held. |
 | **Shift** | Press and hold this key while moving to **sprint**. |
+| **Space** | Jump. |
+
+### Game
+
+| Key | Action |
+| --- | ------ |
+| **Escape** | Pauses the game. |
+| **F11** | Toggles the borderless fullscreen mode. |
