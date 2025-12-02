@@ -3,7 +3,7 @@ import flet as ft
 from entities.entity import Entity
 from entities.enemy import Factions
 from images import Sprite
-from audio.audio_manager import AudioManager
+from audio.audio_manager import global_audio_manager
 
 
 def before_test(page: ft.Page):
@@ -14,7 +14,7 @@ def before_test(page: ft.Page):
 
 def test(page: ft.Page):
     """Test for the `Entity` class; a simple implementation"""
-    audio_manager = AudioManager(debug=False)
+    audio_manager = global_audio_manager
     audio_manager.initialize()
     
     entity_spr = Sprite("images/enemies/goblin/idle_0.png", width=150, height=150)

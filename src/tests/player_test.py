@@ -1,7 +1,7 @@
 import flet as ft
 
 from utilities.keyboard_manager import start as km_start, held_keys
-from audio.audio_manager import AudioManager
+from audio.audio_manager import global_audio_manager
 from entities.player import Player
 
 
@@ -13,7 +13,7 @@ def before_test(page: ft.Page):
 
 def test(page: ft.Page):
     """Test for the `Player` class; a simple implementation"""
-    audio_manager = AudioManager(debug=False)
+    audio_manager = global_audio_manager
     audio_manager.initialize()
     km_start()
     

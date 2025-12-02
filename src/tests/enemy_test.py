@@ -2,7 +2,7 @@ import flet as ft
 
 from entities.enemy import Enemy, EnemyType, Factions
 from entities.entity import Entity
-from audio.audio_manager import AudioManager
+from audio.audio_manager import global_audio_manager
 from utilities.tasks import attempt_cancel
 from images import Sprite
 
@@ -15,7 +15,7 @@ def before_test(page: ft.Page):
 
 def test(page: ft.Page):
     """Test for the `Enemy` class; a simple implementation"""
-    audio_manager = AudioManager()
+    audio_manager = global_audio_manager
     audio_manager.initialize()
     
     async def on_death(_): await enemy.death()

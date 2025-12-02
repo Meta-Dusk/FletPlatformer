@@ -1,6 +1,7 @@
 import flet as ft
 import time, asyncio
 
+from utilities.components import try_update
 
 class LupsCounter(ft.Text):
     """
@@ -10,14 +11,15 @@ class LupsCounter(ft.Text):
     """
     def __init__(
         self, left: int = None, right: int = None,
-        top: int = None, bottom: int = None
+        top: int = None, bottom: int = None, visible: bool = True
     ):
         super().__init__(
+            color=ft.Colors.GREEN, size=12, weight=ft.FontWeight.BOLD,
+            left=left, right=right, top=top, bottom=bottom, visible=visible,
             spans=[
                 ft.TextSpan("LUPS: "),
                 ft.TextSpan("0")
-            ], color=ft.Colors.GREEN, size=12, weight=ft.FontWeight.BOLD,
-            left=left, right=right, top=top, bottom=bottom
+            ]
         )
         
         # Logic variables
@@ -26,7 +28,12 @@ class LupsCounter(ft.Text):
         self._update_interval = 0.5
         self._time_accumulator = 0.0
         self._running = True # Control flag
-
+    
+    def toggle_visibility(self, visible: bool = None):
+        if visible: self.visible = visible
+        else: self.visible = not self.visible
+        try_update(self)
+    
     def did_mount(self):
         """
         Called automatically when the control is added to the page.

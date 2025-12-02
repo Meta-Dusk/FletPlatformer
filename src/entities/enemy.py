@@ -9,6 +9,7 @@ from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
 from utilities.tasks import attempt_cancel
 from utilities.collisions import is_in_x_range
+from utilities.components import try_update
 
 sfx = SFXLibrary()
 
@@ -116,7 +117,7 @@ class Enemy(Entity):
         await asyncio.sleep(0.1)
         self._play_sfx(sfx.enemy.goblin_cackle)
         self.stack.opacity = 1
-        self._safe_update(self.stack)
+        try_update(self.stack)
         await asyncio.sleep(round(self.stack.animate_opacity.duration / 1000, 3))
         logic_delay: float = 0.05
         
@@ -173,7 +174,7 @@ class Enemy(Entity):
             self._check_movement(dx, dy)
             if self.states.is_moving:
                 self.states.dealing_damage = False
-                self._safe_update(self.stack)
+                try_update(self.stack)
             await asyncio.sleep(logic_delay)
         
     
@@ -244,7 +245,7 @@ class Enemy(Entity):
         self._debug_msg(f"Attempting to remove self from entity_stack: {len(entity_stack.controls)} -> ", end="")
         if self.stack in entity_stack.controls:
             entity_stack.controls.remove(self.stack)
-            self._safe_update(entity_stack)
+            try_update(entity_stack)
         self._debug_msg(len(entity_stack.controls), include_handler=False)
         
         self._debug_msg(f"Attempting to remove self from _entity_list: {len(self._entity_list)} -> ", end="")
@@ -288,7 +289,7 @@ class Enemy(Entity):
         # ? Despawn and cleanup
         self.states.revivable = False
         self.stack.opacity = 0
-        self._safe_update(self.stack)
+        try_update(self.stack)
         await asyncio.sleep(self.stack.animate_opacity.duration / 1000)
         self._cancel_loop_tasks()
         self._cleanup_ready = True

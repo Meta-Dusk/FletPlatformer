@@ -13,8 +13,8 @@ class AudioManager:
         directional_sfx: bool = True,
         *, debug: bool = True
     ):
-        self.music_volume = music_volume
-        self.sfx_volume = sfx_volume
+        self._music_volume = music_volume
+        self._sfx_volume = sfx_volume
         self.directional_sfx = directional_sfx
         self.debug = debug
         
@@ -24,6 +24,30 @@ class AudioManager:
         
         # Optimization: Cooldowns to prevent audio spam (Phasing/Distortion)
         self._sfx_cooldowns: dict[Path, float] = {}
+    
+    @property
+    def sfx_volume(self) -> float:
+        """SFX volume between 0.0 and 1.0."""
+        return self._sfx_volume
+    
+    @sfx_volume.setter
+    def sfx_volume(self, volume: float):
+        """Automatically clamps volume for sfx between 0.0 and 1.0."""
+        self._sfx_volume = round(clamp(volume), 1)
+        # if len(self._sfx_cache) <= 0: return
+        # for _, sfx in self._sfx_cache.items():
+        #     sfx.set_volume(self._sfx_volume)
+    
+    @property
+    def music_volume(self) -> float:
+        """Music volume between 0.0 and 1.0."""
+        return self._music_volume
+    
+    @music_volume.setter
+    def music_volume(self, volume: float):
+        """Automatically clamps volume for music between 0.0 and 1.0."""
+        self._music_volume = round(clamp(volume), 1)
+        pygame.mixer.music.set_volume(self._music_volume)
     
     def _debug_msg(self, msg: str):
         if self.debug: print(f"[AudioManager] {msg}")
@@ -36,9 +60,6 @@ class AudioManager:
         try:
             pygame.mixer.pre_init(channels=2)
             pygame.mixer.init()
-            
-            # OPTIMIZATION: Increase Channel Count
-            # 8 is default. 32 allows for complex battles without cutting sounds.
             pygame.mixer.set_num_channels(32)
             
             freq, size, channels = pygame.mixer.get_init()
@@ -56,7 +77,7 @@ class AudioManager:
             resolved_path = get_asset_path(music_path)
             self._debug_msg(f"Playing music: {resolved_path}")
             pygame.mixer.music.load(resolved_path)
-            pygame.mixer.music.play(-1)
+            pygame.mixer.music.play(-1, fade_ms=1000)
         except Exception as e:
             self._debug_msg(f"Error playing music: {e}")
     
@@ -95,8 +116,8 @@ class AudioManager:
             
             # Apply Master Volume
             # Use specific base_volume if provided, else use global sfx_volume
-            vol = self.sfx_volume if base_volume is None else base_volume
-            sound.set_volume(clamp(vol))
+            vol = self.sfx_volume if base_volume is None else clamp(base_volume) * self.sfx_volume
+            sound.set_volume(vol)
             
             # Play to get a Channel
             channel = sound.play()
@@ -107,7 +128,7 @@ class AudioManager:
                 clamped_vol_r = clamp(right_volume)
                 clamped_vol_l = clamp(left_volume)
                 channel.set_volume(clamped_vol_l, clamped_vol_r)
-                self._debug_msg(f"Played SFX (Pan): L={clamped_vol_l:.2f} R={clamped_vol_r:.2f}")
+                self._debug_msg(f"Played SFX (Pan): L={clamped_vol_l:.1f} R={clamped_vol_r:.1f}")
             else:
                 # Force full volume on this channel if centered (overrides previous settings)
                 channel.set_volume(1.0, 1.0)
@@ -115,3 +136,5 @@ class AudioManager:
                     
         except Exception as e:
             self._debug_msg(f"Failed to play SFX: {e}")
+
+global_audio_manager = AudioManager(debug=False)

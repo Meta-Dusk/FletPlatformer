@@ -1,13 +1,13 @@
 import flet as ft
 
 # --- CONSTANTS ---
-IMG_WIDTH = 928
-IMG_HEIGHT = 793
-SCALE = 2
-DEFAULT_DURATION = 1000
+IMG_WIDTH: int = 928
+IMG_HEIGHT: int = 793
+SCALE: float = 2
+DEFAULT_DURATION: int = 1000
 
 # Map index to specific durations (None = No animation)
-LAYER_DURATIONS = {
+LAYER_DURATIONS: dict[int, int] = {
     1: 2000,
     2: 1800,
     3: 120000, # ? Dynamic layer (Light)
@@ -18,7 +18,7 @@ LAYER_DURATIONS = {
 }
 
 # Layers that need to be wider (3 and 6)
-WIDE_LAYERS = {3, 6}
+WIDE_LAYERS: set[int] = {3, 6}
 
 def bg_image_forest(index: int, page: ft.Page) -> ft.Image:
     """Returns an image configured for the background."""
@@ -31,7 +31,7 @@ def bg_image_forest(index: int, page: ft.Page) -> ft.Image:
     
     # If index is 3 or 6, use 4x width, otherwise 2x
     width_mult = 4 if index in WIDE_LAYERS else 2
-
+    
     return ft.Image(
         src=f"images/backgrounds/night_forest/{index}.png",
         data=index,
@@ -50,6 +50,28 @@ def bg_image_forest(index: int, page: ft.Page) -> ft.Image:
         repeat=ft.ImageRepeat.REPEAT if index == 0 else ft.ImageRepeat.REPEAT_X,
         # Animation
         animate_position=anim,
-        animate_opacity=ft.Animation(2500, ft.AnimationCurve.LINEAR),
         opacity=1
     )
+    
+def add_infinite_layer(stack: ft.Stack, index: int, page: ft.Page):
+    # Determine Width
+    # Layers 3 & 6 are 4x width (928*4), others are 2x (928*2)
+    is_wide = index in [3, 6]
+    base_width = 928 * (4 if is_wide else 2)
+    
+    # Spawn 3 copies (Left, Center, Right)
+    for i in range(3):
+        img = bg_image_forest(index, page)
+        
+        # Position: i=0 (Left), i=1 (Center), i=2 (Right)
+        # Center the middle image on the screen
+        start_x = (page.width / 2) + ((i - 1) * base_width) - (base_width / 2)
+        
+        img.left = start_x
+        
+        # Store Width for Wrapping Logic
+        # We attach it to .data so the loop knows how wide this specific image is
+        img.data = {"layer": index, "width": base_width}
+        
+        stack.controls.append(img)
+        
