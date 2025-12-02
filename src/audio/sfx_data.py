@@ -85,6 +85,8 @@ class ButtonSFX:
     click_1 = sound_path("button_click")
     hover_1 = sound_path("button_hover")
     item_select = sound_path("item_select")
+    switch_on = sound_path("switch_on")
+    switch_off = sound_path("switch_off")
 
 @dataclass
 class UISounds:

@@ -340,7 +340,12 @@ class Entity:
         """Play an SFX with support for directional playback."""
         right_vol = (self.stack.left + (self.sprite.width / 2)) / self.page.width
         left_vol = 1.0 - right_vol
-        self.audio_manager.play_sfx(sfx, left_vol, right_vol, volume)
+        self.audio_manager.play_sfx(
+            sfx_path=sfx,
+            left_volume=left_vol,
+            right_volume=right_vol,
+            base_volume=volume
+        )
     
     # * === MOVEMENT LOOP ===
     def _check_movement(

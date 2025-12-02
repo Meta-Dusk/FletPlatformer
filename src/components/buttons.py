@@ -3,12 +3,12 @@ from pathlib import Path
 from typing import Optional
 import inspect
 
-from audio.audio_manager import AudioManager
+from audio.audio_manager import global_audio_manager
 from audio.sfx_data import SFXLibrary
-from setup import FontStyles, FONT_STYLES
+from setup import FontStyles
 
 sfx = SFXLibrary()
-audio_manager = AudioManager(debug=False)
+audio_manager = global_audio_manager
 
 class SimpleButton(ft.Button):
     def __init__(
@@ -44,11 +44,12 @@ class SimpleButton(ft.Button):
         )
         if isinstance(self.content, ft.Text):
             self.content.font_family = font_family
-            self.content.size = height / 2
+            if height and height != 0:
+                self.content.size = height / 2
         
-    def _play_sfx(self, sfx: Path, volume: float = None):
-        """Play an SFX."""
-        audio_manager.play_sfx(sfx, base_volume=volume)
+    def _play_sfx(self, sfx: Path):
+        """Play a sound effect."""
+        audio_manager.play_sfx(sfx)
         
     async def _on_click(self, e: ft.ControlEvent):
         """Plays a sound before the `on_click` callback."""
@@ -71,21 +72,4 @@ class SimpleButton(ft.Button):
         """Plays a sound before the `on_focus` callback."""
         self._play_sfx(self.on_focus_sfx)
         if self.user_on_focus: self.user_on_focus(e)
-
-
-def test(page: ft.Page):
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.fonts = FONT_STYLES
-    
-    audio_manager.initialize()
-    
-    buttons_column = ft.Column()
-    for i in range(5):
-        buttons_column.controls.append(
-            SimpleButton(ft.Text(f"Button {i}", size=30), width=200, height=100)
-        )
-    
-    page.add(buttons_column)
-
-if __name__ == "__main__": ft.run(test, assets_dir="../assets")
+        

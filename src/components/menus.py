@@ -1,12 +1,14 @@
 import asyncio
 import flet as ft
-from typing import Optional
+from typing import Optional, Literal
 
 from setup import FontStyles
 from components.buttons import SimpleButton
+from components.volume_controls import VolumeControl, DirectionalVolumeToggle
 from backgrounds import add_infinite_layer
 from bg_loops import light_mv_loop
 from utilities.components import try_update
+from audio.audio_manager import AudioManager
 
 def new_button(
     text: str, width: ft.Number = 250, height: ft.Number = 50,
@@ -19,7 +21,19 @@ def new_button(
         on_click=on_click
     )
 
-class MainMenu(ft.WindowDragArea):
+class Menu(ft.WindowDragArea):
+    """Menu base class."""
+    def __init__(
+        self, content: ft.Control, visible: bool = True,
+        opacity: ft.Number = 1
+    ):
+        super().__init__(
+            content=content, maximizable=False, expand=True, visible=visible,
+            animate_opacity=ft.Animation(1000, ft.AnimationCurve.LINEAR),
+            opacity=opacity
+        )
+
+class MainMenu(Menu):
     """A control representing the Main Menu."""
     def __init__(
         self,
@@ -41,18 +55,17 @@ class MainMenu(ft.WindowDragArea):
                 new_button("Start Game", on_click=on_start),
                 new_button("Settings", on_click=on_settings),
                 new_button("Quit", on_click=on_quit),
-            ], alignment=ft.MainAxisAlignment.CENTER,
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER
         )
         
         ui_stack = ft.Stack([bg_container, ui_elements], alignment=ft.Alignment.CENTER)
         main_container = ft.Container(
-            content=ui_stack, expand=True, alignment=ft.Alignment.CENTER,
-            animate_opacity=ft.Animation(1000, ft.AnimationCurve.LINEAR),
-            opacity=0
+            content=ui_stack, expand=True, alignment=ft.Alignment.CENTER
         )
         
-        super().__init__(content=main_container, maximizable=False, expand=True)
+        super().__init__(content=main_container, opacity=0)
         
         self.light_mv_task: asyncio.Task = None
     
@@ -68,8 +81,8 @@ class MainMenu(ft.WindowDragArea):
     async def start_up_anim(self):
         """Animation when starting up the game."""
         await asyncio.sleep(0.1)
-        self.content.opacity = 1
-        try_update(self.content)
+        self.opacity = 1
+        try_update(self)
     
     def did_mount(self):
         """Runs automatically once attached to a page control."""
@@ -85,11 +98,12 @@ class MainMenu(ft.WindowDragArea):
         try_update(self.bg_stack)
         self.page.run_task(self.start_up_anim)
 
-class PauseMenu(ft.WindowDragArea):
+class PauseMenu(Menu):
     """A control representing the Pause Menu."""
     def __init__(
         self,
         on_resume: Optional[ft.ControlEventHandler[ft.Button]] = None,
+        on_settings: Optional[ft.ControlEventHandler[ft.Button]] = None,
         on_quit: Optional[ft.ControlEventHandler[ft.Button]] = None
     ):
         """Provide callbacks for the Pause Menu buttons."""
@@ -100,25 +114,90 @@ class PauseMenu(ft.WindowDragArea):
         )
         
         main_container = ft.Container(
-            expand=True, opacity=1,
-            animate_opacity=ft.Animation(1000, ft.AnimationCurve.LINEAR),
+            expand=True,
             bgcolor=ft.Colors.with_opacity(0.65, ft.Colors.BLACK),
             alignment=ft.Alignment.CENTER,
             content=ft.Column(
                 controls=[
                     title, subtitle,
                     new_button("Resume", on_click=on_resume),
+                    new_button("Settings", on_click=on_settings),
                     new_button("Quit to Title", on_click=on_quit),
                 ], alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER
             )
         )
-        super().__init__(content=main_container, maximizable=False, expand=True, visible=False)
+        super().__init__(content=main_container, visible=False, opacity=1)
         
-# TODO: Implement the Settings Menu
-class SettingsMenu(ft.WindowDragArea):
+class SettingsMenu(Menu):
     """A control representing the Settings Menu."""
-    def __init__(self):
+    def __init__(
+        self, audio_manager: AudioManager,
+        on_close: Optional[ft.ControlEventHandler[ft.Button]] = None
+    ):
         """Provide callbacks for the Settings Menu buttons."""
+        self.audio_manager = audio_manager
         
-        super().__init__()
+        title = ft.Text("SETTINGS", size=80, font_family=FontStyles.MEDODICA)
+        self.subtitle = ft.Text(
+            "Game is still running!", size=20, font_family=FontStyles.LIEF,
+            offset=ft.Offset(0.0, -1.0), color=ft.Colors.RED, visible=False
+        )
+        
+        volume_container = ft.Container(
+            padding=8, offset=ft.Offset(0.0, -0.1),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        self._new_volume_control("music", "Music Volume"),
+                        self._new_volume_control("sfx", "SFX Volume"),
+                        DirectionalVolumeToggle(self.audio_manager),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                ),
+                padding=8, alignment=ft.Alignment.CENTER,
+                bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.GREY),
+                border=ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.GREY))
+            )
+        )
+        
+        main_container = ft.Container(
+            expand=True,
+            bgcolor=ft.Colors.with_opacity(0.65, ft.Colors.BLACK),
+            alignment=ft.Alignment.CENTER,
+            content=ft.Column(
+                controls=[
+                    title,
+                    self.subtitle,
+                    volume_container,
+                    new_button("Go Back", on_click=on_close),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER
+            )
+        )
+        super().__init__(content=main_container, visible=False, opacity=1)
+    
+    def _new_volume_control(self, audio_type: Literal["music", "sfx"], label: str):
+        return VolumeControl(self.audio_manager, audio_type, label)
+
+
+from setup import FONT_STYLES
+from audio.audio_manager import global_audio_manager
+def test(page: ft.Page):
+    page.vertical_alignment = ft.MainAxisAlignment.CENTER
+    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+    page.fonts = FONT_STYLES
+    page.padding = 0
+    page.bgcolor = ft.Colors.WHITE
+    
+    audio_manager = global_audio_manager
+    audio_manager.initialize()
+    
+    settings_menu = SettingsMenu(audio_manager)
+    settings_menu.visible = True
+    
+    page.add(settings_menu)
+
+if __name__ == "__main__": ft.run(test, assets_dir="../assets")
