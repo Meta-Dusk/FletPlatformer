@@ -8,6 +8,7 @@ from components.volume_controls import VolumeControl, DirectionalVolumeToggle
 from backgrounds import add_infinite_layer
 from bg_loops import light_mv_loop
 from utilities.components import try_update
+from utilities.values import get_app_version
 from audio.audio_manager import AudioManager
 
 def new_button(
@@ -43,7 +44,10 @@ class MainMenu(Menu):
     ):
         """Provide callbacks for the Main Menu buttons."""
         title = ft.Text("Fushi: The Beckoning", size=80, font_family=FontStyles.LIEF)
-        version = ft.Text("v0.4.8", size=30, font_family=FontStyles.MEDODICA, offset=ft.Offset(0.0, -1.0))
+        version = ft.Text(
+            value=f"v{get_app_version()}.dev", size=30,
+            font_family=FontStyles.MEDODICA, offset=ft.Offset(0.0, -1.0)
+        )
         
         self.bg_stack = ft.Stack(expand=True)
         bg_container = ft.Container(self.bg_stack, expand=True, alignment=ft.Alignment.CENTER)
