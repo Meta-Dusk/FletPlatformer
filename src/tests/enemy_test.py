@@ -1,6 +1,7 @@
 import flet as ft
 
-from entities.enemy import Enemy, EnemyType, Factions
+from entities.enemy import Enemy, EnemyType
+from entities.features.entity_data import Factions
 from entities.entity import Entity
 from audio.audio_manager import global_audio_manager
 from utilities.tasks import attempt_cancel

@@ -3,7 +3,8 @@ import flet as ft
 from dataclasses import dataclass
 from enum import Enum
 
-from entities.entity import Entity, EntityStates, EntityStats, Factions
+from entities.entity import Entity
+from entities.features.entity_data import EntityStates, EntityStats, Factions
 from images import Sprite
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary

@@ -16,6 +16,7 @@ class LupsCounter(ft.Text):
         super().__init__(
             color=ft.Colors.GREEN, size=12, weight=ft.FontWeight.BOLD,
             left=left, right=right, top=top, bottom=bottom, visible=visible,
+            bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
             spans=[
                 ft.TextSpan("LUPS: "),
                 ft.TextSpan("0")

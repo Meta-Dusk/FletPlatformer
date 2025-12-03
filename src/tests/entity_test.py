@@ -1,7 +1,7 @@
 import flet as ft
 
 from entities.entity import Entity
-from entities.enemy import Factions
+from entities.features.entity_data import Factions
 from images import Sprite
 from audio.audio_manager import global_audio_manager
 
