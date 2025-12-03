@@ -23,7 +23,7 @@ from colorama import Fore, Style, init as colorama_init
 from dataclasses import dataclass
 
 
-APP_NAME = "FletPlatformer"
+APP_NAME = "fushi-the-beckoning"
 
 # Initialize colorama (auto resets colors after each print)
 colorama_init(autoreset=True)
@@ -171,7 +171,7 @@ def main():
         print_section("STEP 2: BUILDING FLET APP FOR WINDOWS WITH PACK")
         build_options = [
             "--icon", ICON_DIR.as_posix(),
-            "--name", f"{APP_NAME}.v{info.version}-Win64-Standalone",
+            "--name", f"{APP_NAME}-v{info.version}-Win64-Standalone",
             "--product-name", humanize_name(APP_NAME),
             "--file-description", info.description,
             "--product-version", info.version,

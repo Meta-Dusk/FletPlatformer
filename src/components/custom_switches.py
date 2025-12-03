@@ -10,13 +10,13 @@ from audio.sfx_data import SFXLibrary
 audio_manager = global_audio_manager
 sfx = SFXLibrary()
 
-SwitchState = bool
+SwitchBoolState = bool
 
 class CustomSwitch(ft.Container):
     """A switch but square."""
     def __init__(
         self, width: ft.Number = 100, height: ft.Number = 50, value: bool = False,
-        on_toggle: Callable[[SwitchState], None] = None
+        on_toggle: Callable[[SwitchBoolState], None] = None
     ):
         self.on_toggle = on_toggle
         
