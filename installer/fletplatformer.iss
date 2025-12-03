@@ -8,7 +8,7 @@
 #endif
 #define MyAppPublisher "MetaDusk Inc."
 #define MyAppURL "https://github.com/Meta-Dusk/fushi-flet-plaformer"
-#define MyAppExeName "fushi.exe"
+#define MyAppExeName "fushi_the_beckoning.exe"
 #define MyAppAssocName MyAppName + " File"
 #define MyAppAssocExt ".fushi"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
