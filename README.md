@@ -19,7 +19,7 @@ It's a somewhat difficult side-scroller genre of a game (which is basically just
 | **Simple Enemy AI** | The current enemy (goblin) has this. | v0.3.X |
 | **Various Entity States** | Entities such as the player and the goblin, can die, move, attack, etc. | v0.3.X |
 | **Somewhat Intelligent "AI"** | Enemies such as the goblin are now a bit smarter, attempting to predict the player's moves. | v0.4.X |
-| **Menus** | There's a main menu and a pause menu now. | v0.4.X |
+| **Menus** | There's a main menu, settings menu, and a pause menu now. | v0.4.X |
 
 ## Controls
 

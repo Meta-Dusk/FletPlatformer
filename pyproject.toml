@@ -1,7 +1,7 @@
 [project]
-name = "FletPlatformer"
+name = "fushi-the-beckoning"
 version = "0.4.10"
-description = "A Platformer Game Made in Flet"
+description = "A Platformer Game Made with Flet"
 readme = "README.md"
 requires-python = ">=3.13"
 authors = [{ name = "MetaDusk", email = "andredcxxv@gmail.com" }]
@@ -17,7 +17,7 @@ dependencies = [
 
 [tool.flet]
 org = "com.metadusk"
-product = "Flet Platformer"
+product = "Fushi: The Beckoning"
 company = "MetaDusk Inc."
 copyright = "Copyright (C) 2025 MetaDusk"
 compile_app = true

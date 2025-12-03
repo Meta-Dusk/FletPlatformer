@@ -23,7 +23,7 @@ from colorama import Fore, Style, init as colorama_init
 from dataclasses import dataclass
 
 
-APP_NAME = "FletPlatformer"
+APP_NAME = "fushi-the-beckoning"
 
 # Initialize colorama (auto resets colors after each print)
 colorama_init(autoreset=True)
