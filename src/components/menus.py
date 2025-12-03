@@ -5,6 +5,7 @@ from typing import Optional, Literal
 from setup import FontStyles
 from components.buttons import SimpleButton
 from components.volume_controls import VolumeControl, DirectionalVolumeToggle
+from components.window_controls import FullscreenToggle
 from backgrounds import add_infinite_layer
 from bg_loops import light_mv_loop
 from utilities.components import try_update
@@ -148,21 +149,50 @@ class SettingsMenu(Menu):
             offset=ft.Offset(0.0, -1.0), color=ft.Colors.RED, visible=False
         )
         
-        volume_container = ft.Container(
+        volume_column = ft.Column(
+            controls=[
+                ft.Text("Volume", size=40, font_family=FontStyles.LIEF, color=ft.Colors.WHITE_54),
+                self._new_volume_control("music", "Music Volume"),
+                self._new_volume_control("sfx", "SFX Volume"),
+                DirectionalVolumeToggle(self.audio_manager),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        )
+        volume_settings = ft.Container(
+            content=volume_column, bgcolor=ft.Colors.GREY_900,
+            alignment=ft.Alignment.CENTER
+        )
+        
+        self.fullscreen_toggle = FullscreenToggle()
+        self.window_column = ft.Column(
+            controls=[
+                ft.Text("Window", size=40, font_family=FontStyles.LIEF, color=ft.Colors.WHITE_54),
+                self.fullscreen_toggle,
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        )
+        window_settings = ft.Container(
+            content=self.window_column, bgcolor=ft.Colors.GREY_900,
+            alignment=ft.Alignment.CENTER
+        )
+        
+        settings_container = ft.Container(
             padding=8, offset=ft.Offset(0.0, -0.1),
             content=ft.Container(
                 content=ft.Column(
                     controls=[
-                        self._new_volume_control("music", "Music Volume"),
-                        self._new_volume_control("sfx", "SFX Volume"),
-                        DirectionalVolumeToggle(self.audio_manager),
+                        volume_settings,
+                        window_settings
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    scroll=ft.ScrollMode.ALWAYS
                 ),
                 padding=8, alignment=ft.Alignment.CENTER,
-                bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.GREY),
-                border=ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.GREY))
+                bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
+                border=ft.Border.all(1, ft.Colors.with_opacity(0.75, ft.Colors.BLACK))
             )
         )
         
@@ -174,7 +204,7 @@ class SettingsMenu(Menu):
                 controls=[
                     title,
                     self.subtitle,
-                    volume_container,
+                    settings_container,
                     new_button("Go Back", on_click=on_close),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,

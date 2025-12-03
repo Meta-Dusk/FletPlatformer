@@ -62,7 +62,8 @@ class VolumeControl(ft.Container):
     ):
         return ft.Text(
             value=text, font_family=font_family,
-            size=size, text_align=ft.TextAlign.CENTER
+            size=size, text_align=ft.TextAlign.CENTER,
+            color=ft.Colors.WHITE_70
         )
     
     def _get_volume_from_type(self):
@@ -95,18 +96,18 @@ class DirectionalVolumeToggle(ft.Container):
         label = ft.Container(
             content=ft.Text(
                 "Directional Audio", size=30,
-                font_family=FontStyles.ADAPA
+                font_family=FontStyles.ADAPA,
+                color=ft.Colors.WHITE_70
             ),
-            padding=4, alignment=ft.Alignment.CENTER
+            alignment=ft.Alignment.CENTER, offset=ft.Offset(0.1, 0.0)
         )
-        spacer = ft.Container(width=70)
+        spacer = ft.Container(width=100)
         
         main_container = ft.Container(
             content=ft.Row(
                 controls=[label, spacer, toggle], expand=True,
                 alignment=ft.MainAxisAlignment.CENTER,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=20
+                vertical_alignment=ft.CrossAxisAlignment.CENTER
             ),
             alignment=ft.Alignment.CENTER
         )
