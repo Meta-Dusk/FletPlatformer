@@ -80,6 +80,7 @@ class GameManager:
         
         # --- Event Handlers ---
         self.page.on_keyboard_event = self._on_keyboard_event
+        self.page.window.on_event = self._win_on_event
         
         # Setup UI: Stack all layers
         self.settings_menu = SettingsMenu(self.audio_manager, on_close=self.close_settings)
@@ -189,6 +190,11 @@ class GameManager:
             case "V": self.player.attack()
             case "Escape": self.toggle_pause(e)
             case "F11": self.page.window.maximized = not self.page.window.maximized
+    
+    def _win_on_event(self, e: ft.WindowEvent):
+        match e.type:
+            case ft.WindowEventType.MAXIMIZE | ft.WindowEventType.UNMAXIMIZE:
+                self.settings_menu.fullscreen_toggle.update()
     
     # * === MENU EVENTS ===
     async def start_game(self, _):

@@ -2,19 +2,19 @@
 ; Safe to share publicly — contains no private data
 ; Paths are relative, version is auto-updated by build script
 
-#define MyAppName "FletPlatformer"
+#define MyAppName "Fushi the Beckoning"
 #ifndef MyAppVersion
 #define MyAppVersion "0.0.0"
 #endif
 #define MyAppPublisher "MetaDusk Inc."
-#define MyAppURL ""
-#define MyAppExeName "fletplatformer.exe"
+#define MyAppURL "https://github.com/Meta-Dusk/fushi-flet-plaformer"
+#define MyAppExeName "fushi.exe"
 #define MyAppAssocName MyAppName + " File"
-#define MyAppAssocExt ".fp"
+#define MyAppAssocExt ".fs"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
 
 [Setup]
-AppId={{}
+AppId={{5960D845-BF1D-4E66-9EEE-290025EDCC2A}
 
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
