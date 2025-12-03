@@ -13,7 +13,7 @@ def pathify(path_str: str):
 def get_app_version():
     try:
         # The string here must match the 'name' in pyproject.toml
-        return version("FletPlatformer")
+        return version("fushi-the-beckoning")
     except PackageNotFoundError:
         # Fallback if the app isn't installed as a package (e.g., during early dev)
         return "Dev-Mode"
