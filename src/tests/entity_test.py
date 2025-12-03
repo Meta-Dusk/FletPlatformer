@@ -4,16 +4,13 @@ from entities.entity import Entity
 from entities.features.entity_data import Factions
 from images import Sprite
 from audio.audio_manager import global_audio_manager
+from tests.test_templates import test_init
 
 
-def before_test(page: ft.Page):
-    page.title = "Entity Class Test"
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.padding = 0
-
-def test(page: ft.Page):
+async def test(page: ft.Page):
     """Test for the `Entity` class; a simple implementation"""
+    await test_init(page)
+    
     audio_manager = global_audio_manager
     audio_manager.initialize()
     
@@ -25,13 +22,7 @@ def test(page: ft.Page):
     
     stage = ft.Stack(controls=[entity()], expand=True)
     
-    async def on_keyboard_event(e: ft.KeyboardEvent):
-        """Fast exit with key: `[Escape]`."""
-        if e.key == "Escape": await page.window.close()
-    
-    page.on_keyboard_event = on_keyboard_event
     page.add(stage)
     entity._start_movement_loop()
     
-if __name__ == "__main__":
-    ft.run(main=test, before_main=before_test, assets_dir="../assets")
+ft.run(test, assets_dir="../assets")

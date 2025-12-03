@@ -44,7 +44,7 @@ class SimpleButton(ft.Button):
         )
         if isinstance(self.content, ft.Text):
             self.content.font_family = font_family
-            if height and height != 0:
+            if self.content.size is None and height and height != 0:
                 self.content.size = height / 2
         
     def _play_sfx(self, sfx: Path):
