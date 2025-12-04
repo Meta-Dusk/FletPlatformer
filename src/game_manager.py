@@ -134,21 +134,29 @@ class GameManager:
         self._available_entities = ChoiceArg(["player"])
         
         async def kill(entity: str) -> None:
-            if entity:
-                if entity == "player":
+            if entity == "player":
+                if not self.player.states.dead:
+                    self.console.log(f"Killing {self.player.name}.", ft.Colors.RED)
                     await self.player.death()
-                self.console.log(f"Killing {entity}.", ft.Colors.RED)
-            else:
-                raise ValueError("Provide an entity to kill.")
+                else:
+                    raise Exception("Cannot kill an already dead player.")
         
         async def damage(entity: str, amount: float) -> None:
-            if entity:
-                if entity == "player":
+            if entity == "player":
+                if not self.player.states.dead:
                     self.console.log(f"Dealing {amount} damage to {self.player.name}.", ft.Colors.RED)
                     await self.player.take_damage(amount)
-                # self.console.log(f"Killing {entity}.", ft.Colors.RED)
-            else:
-                raise ValueError("Provide an entity to damage.")
+                else:
+                    raise Exception("Cannot deal damage to an already dead player.")
+        
+        async def revive(entity: str) -> None:
+            if entity == "player":
+                if self.player.states.dead:
+                    self.console.log(f"Reviving {self.player.name}.", ft.Colors.GREEN)
+                    await self.player.revive()
+                    self.player.states.disable_movement = True
+                else:
+                    raise Exception("Cannot revive an alive player.")
         
         async def quit() -> None:
             if not self.main_menu.visible:
@@ -172,6 +180,13 @@ class GameManager:
                 "amount": FloatArg()
             },
             help_text="Damages an entity by the amount given, in the current scene."
+        )
+        
+        self.console.register_command(
+            command_structure="revive <entity>",
+            handler=revive,
+            arg_types={"entity": self._available_entities},
+            help_text="Revive an entity. Only revives currently dead entities."
         )
         
         self.console.register_command(
@@ -247,39 +262,24 @@ class GameManager:
             case "/":
                 if not self.console in self.page.overlay: return
                 await self.console.toggle()
-                if self.console.visible:
-                    if self.player:
-                        self.player.states.disable_movement = True
-                    self.main_menu.disabled = True
-                    self.settings_menu.disabled = True
-                    self.pause_menu.disabled = True
-                    self.ui_stack.disabled = True
-                else:
-                    if self.player:
-                        self.player.states.disable_movement = False
-                    self.main_menu.disabled = False
-                    self.settings_menu.disabled = False
-                    self.pause_menu.disabled = False
-                    self.ui_stack.disabled = False
+                self._update_ui_focus()
             case "Escape":
                 if self.console.visible:
                     await self.console.toggle()
-                    if self.player:
-                        self.player.states.disable_movement = False
-                    self.main_menu.disabled = False
-                    self.settings_menu.disabled = False
-                    self.pause_menu.disabled = False
-                    self.ui_stack.disabled = False
-                else: self.toggle_pause(e)
+                    self._update_ui_focus()
+                elif self.settings_menu.visible:
+                    self.close_settings(e)
+                else:
+                    self.toggle_pause(e)
         await self.console.handle_keyboard(e)
         
         # Player Keybinds
-        if not self.is_game_running: return
+        if not self.is_game_running or (self.player and self.player.states.disable_movement):
+            return
+        
         match e.key:
-            case " ":
-                if not self.console.visible: self.player.jump()
-            case "V":
-                if not self.console.visible: self.player.attack()
+            case " ": self.player.jump()
+            case "V": self.player.attack()
     
     def _win_on_event(self, e: ft.WindowEvent):
         match e.type:
@@ -298,6 +298,7 @@ class GameManager:
                 self.page.overlay.remove(self.console)
                 self._debug_msg("Disabling dev console... 2/2")
         self.page.update()
+        self._update_ui_focus()
     
     def _pm_ups_toggle(self, enabled: bool) -> None:
         self.perf_monitor.toggle_ups(enabled)
@@ -311,6 +312,72 @@ class GameManager:
             self.page.update()
         else:
             self.page.overlay.remove(self.perf_monitor)
+    
+    # * === UI MANAGEMENT ===
+    def _update_ui_focus(self):
+        """
+        Centralized logic to determine which UI layer should be interactive.
+        Priority Order (Highest to Lowest):
+        1. Dev Console
+        2. Settings Menu
+        3. Pause Menu
+        4. Main Menu
+        5. Game HUD (Entity movement / On-screen buttons)
+        """
+        # 1. Check Console (Top Priority)
+        if self.console in self.page.overlay and self.console.visible:
+            self._set_interactivity()
+            return
+
+        # 2. Check Settings (Can be opened from Main Menu OR Pause Menu)
+        if self.settings_menu.visible:
+            self._set_interactivity(settings=True)
+            return
+
+        # 3. Check Pause Menu (In-Game Overlay)
+        if self.pause_menu.visible:
+            self._set_interactivity(pause=True)
+            return
+
+        # 4. Check Main Menu (Start Screen)
+        if self.main_menu in self.stage.controls and self.main_menu.visible:
+            self._set_interactivity(main_menu=True)
+            return
+
+        # 5. Game Layer (Lowest Priority - only active if nothing else is)
+        if self.is_game_running and self.game_layer.visible:
+            self._set_interactivity(game_hud=True)
+            return
+
+    def _set_interactivity(
+        self,
+        settings: bool = False,
+        pause: bool = False,
+        main_menu: bool = False,
+        game_hud: bool = False
+    ):
+        """Helper to apply disabled states based on the active flag."""
+        
+        # ? Console (Always interactive if visible, but we don't disable it via property)
+        # ? We just act on the layers below it.
+        
+        # Settings
+        self.settings_menu.disabled = not settings
+        
+        # Pause Menu
+        self.pause_menu.disabled = not pause
+        
+        # Main Menu
+        if self.main_menu:
+            self.main_menu.disabled = not main_menu
+            
+        # Game HUD & Player Control
+        self.ui_stack.disabled = not game_hud
+        
+        # Handle Player Movement Locking
+        if self.player:
+            # Player can move ONLY if the game HUD is the active focus
+            self.player.states.disable_movement = not game_hud
     
     # * === MENU EVENTS ===
     async def start_game(self, _):
@@ -335,22 +402,23 @@ class GameManager:
         self.audio_manager.play_music(music.loops.sketchbook.abstraction_2024_03_20_02)
         self.is_game_running = True
         self.start_tasks()
+        self._update_ui_focus()
         self._debug_msg("Starting Game!")
         self.page.update()
     
     async def open_settings(self, _):
         if self.pause_menu.visible:
-            self.pause_menu.opacity = 1
             self.pause_menu.visible = False
-            self.settings_menu.opacity = 1
             self.settings_menu.visible = True
             self.settings_menu.subtitle.visible = True
         
         elif self.main_menu.visible:
-            self.main_menu.disabled = True
             self.settings_menu.visible = True
+            self.settings_menu.subtitle.visible = False
+        
+        self._update_ui_focus()
     
-    async def close_settings(self, _):
+    def close_settings(self, _):
         if self.is_game_running:
             self.pause_menu.visible = True
             self.settings_menu.visible = False
@@ -358,17 +426,16 @@ class GameManager:
         elif self.main_menu.visible:
             self.main_menu.disabled = False
             self.settings_menu.visible = False
+        
+        self._update_ui_focus()
     
     def toggle_pause(self, _):
         """Toggle Pause Overlay"""
-        if not self.is_game_running \
-        or self.settings_menu.visible: return
+        if not self.is_game_running or self.settings_menu.visible: return
         
         self.pause_menu.visible = not self.pause_menu.visible
-        if self.pause_menu.visible:
-            self.ui_stack.disabled = True
-        else:
-            self.ui_stack.disabled = False
+        self._update_ui_focus()
+        
         msg = "Game paused!" if self.pause_menu.visible else "Unpausing game!"
         self._debug_msg(msg)
         
