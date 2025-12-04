@@ -24,7 +24,6 @@ class IntArg(ArgType):
             raise ValueError(f"'{value}' is not a valid integer")
     
     def get_suggestions(self, current_input: str) -> List[str]:
-        # Suggest tilde if they haven't started typing a number
         if current_input == "":
             return ["1", "2", "3"]
         return []
@@ -37,7 +36,6 @@ class FloatArg(ArgType):
             raise ValueError(f"'{value}' is not a valid float")
     
     def get_suggestions(self, current_input: str) -> List[str]:
-        # Suggest tilde if they haven't started typing a number
         if current_input == "":
             return ["1.0", "1.5", "2.0"]
         return []

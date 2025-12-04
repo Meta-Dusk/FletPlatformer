@@ -29,6 +29,7 @@ class EnemyType(Enum):
     # SKELETON = EnemyData("Skelly")
 
 # TODO: Finish the Enemy class
+# TODO: Add a revive method to the Enemy class
 class Enemy(Entity):
     """Handles an enemy's actions and states."""
     def __init__(

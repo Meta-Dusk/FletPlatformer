@@ -86,102 +86,34 @@ class DevConsole(ft.Container):
         self.update()
     
     def register_command(
-        self, 
-        command_structure: str, 
-        handler: callable, 
-        arg_types: dict = None, 
-        help_text: str = ""
+        self, command_structure: str, handler: callable,
+        arg_types: dict = None, help_text: str | list[str] = ""
     ) -> None:
         """
-        Allows external scripts (like `main.py` or `GameManager`) to register commands
+        Allows external scripts (like `main.py` or `GameManager` class) to register commands
         without creating circular imports.
         """
         self.parser.register(command_structure, handler, arg_types, help_text)
     
     def _register_commands(self) -> None:
-        """Registers all game commands and the help system."""
-        
-        # * Define Argument Types
-        entities = ChoiceArg(["goblin", "orc", "slime", "dragon"])
-        items = ChoiceArg(["sword", "potion", "gold"])
-        coords = CoordinateArg()
-        
-        # ? Helper to convert parsed coord tuple to actual string for logging
-        def fmt_pos(pos: tuple[int, bool]) -> str:
-            """Formats the position."""
-            val, is_rel = pos
-            return f"{'~' if is_rel else ''}{val if val != 0 or not is_rel else ''}"
-        
+        """Registers all internal commands and the help system."""
         # * Define Internal Handlers
-        def summon_default(entity: str, count: int) -> None:
-            """Centered entity spawning."""
-            # We default to relative (0, 0) -> "~ ~"
-            self.log(f"Spawned {entity} (x{count}) at (Center)", ft.Colors.CYAN)
-            
-        def summon_at_pos(entity: str, x: tuple, y: tuple, count: int) -> None:
-            """Spawn entity at location provided."""
-            # x and y are tuples like (10, False) or (5, True)
-            pos_str = f"({fmt_pos(x)}, {fmt_pos(y)})"
-            self.log(f"Spawned {entity} (x{count}) at {pos_str}", ft.Colors.CYAN_ACCENT)
-            
-        def give(item: str, count: int) -> None:
-            self.log(f"Added {item} (x{count}) to inventory", ft.Colors.YELLOW)
-        
         async def exit() -> None:
             self.log("Exiting the game...", ft.Colors.ORANGE)
             await asyncio.sleep(0.5)
             await self.page.window.close()
         
-        def cls() -> None:
-            self.clear_log_view()
+        def cls() -> None: self.clear_log_view()
         
         # * Register Some Internal Commands
-        self.parser.register(
-            command_structure="summon <entity> <count>", 
-            handler=summon_default, 
-            arg_types={"entity": entities, "count": IntArg()},
-            help_text="Spawns entities at the default center."
-        )
+        self.parser.register("exit", exit, help_text="Exits the game.")
         
-        self.parser.register(
-            command_structure="summon <entity> <x> <y> <count>",
-            handler=summon_at_pos,
-            arg_types={
-                "entity": entities,
-                "x": coords,
-                "y": coords,
-                "count": IntArg()
-            },
-            help_text=[
-                "Spawns entities at a specific coordinate.",
-                "i.e.; summon orc ~ ~ 5",
-                "'~' means relative to the center."
-            ]
-        )
-        
-        self.parser.register(
-            command_structure="give <item> <amount>", 
-            handler=give,
-            arg_types={"item": items, "amount": IntArg()},
-            help_text="Adds items to your local inventory."
-        )
-        
-        self.parser.register(
-            command_structure="exit",
-            handler=exit,
-            help_text="Exits the game."
-        )
-        
-        self.parser.register(
-            command_structure="cls",
-            handler=cls,
-            help_text="Clears the logs in the dev console."
-        )
+        self.parser.register("cls", cls, help_text="Clears the logs in the dev console.")
         
         # * Implement Help System
         def print_all_help() -> None:
             """Handler for plain 'help'"""
-            # FIX: Get the list FRESH every time this function runs
+            # Get the list FRESH every time this function runs
             current_cmds = self.parser.get_root_commands()
             
             cmds_str = ", ".join(sorted(current_cmds))
@@ -193,21 +125,15 @@ class DevConsole(ft.Container):
             """Handler for 'help <cmd>'"""
             desc = self.parser.get_command_help(cmd_name)
             self.log(f"Help: {cmd_name}", ft.Colors.GREEN_ACCENT)
-            self.log(desc) # (Assuming you removed the extra spaces from previous step)
+            self.log(desc)
 
         # Register 'help'
-        self.parser.register(
-            "help", 
-            print_all_help, 
-            help_text="Lists all available commands."
-        )
+        self.parser.register("help", print_all_help, help_text="Lists all available commands.")
 
         # Register 'help <command>' using the new DYNAMIC argument
         self.parser.register(
-            "help <command_name>", 
-            print_specific_help,
-            # FIX: Use CommandNameArg instead of ChoiceArg
-            {"command_name": CommandNameArg(self.parser)}, 
+            "help <command_name>", print_specific_help,
+            {"command_name": CommandNameArg(self.parser)},
             help_text="Shows detailed usage for a command."
         )
         
