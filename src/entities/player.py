@@ -398,7 +398,15 @@ class Player(Entity):
             self._take_hit_task
         ]
         for task in tasks: attempt_cancel(task)
-        
+    
+    def _cancel_loop_tasks(self):
+        """Cancels all running looping tasks."""
+        tasks = [
+            self._movement_loop_task,
+            self._animation_loop_task
+        ]
+        for task in tasks: attempt_cancel(task)
+    
     def _start_loops(self):
         self._start_animation_loop()
         self._start_movement_loop()

@@ -29,6 +29,19 @@ class IntArg(ArgType):
             return ["1", "2", "3"]
         return []
 
+class FloatArg(ArgType):
+    def parse(self, value: str) -> float:
+        try:
+            return float(value)
+        except ValueError:
+            raise ValueError(f"'{value}' is not a valid float")
+    
+    def get_suggestions(self, current_input: str) -> List[str]:
+        # Suggest tilde if they haven't started typing a number
+        if current_input == "":
+            return ["1.0", "1.5", "2.0"]
+        return []
+
 class ChoiceArg(ArgType):
     """Restricts input to a specific list of options (e.g., 'goblin', 'orc')"""
     def __init__(self, choices: List[str]) -> None:

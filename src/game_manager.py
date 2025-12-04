@@ -3,14 +3,14 @@ import asyncio, random
 
 from audio.audio_manager import AudioManager, global_audio_manager
 from audio.music_data import MusicLibrary
-from components.lups_counter import LupsCounter
 from components.menus import MainMenu, PauseMenu, SettingsMenu
 from utilities.keyboard_manager import held_keys, start as km_start
 from utilities.tasks import attempt_cancel
 from entities.player import Player
 from utilities.components import try_update
 from utilities.commands.ui import DevConsole
-from utilities.commands.parser import ChoiceArg
+from utilities.commands.parser import ChoiceArg, FloatArg
+from utilities.performance_monitor import PerformanceMonitor
 from entities.enemy import EnemyType, Enemy
 from entities.entity import Entity
 from entities.goblin import Goblin
@@ -45,6 +45,7 @@ class GameManager:
         self.is_game_running: bool = False
         
         # Scenes
+        self.main_menu = None
         self.pause_menu = PauseMenu(
             on_resume=self.toggle_pause,
             on_settings=self.open_settings,
@@ -66,7 +67,6 @@ class GameManager:
         )
         if not self.main_menu in self.stage.controls:
             self.stage.controls.insert(1, self.main_menu)
-        print(len(self.stage.controls))
         try_update(self.stage)
     
     def _remove_main_menu(self):
@@ -102,6 +102,10 @@ class GameManager:
         
         # Post Setup for UI
         self.settings_menu.console_switch.toggle.on_toggle = self._console_on_toggle
+        self.perf_monitor = PerformanceMonitor()
+        self.settings_menu.perf_toggles.monitor_switch.toggle.on_toggle = self._perf_monitor_toggle
+        self.settings_menu.perf_toggles.ups_switch.toggle.on_toggle = self._pm_ups_toggle
+        self.settings_menu.perf_toggles.lag_switch.toggle.on_toggle = self._pm_lag_toggle
         
         self.page.add(self.stage)
         await self.page.window.center()
@@ -139,11 +143,31 @@ class GameManager:
             else:
                 raise ValueError("Provide an entity to kill.")
         
+        def damage(entity: str, amount: float) -> None:
+            if entity:
+                if entity == "player":
+                    self.player.take_damage(amount)
+                else:
+                    raise ValueError("Missing or unknown entity.")
+                self.console.log(f"Killing {entity}.", ft.Colors.RED)
+            else:
+                raise ValueError("Provide an entity to kill.")
+        
         self.console.register_command(
             command_structure="kill <entity>",
             handler=kill,
             arg_types={"entity": self._available_entities},
             help_text="Kills an entity in the current scene."
+        )
+        
+        self.console.register_command(
+            command_structure="damage <entity> <amount>",
+            handler=damage,
+            arg_types={
+                "entity": self._available_entities,
+                "amount": FloatArg()
+            },
+            help_text="Damages an entity by the amount given, in the current scene."
         )
     
     # * === UI SETUP ===
@@ -179,9 +203,8 @@ class GameManager:
                 ft.Container(spawn_gobby_btn, padding=8),
             ], alignment=ft.MainAxisAlignment.CENTER, top=0, left=0
         )
-        self.lups_counter = LupsCounter(top=10, right=10)
         
-        self.ui_stack.controls.extend([buttons_row, self.lups_counter])
+        self.ui_stack.controls.append(buttons_row)
         
         # Composition
         self.game_stage.controls.extend([
@@ -231,11 +254,13 @@ class GameManager:
                     self.main_menu.disabled = True
                     self.settings_menu.disabled = True
                     self.pause_menu.disabled = True
+                    self.ui_stack.disabled = True
                 else:
                     self.player.states.disable_movement = False
                     self.main_menu.disabled = False
                     self.settings_menu.disabled = False
                     self.pause_menu.disabled = False
+                    self.ui_stack.disabled = False
         await self.console.handle_keyboard(e)
     
     def _win_on_event(self, e: ft.WindowEvent):
@@ -255,6 +280,19 @@ class GameManager:
                 self.page.overlay.remove(self.console)
                 self._debug_msg("Disabling dev console... 2/2")
         self.page.update()
+    
+    def _pm_ups_toggle(self, enabled: bool) -> None:
+        self.perf_monitor.toggle_ups(enabled)
+    
+    def _pm_lag_toggle(self, enabled: bool) -> None:
+        self.perf_monitor.toggle_latency(enabled)
+    
+    def _perf_monitor_toggle(self, enabled: bool) -> None:
+        if enabled:
+            self.page.overlay.insert(1, self.perf_monitor)
+            self.page.update()
+        else:
+            self.page.overlay.remove(self.perf_monitor)
     
     # * === MENU EVENTS ===
     async def start_game(self, _):
@@ -402,6 +440,8 @@ entity_stack: {len(self.entity_stack.controls)}
             if isinstance(entity, Enemy):
                 entity._cancel_loop_tasks()
                 entity._cancel_temp_tasks()
+        self.player._cancel_loop_tasks()
+        self.player._cancel_temp_tasks()
                 
 class GameManagerMixin:
     """Mixin to bridge GameManager data into Entities."""

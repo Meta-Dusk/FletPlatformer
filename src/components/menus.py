@@ -6,7 +6,7 @@ from setup import FontStyles
 from components.buttons import SimpleButton
 from components.volume_controls import VolumeControl, DirectionalVolumeToggle
 from components.window_controls import FullscreenToggle
-from components.game_controls import ConsoleToggle
+from components.game_controls import ConsoleToggle, PerfMonitorToggles
 from backgrounds import add_infinite_layer
 from bg_loops import light_mv_loop
 from utilities.components import try_update
@@ -180,10 +180,12 @@ class SettingsMenu(Menu):
         )
         
         self.console_switch = ConsoleToggle()
+        self.perf_toggles = PerfMonitorToggles()
         game_column = ft.Column(
             controls=[
                 ft.Text("Game", size=40, font_family=FontStyles.LIEF, color=ft.Colors.WHITE_54),
                 self.console_switch,
+                self.perf_toggles
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER
@@ -239,22 +241,3 @@ class SettingsMenu(Menu):
         if e.type == ft.WindowEventType.RESIZED:
             self.settings_container.height = self.page.height / 2
             try_update(self.settings_container)
-
-from setup import FONT_STYLES
-from audio.audio_manager import global_audio_manager
-def test(page: ft.Page):
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.fonts = FONT_STYLES
-    page.padding = 0
-    page.bgcolor = ft.Colors.WHITE
-    
-    audio_manager = global_audio_manager
-    audio_manager.initialize()
-    
-    settings_menu = SettingsMenu(audio_manager)
-    settings_menu.visible = True
-    
-    page.add(settings_menu)
-
-if __name__ == "__main__": ft.run(test, assets_dir="../assets")
