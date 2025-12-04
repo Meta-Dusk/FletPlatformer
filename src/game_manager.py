@@ -137,21 +137,25 @@ class GameManager:
             if entity:
                 if entity == "player":
                     await self.player.death()
-                else:
-                    raise ValueError("Missing or unknown entity.")
                 self.console.log(f"Killing {entity}.", ft.Colors.RED)
             else:
                 raise ValueError("Provide an entity to kill.")
         
-        def damage(entity: str, amount: float) -> None:
+        async def damage(entity: str, amount: float) -> None:
             if entity:
                 if entity == "player":
-                    self.player.take_damage(amount)
-                else:
-                    raise ValueError("Missing or unknown entity.")
-                self.console.log(f"Killing {entity}.", ft.Colors.RED)
+                    self.console.log(f"Dealing {amount} damage to {self.player.name}.", ft.Colors.RED)
+                    await self.player.take_damage(amount)
+                # self.console.log(f"Killing {entity}.", ft.Colors.RED)
             else:
-                raise ValueError("Provide an entity to kill.")
+                raise ValueError("Provide an entity to damage.")
+        
+        async def quit() -> None:
+            if not self.main_menu.visible:
+                self.console.log("Quitting to the Main Menu.", ft.Colors.ORANGE)
+                await self.quit_to_menu(None)
+            else:
+                raise Exception("Cannot quit to Main Menu when in Main Menu.")
         
         self.console.register_command(
             command_structure="kill <entity>",
@@ -169,7 +173,13 @@ class GameManager:
             },
             help_text="Damages an entity by the amount given, in the current scene."
         )
-    
+        
+        self.console.register_command(
+            command_structure="quit",
+            handler=quit,
+            help_text="Quits to the main menu."
+        )
+        
     # * === UI SETUP ===
     def _setup_game_ui(self):
         """Initializes Player, Stacks, and HUD."""
@@ -231,37 +241,45 @@ class GameManager:
     async def _player_damage(self, _): await self.player.take_damage(5)
     
     async def _on_keyboard_event(self, e: ft.KeyboardEvent):
+        # Window and Dev keybinds
+        match e.key:
+            case "F11": self.page.window.maximized = not self.page.window.maximized
+            case "/":
+                if not self.console in self.page.overlay: return
+                await self.console.toggle()
+                if self.console.visible:
+                    if self.player:
+                        self.player.states.disable_movement = True
+                    self.main_menu.disabled = True
+                    self.settings_menu.disabled = True
+                    self.pause_menu.disabled = True
+                    self.ui_stack.disabled = True
+                else:
+                    if self.player:
+                        self.player.states.disable_movement = False
+                    self.main_menu.disabled = False
+                    self.settings_menu.disabled = False
+                    self.pause_menu.disabled = False
+                    self.ui_stack.disabled = False
+            case "Escape":
+                if self.console.visible:
+                    await self.console.toggle()
+                    if self.player:
+                        self.player.states.disable_movement = False
+                    self.main_menu.disabled = False
+                    self.settings_menu.disabled = False
+                    self.pause_menu.disabled = False
+                    self.ui_stack.disabled = False
+                else: self.toggle_pause(e)
+        await self.console.handle_keyboard(e)
+        
+        # Player Keybinds
         if not self.is_game_running: return
         match e.key:
             case " ":
                 if not self.console.visible: self.player.jump()
             case "V":
                 if not self.console.visible: self.player.attack()
-            case "Escape":
-                if self.console.visible: await self.console.toggle()
-                else: self.toggle_pause(e)
-                if self.console.visible:
-                    self.player.states.disable_movement = False
-                    self.main_menu.disabled = False
-                    self.settings_menu.disabled = False
-                    self.pause_menu.disabled = False
-            case "F11": self.page.window.maximized = not self.page.window.maximized
-            case "/":
-                if not self.console in self.page.overlay: return
-                await self.console.toggle()
-                if self.console.visible:
-                    self.player.states.disable_movement = True
-                    self.main_menu.disabled = True
-                    self.settings_menu.disabled = True
-                    self.pause_menu.disabled = True
-                    self.ui_stack.disabled = True
-                else:
-                    self.player.states.disable_movement = False
-                    self.main_menu.disabled = False
-                    self.settings_menu.disabled = False
-                    self.pause_menu.disabled = False
-                    self.ui_stack.disabled = False
-        await self.console.handle_keyboard(e)
     
     def _win_on_event(self, e: ft.WindowEvent):
         match e.type:
@@ -306,6 +324,7 @@ class GameManager:
         
         self.game_layer.opacity = 0
         self.game_layer.visible = True
+        self.ui_stack.disabled = False
         try_update(self.game_layer)
         await asyncio.sleep(0.1)
         self.game_layer.opacity = 1
@@ -315,9 +334,9 @@ class GameManager:
         
         self.audio_manager.play_music(music.loops.sketchbook.abstraction_2024_03_20_02)
         self.is_game_running = True
-        self.page.update()
         self.start_tasks()
         self._debug_msg("Starting Game!")
+        self.page.update()
     
     async def open_settings(self, _):
         if self.pause_menu.visible:
@@ -330,8 +349,6 @@ class GameManager:
         elif self.main_menu.visible:
             self.main_menu.disabled = True
             self.settings_menu.visible = True
-            
-        self.page.update()
     
     async def close_settings(self, _):
         if self.is_game_running:
@@ -341,8 +358,6 @@ class GameManager:
         elif self.main_menu.visible:
             self.main_menu.disabled = False
             self.settings_menu.visible = False
-            
-        self.page.update()
     
     def toggle_pause(self, _):
         """Toggle Pause Overlay"""
@@ -350,7 +365,10 @@ class GameManager:
         or self.settings_menu.visible: return
         
         self.pause_menu.visible = not self.pause_menu.visible
-        try_update(self.pause_menu)
+        if self.pause_menu.visible:
+            self.ui_stack.disabled = True
+        else:
+            self.ui_stack.disabled = False
         msg = "Game paused!" if self.pause_menu.visible else "Unpausing game!"
         self._debug_msg(msg)
         
@@ -391,8 +409,6 @@ entity_stack: {len(self.entity_stack.controls)}
         try_update(self.main_menu)
         await self._await_for_dur(self.main_menu)
         self.main_menu.start_loop()
-        
-        self.page.update()
     
     # * === GAME EVENTS ===
     def summon_enemy(
