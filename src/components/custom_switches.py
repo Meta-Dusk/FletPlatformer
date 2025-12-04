@@ -6,6 +6,7 @@ import inspect
 from utilities.components import try_update
 from audio.audio_manager import global_audio_manager
 from audio.sfx_data import SFXLibrary
+from setup import FontStyles
 
 audio_manager = global_audio_manager
 sfx = SFXLibrary()
@@ -83,3 +84,35 @@ class CustomSwitch(ft.Container):
     
     def _on_focus(self, _):
         self._play_sfx(sfx.ui.buttons.hover_1)
+        
+class TextAndToggle(ft.Container):
+    def __init__(
+        self,
+        label_text: str = "",
+        label_offset: ft.Offset = ft.Offset(0.0, 0.0),
+        spacer_width: int = 60,
+        toggle_value: bool = False
+    ):
+        self.toggle = CustomSwitch(value=toggle_value)
+        label = ft.Container(
+            content=ft.Text(
+                value=label_text, size=30,
+                font_family=FontStyles.ADAPA, color=ft.Colors.WHITE_70
+            ),
+            alignment=ft.Alignment.CENTER, offset=label_offset
+        )
+        spacer = ft.Container(width=spacer_width)
+        
+        main_container = ft.Container(
+            content=ft.Row(
+                controls=[label, spacer, self.toggle], expand=True,
+                alignment=ft.MainAxisAlignment.CENTER,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER
+            ),
+            alignment=ft.Alignment.CENTER
+        )
+        
+        super().__init__(
+            content=main_container, alignment=ft.Alignment.CENTER,
+            padding=4, expand=True
+        )

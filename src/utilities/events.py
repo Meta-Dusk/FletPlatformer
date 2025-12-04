@@ -10,7 +10,12 @@ def silence_event_loop_closed(loop: asyncio.AbstractEventLoop, context: dict[str
     
     # ? ConnectionResetError: Often happens alongside the socket disconnect
     if isinstance(exception, ConnectionResetError): return
-
+    
+    # ? WinError 10053: "An established connection was aborted by the software in your host machine"
+    if isinstance(exception, ConnectionAbortedError):
+        # Optional precision check
+        if getattr(exception, "winerror", 0) == 10053: return
+    
     # ? Pass everything else to the default handler
     loop.default_exception_handler(context)
     

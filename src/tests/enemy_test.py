@@ -1,20 +1,18 @@
 import flet as ft
 
-from entities.enemy import Enemy, EnemyType, Factions
+from entities.enemy import Enemy, EnemyType
+from entities.features.entity_data import Factions
 from entities.entity import Entity
 from audio.audio_manager import global_audio_manager
 from utilities.tasks import attempt_cancel
 from images import Sprite
+from tests.test_templates import test_init
 
 
-def before_test(page: ft.Page):
-    page.title = "Enemy Class Test"
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.padding = 0
-
-def test(page: ft.Page):
+async def test(page: ft.Page):
     """Test for the `Enemy` class; a simple implementation"""
+    await test_init(page)
+    
     audio_manager = global_audio_manager
     audio_manager.initialize()
     
@@ -59,13 +57,7 @@ def test(page: ft.Page):
     
     stage = ft.Stack(controls=[dummy_player(), enemy(), buttons_row], expand=True)
     
-    async def on_keyboard_event(e: ft.KeyboardEvent):
-        """Fast exit with key: `[Escape]`."""
-        if e.key == "Escape": await page.window.close()
-    
-    page.on_keyboard_event = on_keyboard_event
     page.add(stage)
     dummy_player._start_movement_loop()
     
-if __name__ == "__main__":
-    ft.run(main=test, before_main=before_test, assets_dir="../assets")
+ft.run(test, assets_dir="../assets")

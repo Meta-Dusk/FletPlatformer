@@ -102,7 +102,7 @@ async def stage_panning_loop(
         for fg in foreground_stack.controls:
             move_and_wrap(fg, 1.0)
             
-        # Handle Entities (Keep your existing logic)
+        # Handle Entities
         for entity in entity_list:
             entity.states.disable_movement = True
             entity.states.invincible = True
@@ -118,7 +118,7 @@ async def stage_panning_loop(
         for fg in foreground_stack.controls:
             fg.opacity = 1
         
-        # Restore Entity States (Keep your existing logic)
+        # Restore Entity States
         for entity in entity_list:
             entity.states.disable_movement = False
             entity.states.invincible = False

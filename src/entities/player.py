@@ -2,7 +2,8 @@ import asyncio, random
 import flet as ft
 from pynput import keyboard
 
-from entities.entity import Entity, EntityStates, EntityStats, Factions
+from entities.entity import Entity
+from entities.features.entity_data import EntityStates, EntityStats, Factions
 from images import Sprite
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
@@ -397,7 +398,15 @@ class Player(Entity):
             self._take_hit_task
         ]
         for task in tasks: attempt_cancel(task)
-        
+    
+    def _cancel_loop_tasks(self):
+        """Cancels all running looping tasks."""
+        tasks = [
+            self._movement_loop_task,
+            self._animation_loop_task
+        ]
+        for task in tasks: attempt_cancel(task)
+    
     def _start_loops(self):
         self._start_animation_loop()
         self._start_movement_loop()

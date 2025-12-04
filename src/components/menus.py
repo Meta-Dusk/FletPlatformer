@@ -6,6 +6,7 @@ from setup import FontStyles
 from components.buttons import SimpleButton
 from components.volume_controls import VolumeControl, DirectionalVolumeToggle
 from components.window_controls import FullscreenToggle
+from components.game_controls import ConsoleToggle, PerfMonitorToggles
 from backgrounds import add_infinite_layer
 from bg_loops import light_mv_loop
 from utilities.components import try_update
@@ -53,7 +54,7 @@ class MainMenu(Menu):
         self.bg_stack = ft.Stack(expand=True)
         bg_container = ft.Container(self.bg_stack, expand=True, alignment=ft.Alignment.CENTER)
         
-        ui_elements = ft.Column(
+        self.ui_elements = ft.Column(
             controls=[
                 title,
                 version,
@@ -65,7 +66,7 @@ class MainMenu(Menu):
             horizontal_alignment=ft.CrossAxisAlignment.CENTER
         )
         
-        ui_stack = ft.Stack([bg_container, ui_elements], alignment=ft.Alignment.CENTER)
+        ui_stack = ft.Stack([bg_container, self.ui_elements], alignment=ft.Alignment.CENTER)
         main_container = ft.Container(
             content=ui_stack, expand=True, alignment=ft.Alignment.CENTER
         )
@@ -178,13 +179,30 @@ class SettingsMenu(Menu):
             alignment=ft.Alignment.CENTER
         )
         
-        settings_container = ft.Container(
+        self.console_switch = ConsoleToggle()
+        self.perf_toggles = PerfMonitorToggles()
+        game_column = ft.Column(
+            controls=[
+                ft.Text("Game", size=40, font_family=FontStyles.LIEF, color=ft.Colors.WHITE_54),
+                self.console_switch,
+                self.perf_toggles
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        )
+        game_settings = ft.Container(
+            content=game_column, bgcolor=ft.Colors.GREY_900,
+            alignment=ft.Alignment.CENTER
+        )
+        
+        self.settings_container = ft.Container(
             padding=8, offset=ft.Offset(0.0, -0.1),
             content=ft.Container(
                 content=ft.Column(
                     controls=[
                         volume_settings,
-                        window_settings
+                        window_settings,
+                        game_settings
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -204,7 +222,7 @@ class SettingsMenu(Menu):
                 controls=[
                     title,
                     self.subtitle,
-                    settings_container,
+                    self.settings_container,
                     new_button("Go Back", on_click=on_close),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
@@ -215,23 +233,11 @@ class SettingsMenu(Menu):
     
     def _new_volume_control(self, audio_type: Literal["music", "sfx"], label: str):
         return VolumeControl(self.audio_manager, audio_type, label)
-
-
-from setup import FONT_STYLES
-from audio.audio_manager import global_audio_manager
-def test(page: ft.Page):
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.fonts = FONT_STYLES
-    page.padding = 0
-    page.bgcolor = ft.Colors.WHITE
     
-    audio_manager = global_audio_manager
-    audio_manager.initialize()
+    def did_mount(self):
+        self.settings_container.height = self.page.height / 2
     
-    settings_menu = SettingsMenu(audio_manager)
-    settings_menu.visible = True
-    
-    page.add(settings_menu)
-
-if __name__ == "__main__": ft.run(test, assets_dir="../assets")
+    def win_on_update(self, e: ft.WindowEvent):
+        if e.type == ft.WindowEventType.RESIZED:
+            self.settings_container.height = self.page.height / 2
+            try_update(self.settings_container)
