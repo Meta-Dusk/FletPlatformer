@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Self
 from abc import ABC, abstractmethod
 
-# --- Types of Arguments ---
+# * --- Types of Arguments ---
 class ArgType(ABC):
     """Base class for argument types (String, Int, Float, Choice, etc.)"""
     @abstractmethod
@@ -22,6 +22,12 @@ class IntArg(ArgType):
             return int(value)
         except ValueError:
             raise ValueError(f"'{value}' is not a valid integer")
+    
+    def get_suggestions(self, current_input: str) -> List[str]:
+        # Suggest tilde if they haven't started typing a number
+        if current_input == "":
+            return ["1", "2", "3"]
+        return []
 
 class ChoiceArg(ArgType):
     """Restricts input to a specific list of options (e.g., 'goblin', 'orc')"""
@@ -36,7 +42,45 @@ class ChoiceArg(ArgType):
     def get_suggestions(self, current_input: str) -> List[str]:
         return [c for c in self.choices if c.startswith(current_input)]
 
-# --- The Command Node Structure ---
+class CoordinateArg(ArgType):
+    """
+    Parses a Minecraft-style coordinate.
+    Returns a tuple: (`value`: int, `is_relative`: bool)
+    \nExamples:\n
+      "10"  -> (10, False)  (Absolute 10)
+      "~"   -> (0, True)    (Relative +0)
+      "~5"  -> (5, True)    (Relative +5)
+      "~-5" -> (-5, True)   (Relative -5)
+    """
+    def parse(self, value: str) -> tuple[int, bool]:
+        if value == "~": return (0, True)
+        
+        if value.startswith("~"):
+            # It is relative, parse the rest as int
+            try:
+                # remove '~' and parse the rest
+                rest = value[1:] 
+                # Handle case like "~" which leaves "" -> 0
+                number = int(rest) if rest else 0
+                return (number, True)
+            except ValueError:
+                raise ValueError(f"Invalid relative coordinate: {value}")
+        
+        # Absolute coordinate
+        try:
+            return (int(value), False)
+        except ValueError:
+            raise ValueError(f"'{value}' is not a valid coordinate")
+
+    def get_suggestions(self, current_input: str) -> List[str]:
+        # Suggest tilde if they haven't started typing a number
+        if current_input == "":
+            return ["~", "~1", "~-1"]
+        if current_input == "~":
+            return ["~", "~1", "~-1"]
+        return []
+
+# * --- The Command Node Structure ---
 @dataclass
 class CommandNode:
     name: str
@@ -56,19 +100,15 @@ class CommandParser:
         self.root = CommandNode("root")
         
     def register(
-        self, command_structure: str,
-        handler: Callable[..., any],
+        self, 
+        command_structure: str, 
+        handler: Callable[..., any], 
         arg_types: Optional[dict[str, ArgType]] = None,
-        help_text: str = "No description provided."
+        # CHANGE: Type hint now allows str OR List[str]
+        help_text: str | List[str] = "No description provided." 
     ) -> None:
         """
-        Register a command like "summon <entity> <count>".
-        
-        Args:
-            command_structure (str): The syntax string.
-            handler (Callable): The function to call when executed.
-            arg_types (dict): Map of placeholder names to ArgType objects.
-            help_text (str): A description of what the command does.
+        Register a command. 'help_text' can be a single string or a list of lines.
         """
         parts = command_structure.split()
         current = self.root
@@ -77,7 +117,6 @@ class CommandParser:
             is_arg = part.startswith("<") and part.endswith(">")
             name = part.strip("<>")
             
-            # Check if this node already exists (for branching commands)
             found: Optional[CommandNode] = None
             for child in current.children.values():
                 if child.name == name:
@@ -87,181 +126,293 @@ class CommandParser:
             if found:
                 current = found
             else:
-                # Create new node
                 atype: Optional[ArgType] = None
                 if is_arg and arg_types and name in arg_types:
                     atype = arg_types[name]
                 elif is_arg:
-                    atype = StringArg() # Default to string if not specified
+                    atype = StringArg()
                 
                 new_node = current.add_child(name, atype)
                 current = new_node
         
-        # The last node handles the execution
         current.handler = handler
-        current.help_text = help_text
+        
+        # If it is a list, join it into a single string with newlines.
+        # This makes it compatible with our existing hanging indent system.
+        if isinstance(help_text, list):
+            current.help_text = "\n".join(help_text)
+        else:
+            current.help_text = help_text
         
     def get_suggestions(self, full_text: str) -> List[str]:
-        """Returns a list of valid next words based on incomplete input."""
+        """
+        Returns a list of valid next words based on incomplete input.
+        Uses Backtracking to find ALL valid suggestions from ALL matching paths.
+        """
         parts = full_text.split()
-        if full_text.endswith(" "): parts.append("") 
-        
-        current = self.root
-        
-        # Traverse as deep as we can
-        for _, part in enumerate(parts[:-1]):
-            matched_arg = False
+        # If the user typed a space at the end, they are looking for the NEXT word.
+        # We represent this as an empty token at the end.
+        if full_text.endswith(" "): 
+            parts.append("")
             
-            # 1. Try literal match
-            if part in current.children:
-                current = current.children[part]
-                matched_arg = True
-            else:
-                # 2. Try argument match
-                for child in current.children.values():
-                    if child.arg_type:
-                        try:
-                            child.arg_type.parse(part)
-                            current = child
-                            matched_arg = True
-                            break
-                        except ValueError: continue
-            
-            if not matched_arg: return []
-            
-        # We are at the cursor node. What are valid next options?
-        current_input = parts[-1] if len(parts) > 0 else ""
-        suggestions: List[str] = []
-        
-        for child in current.children.values():
-            if child.arg_type:
-                suggestions.extend(child.arg_type.get_suggestions(current_input))
-            elif child.name.startswith(current_input):
-                suggestions.append(child.name)
+        suggestions: set[str] = set()
+
+        def collect(node: CommandNode, index: int) -> None:
+            # BASE CASE: We are at the cursor (the last part of the input)
+            if index >= len(parts) - 1:
+                current_input = parts[index] if len(parts) > 0 else ""
                 
-        return suggestions
-    
+                # Check all children of this valid path node
+                for child in node.children.values():
+                    # 1. Argument Suggestions (e.g. from ChoiceArg)
+                    if child.arg_type:
+                        for s in child.arg_type.get_suggestions(current_input):
+                            suggestions.add(s)
+                    # 2. Literal Matches (e.g. "help", "summon")
+                    elif child.name.startswith(current_input):
+                        suggestions.add(child.name)
+                return
+
+            # RECURSIVE STEP: We are still walking through the path
+            token = parts[index]
+            
+            # 1. Try Literal Match
+            if token in node.children:
+                collect(node.children[token], index + 1)
+            
+            # 2. Try Argument Match
+            for child in node.children.values():
+                # Avoid duplicates if we already checked this child via literal match
+                if child.name == token: 
+                    continue
+                
+                if child.arg_type:
+                    try:
+                        # Check if this path is valid so far
+                        child.arg_type.parse(token)
+                        # If yes, continue down this rabbit hole
+                        collect(child, index + 1)
+                    except ValueError:
+                        continue
+
+        collect(self.root, 0)
+        return sorted(list(suggestions))
+
     def get_syntax_hint(self, full_text: str) -> str:
         """
-        Returns a string showing the current command structure with future arguments.
-        Example: "summon <entity> <count>"
+        Returns the longest/most complete syntax hint matching the input.
+        Handles ambiguity (e.g. '5' could be count OR x) by showing the longest future.
         """
         parts = full_text.split()
         is_trailing_space = full_text.endswith(" ")
         
-        current = self.root
-        path_str: List[str] = [] # Reconstructed valid path so far
-        
+        # We only traverse up to the last COMPLETE word to build the "past" path.
+        # If trailing space, all parts are complete.
         traverse_parts = parts if is_trailing_space else parts[:-1]
         
-        for part in traverse_parts:
-            found: Optional[CommandNode] = None
-            # Literal match
-            if part in current.children:
-                found = current.children[part]
-                path_str.append(found.name)
-            else:
-                # Arg match
-                for child in current.children.values():
-                    if child.arg_type:
-                        try:
-                            child.arg_type.parse(part)
-                            found = child
-                            path_str.append(part)
-                            break
-                        except ValueError: pass
-            
-            if found:
-                current = found
-            else:
-                return "Unknown Command"
-            
-        # If we are in the middle of typing a word
-        if not is_trailing_space and len(parts) > 0:
-            last_token = parts[-1]
-            best_match: Optional[CommandNode] = None
-            
-            for child in current.children.values():
-                if child.name.startswith(last_token) or child.arg_type:
-                    best_match = child
-                    if not child.arg_type:
-                        path_str.append(child.name) 
-                    else:
-                        path_str.append(f"<{child.name}>")
-                    break
-            
-            if best_match:
-                current = best_match
-            else:
-                return "Unknown Command"
+        valid_paths: List[str] = []
 
-        # Look ahead
-        future_str: List[str] = []
-        temp_node = current
+        def build_hint(node: CommandNode, index: int, path_str: List[str]):
+            # BASE CASE: We consumed all user tokens. Now look at the FUTURE.
+            if index >= len(traverse_parts):
+                
+                # 1. If we are in the middle of typing a word (no trailing space),
+                #    we need to find which node matches that partial word.
+                if not is_trailing_space and len(parts) > 0:
+                    last_token = parts[-1]
+                    matched = False
+                    
+                    # Look for best match among children
+                    for child in node.children.values():
+                        if child.name.startswith(last_token) or child.arg_type:
+                            # We found a valid node for the cursor. 
+                            # Continue one step deeper to find the "Future" after it.
+                            
+                            # For the hint display, we prefer showing the PLACEHOLDER <name>
+                            # rather than the user's partial input, but usage varies.
+                            # Let's show the user's input to keep context.
+                            new_token = f"<{child.name}>" if child.arg_type else child.name
+                            
+                            # RECURSE: Build the future string from this child
+                            future = self._get_best_future_path(child)
+                            full_hint = " ".join(path_str + [new_token] + future)
+                            valid_paths.append(full_hint)
+                            matched = True
+                            # We don't break here; we want to see if other children also match!
+                    
+                    if not matched: return
+
+                else:
+                    # Input is clean (ends in space or empty). Just append future.
+                    future = self._get_best_future_path(node)
+                    full_hint = " ".join(path_str + future)
+                    valid_paths.append(full_hint)
+                return
+
+            # RECURSIVE STEP: Match current token
+            token = traverse_parts[index]
+            
+            # Try Literal
+            if token in node.children:
+                # Add literal name to path
+                build_hint(node.children[token], index + 1, path_str + [node.children[token].name])
+            
+            # Try Arguments
+            for child in node.children.values():
+                if child.name == token: continue
+                if child.arg_type:
+                    try:
+                        child.arg_type.parse(token)
+                        # For arguments, we usually keep the user's value in the hint to show progress
+                        # e.g. "summon goblin 5"
+                        build_hint(child, index + 1, path_str + [token])
+                    except ValueError: continue
+
+        build_hint(self.root, 0, [])
+
+        if not valid_paths:
+            return "Unknown Command"
         
-        while temp_node.children:
-            first_child = list(temp_node.children.values())[0]
-            
+        # Heuristic: Return the longest string. 
+        # This solves the ambiguity: "summon goblin 5" -> prefers "<x> <y> <count>" over "<count>"
+        return max(valid_paths, key=len)
+
+    def _get_best_future_path(self, node: CommandNode) -> List[str]:
+        """Helper to find one valid 'future' path from a node to a leaf."""
+        future = []
+        current = node
+        while current.children:
+            # Just grab the first child for the hint
+            first_child = list(current.children.values())[0]
             if first_child.arg_type:
-                future_str.append(f"<{first_child.name}>")
+                future.append(f"<{first_child.name}>")
             else:
-                future_str.append(first_child.name)
-            
-            temp_node = first_child
-            
-        return " ".join(path_str + future_str)
+                future.append(first_child.name)
+            current = first_child
+        return future
     
     def execute(self, full_text: str) -> any:
-        """Parses and runs the command handler."""
+        """
+        Parses and runs the command handler using Backtracking.
+        Returns a tuple to correctly handle functions that return None.
+        """
         parts = full_text.split()
-        current = self.root
-        args_collected: List[any] = []
+        
+        # Returns: (success: bool, return_value: any)
+        def attempt_parse(node: CommandNode, token_index: int, args_collected: List[any]) -> tuple[bool, any]:
+            # BASE CASE: End of input
+            if token_index >= len(parts):
+                if node.handler:
+                    # Execute and return TRUE for success, plus the result
+                    return (True, node.handler(*args_collected))
+                return (False, None)
 
-        for part in parts:
-            found_next = False
+            current_token = parts[token_index]
             
-            if part in current.children:
-                current = current.children[part]
-                found_next = True
-            else:
-                for child in current.children.values():
-                    if child.arg_type:
-                        try:
-                            val = child.arg_type.parse(part)
-                            args_collected.append(val)
-                            current = child
-                            found_next = True
-                            break
-                        except ValueError: continue
-            
-            if not found_next:
-                raise ValueError(f"Unknown command or argument: {part}")
+            # 1. Literal Matches
+            if current_token in node.children:
+                child = node.children[current_token]
+                success, val = attempt_parse(child, token_index + 1, args_collected)
+                if success:
+                    return (True, val)
 
-        if current.handler:
-            return current.handler(*args_collected)
+            # 2. Argument Matches
+            for child in node.children.values():
+                if child.name == current_token: continue
+                if child.arg_type:
+                    try:
+                        parsed_val = child.arg_type.parse(current_token)
+                        # Pass accumulated args down
+                        success, val = attempt_parse(child, token_index + 1, args_collected + [parsed_val])
+                        if success:
+                            return (True, val)
+                    except ValueError:
+                        continue
+            
+            return (False, None)
+
+        # Start recursion
+        success, result = attempt_parse(self.root, 0, [])
+        
+        if success:
+            return result
         else:
-            raise ValueError("Incomplete command.")
+            raise ValueError(f"Unknown command or invalid arguments: '{full_text}'")
 
     def get_root_commands(self) -> List[str]:
         """Returns a list of all top-level command names."""
         return [child.name for child in self.root.children.values()]
     
     def get_command_help(self, command_name: str) -> str:
-        """Retrieves the help text for a top-level command."""
-        if command_name in self.root.children:
-            node = self.root.children[command_name]
-            # If the top level node handles logic, return its help
-            # If it's a branching command, we might want to traverse down, 
-            # but for now let's just return what is stored on the node.
-            # We traverse to the leaf of the first branch to find some help if the root doesn't have it.
-            
-            if node.help_text: return node.help_text
-            
-            # Simple fallback: check the first child if it's a multi-stage command
-            temp = node
-            while temp.children and not temp.help_text:
-                temp = list(temp.children.values())[0]
-            
-            return temp.help_text
-            
-        return "Command not found."
+        """
+        Recursively finds all valid usage patterns (overloads) for a command.
+        Supports multi-line help text with hanging indentation.
+        """
+        if command_name not in self.root.children:
+            return "Command not found."
+
+        root_node = self.root.children[command_name]
+        help_lines: List[str] = []
+
+        def traverse(node: CommandNode, current_path: str) -> None:
+            # 1. If this node is executable (has a handler), record its help
+            if node.handler:
+                desc = node.help_text or "No description."
+                
+                # --- HANGING INDENT LOGIC ---
+                
+                # 1. Prepare the prefix (e.g., "summon <entity> : ")
+                prefix = f"{current_path} : "
+                
+                # 2. Split the help text into lines (handling \n)
+                lines = desc.split('\n')
+                
+                # 3. Add the first line attached directly to the prefix
+                formatted_entry = f"{prefix}{lines[0]}"
+                
+                # 4. Calculate the whitespace padding for subsequent lines
+                #    We use the length of the prefix to align perfectly.
+                indent_padding = " " * len(prefix)
+                
+                # 5. Append the rest of the lines with the padding
+                for extra_line in lines[1:]:
+                    formatted_entry += f"\n{indent_padding}{extra_line}"
+                
+                help_lines.append(formatted_entry)
+
+            # 2. Recurse into all children
+            for child in node.children.values():
+                # Format the name: literal "word" or argument "<word>"
+                if child.arg_type:
+                    token = f"<{child.name}>"
+                else:
+                    token = child.name
+                
+                traverse(child, f"{current_path} {token}")
+
+        # Start traversal from the root of the command
+        traverse(root_node, command_name)
+
+        if not help_lines:
+            return "No usage details found."
+        
+        # Join all found variants with newlines
+        return "\n".join(help_lines)
+    
+
+# * --- Dynamic Command Registry ---
+class CommandNameArg(ArgType):
+    """Dynamically checks for valid command names in the parser."""
+    def __init__(self, parser: CommandParser):
+        self.parser = parser
+
+    def parse(self, value: str) -> str:
+        # Check against the LIVE list of commands
+        if value not in self.parser.root.children:
+            raise ValueError(f"Unknown command: {value}")
+        return value
+
+    def get_suggestions(self, current_input: str) -> List[str]:
+        # Generate suggestions from the LIVE list
+        valid_cmds = self.parser.get_root_commands()
+        return [c for c in valid_cmds if c.startswith(current_input)]

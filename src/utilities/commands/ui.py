@@ -2,11 +2,11 @@ import flet as ft
 from typing import List
 import inspect, asyncio
 
-from utilities.commands.parser import CommandParser, ChoiceArg, IntArg
+from utilities.commands.parser import CommandParser, ChoiceArg, IntArg, CoordinateArg, CommandNameArg
 
 
 class DevConsole(ft.Container):
-    def __init__(self) -> None:
+    def __init__(self, visible: bool = False) -> None:
         self.parser = CommandParser()
         self._current_suggestions: List[str] = []
         
@@ -36,7 +36,7 @@ class DevConsole(ft.Container):
         
         # --- Register Commands ---
         self._register_commands()
-
+        
         # Main Layout
         main_container = ft.Container(
             bgcolor=ft.Colors.with_opacity(0.9, ft.Colors.BLACK),
@@ -52,7 +52,7 @@ class DevConsole(ft.Container):
             )
         )
         super().__init__(
-            bottom=0, left=0, right=0, content=main_container, visible=False
+            bottom=0, left=0, right=0, content=main_container, visible=visible
         )
     
     def clear_log_view(self) -> None:
@@ -72,7 +72,7 @@ class DevConsole(ft.Container):
             self.syntax_hint.value = ""
             self.suggestion_view.controls.clear()
             self.update()
-
+            
     async def handle_keyboard(self, e: ft.KeyboardEvent) -> None:
         if not self.visible: return
 
@@ -80,122 +80,149 @@ class DevConsole(ft.Container):
             if self._current_suggestions:
                 best_guess = self._current_suggestions[0]
                 await self._apply_smart_suggestion(best_guess)
-
+                
     def log(self, message: str, color: str = ft.Colors.WHITE) -> None:
         self.log_view.controls.append(ft.Text(message, color=color, font_family="Consolas"))
         self.update()
-        
+    
+    def register_command(
+        self, 
+        command_structure: str, 
+        handler: callable, 
+        arg_types: dict = None, 
+        help_text: str = ""
+    ) -> None:
+        """
+        Allows external scripts (like `main.py` or `GameManager`) to register commands
+        without creating circular imports.
+        """
+        self.parser.register(command_structure, handler, arg_types, help_text)
+    
     def _register_commands(self) -> None:
         """Registers all game commands and the help system."""
         
-        # 1. Define Argument Types
+        # * Define Argument Types
         entities = ChoiceArg(["goblin", "orc", "slime", "dragon"])
         items = ChoiceArg(["sword", "potion", "gold"])
+        coords = CoordinateArg()
         
-        # 2. Define Handlers
-        def summon(entity: str, count: int) -> None:
-            self.log(f"Spawned {entity} (x{count})", ft.Colors.CYAN)
+        # ? Helper to convert parsed coord tuple to actual string for logging
+        def fmt_pos(pos: tuple[int, bool]) -> str:
+            """Formats the position."""
+            val, is_rel = pos
+            return f"{'~' if is_rel else ''}{val if val != 0 or not is_rel else ''}"
+        
+        # * Define Internal Handlers
+        def summon_default(entity: str, count: int) -> None:
+            """Centered entity spawning."""
+            # We default to relative (0, 0) -> "~ ~"
+            self.log(f"Spawned {entity} (x{count}) at (Center)", ft.Colors.CYAN)
+            
+        def summon_at_pos(entity: str, x: tuple, y: tuple, count: int) -> None:
+            """Spawn entity at location provided."""
+            # x and y are tuples like (10, False) or (5, True)
+            pos_str = f"({fmt_pos(x)}, {fmt_pos(y)})"
+            self.log(f"Spawned {entity} (x{count}) at {pos_str}", ft.Colors.CYAN_ACCENT)
             
         def give(item: str, count: int) -> None:
             self.log(f"Added {item} (x{count}) to inventory", ft.Colors.YELLOW)
-            
-        def heal() -> None:
-            self.log("Player fully healed!", ft.Colors.GREEN)
-        
-        def kys() -> None:
-            self.log("Killing: Player", ft.Colors.RED)
         
         async def exit() -> None:
             self.log("Exiting the game...", ft.Colors.ORANGE)
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
             await self.page.window.close()
         
         def cls() -> None:
             self.clear_log_view()
         
-        # 3. Register Core Logic with Help Text
+        # * Register Some Internal Commands
         self.parser.register(
-            "summon <entity> <count>", 
-            summon, 
-            {"entity": entities, "count": IntArg()},
-            help_text="Spawns a specific number of entities."
+            command_structure="summon <entity> <count>", 
+            handler=summon_default, 
+            arg_types={"entity": entities, "count": IntArg()},
+            help_text="Spawns entities at the default center."
         )
         
         self.parser.register(
-            "give <item> <amount>", 
-            give, 
-            {"item": items, "amount": IntArg()},
+            command_structure="summon <entity> <x> <y> <count>",
+            handler=summon_at_pos,
+            arg_types={
+                "entity": entities,
+                "x": coords,
+                "y": coords,
+                "count": IntArg()
+            },
+            help_text=[
+                "Spawns entities at a specific coordinate.",
+                "i.e.; summon orc ~ ~ 5",
+                "'~' means relative to the center."
+            ]
+        )
+        
+        self.parser.register(
+            command_structure="give <item> <amount>", 
+            handler=give,
+            arg_types={"item": items, "amount": IntArg()},
             help_text="Adds items to your local inventory."
         )
         
         self.parser.register(
-            "heal", 
-            heal,
-            help_text="Restores health to 100%."
-        )
-        
-        self.parser.register(
-            "kys",
-            kys,
-            help_text="Kills the player."
-        )
-        
-        self.parser.register(
-            "exit",
-            exit,
+            command_structure="exit",
+            handler=exit,
             help_text="Exits the game."
         )
         
         self.parser.register(
-            "cls",
-            cls,
+            command_structure="cls",
+            handler=cls,
             help_text="Clears the logs in the dev console."
         )
         
-        # 4. Implement Help System
-        # We get the list of commands currently registered to provide autocomplete for 'help <cmd>'
-        available_cmds = self.parser.get_root_commands()
-        
+        # * Implement Help System
         def print_all_help() -> None:
             """Handler for plain 'help'"""
-            cmds_str = ", ".join(sorted(available_cmds))
+            # FIX: Get the list FRESH every time this function runs
+            current_cmds = self.parser.get_root_commands()
+            
+            cmds_str = ", ".join(sorted(current_cmds))
             self.log("--- Available Commands ---", ft.Colors.GREEN_ACCENT)
             self.log(cmds_str)
             self.log("Type 'help <command>' for details.", ft.Colors.GREY)
-            
+
         def print_specific_help(cmd_name: str) -> None:
             """Handler for 'help <cmd>'"""
             desc = self.parser.get_command_help(cmd_name)
             self.log(f"Help: {cmd_name}", ft.Colors.GREEN_ACCENT)
-            self.log(f"  {desc}")
-            
-        # Register 'help' (lists commands)
+            self.log(desc) # (Assuming you removed the extra spaces from previous step)
+
+        # Register 'help'
         self.parser.register(
             "help", 
             print_all_help, 
             help_text="Lists all available commands."
         )
-        
-        # Register 'help <command>' (details)
+
+        # Register 'help <command>' using the new DYNAMIC argument
         self.parser.register(
             "help <command_name>", 
             print_specific_help,
-            {"command_name": ChoiceArg(available_cmds)}, # Autocomplete matching commands
+            # FIX: Use CommandNameArg instead of ChoiceArg
+            {"command_name": CommandNameArg(self.parser)}, 
             help_text="Shows detailed usage for a command."
         )
         
     def _on_input_change(self, _) -> None:
         full_text = self.input_field.value
         
-        # 1. Update Syntax Hint
+        # Update Syntax Hint
         hint_text = self.parser.get_syntax_hint(full_text)
         self.syntax_hint.value = hint_text
         
-        # 2. Get Suggestions
+        # Get Suggestions
         suggestions = self.parser.get_suggestions(full_text)
         self._current_suggestions = suggestions 
         
-        # 3. Update UI Chips
+        # Update UI Chips
         self.suggestion_view.controls.clear()
         for s in suggestions:
             self.suggestion_view.controls.append(

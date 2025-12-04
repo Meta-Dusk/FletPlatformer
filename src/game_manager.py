@@ -1,6 +1,5 @@
 import flet as ft
 import asyncio, random
-from dataclasses import dataclass
 
 from audio.audio_manager import AudioManager, global_audio_manager
 from audio.music_data import MusicLibrary
@@ -10,6 +9,8 @@ from utilities.keyboard_manager import held_keys, start as km_start
 from utilities.tasks import attempt_cancel
 from entities.player import Player
 from utilities.components import try_update
+from utilities.commands.ui import DevConsole
+from utilities.commands.parser import ChoiceArg
 from entities.enemy import EnemyType, Enemy
 from entities.entity import Entity
 from entities.goblin import Goblin
@@ -18,12 +19,6 @@ from backgrounds import add_infinite_layer
 
 music = MusicLibrary()
 
-@dataclass
-class GameMenuState:
-    main_menu: bool = True
-    settings_menu: bool = False
-    pause_menu: bool = False
-
 class GameManager:
     """Central hub for the game UI and states."""
     def __init__(self, page: ft.Page):
@@ -31,11 +26,14 @@ class GameManager:
         self.page: ft.Page = page
         self.player: Player = None
         self.audio_manager: AudioManager = None
-        self.background_stack: ft.Stack = None
-        self.foreground_stack: ft.Stack = None
-        self.stage: ft.Stack = None
+        self.background_stack = ft.Stack(expand=True)
+        self.foreground_stack = ft.Stack(expand=True)
+        self.entity_stack = ft.Stack(expand=True)
+        self.ui_stack = ft.Stack(expand=True)
+        self.stage = ft.Stack(expand=True)
+        self.game_stage = ft.Stack(expand=True)
         self.entity_list: list[Entity] = []
-        self.menu_state = GameMenuState()
+        self.console = DevConsole()
         
         # Task Management
         self.running_tasks: list[asyncio.Task] = []
@@ -44,16 +42,9 @@ class GameManager:
         self.ground_level: int = 30
         self.kill_count: int = 0
         self.death_count: int = 0
-        self.time: float = 7
         self.is_game_running: bool = False
         
         # Scenes
-        async def exit(_): await self.page.window.close()
-        self.main_menu = MainMenu(
-            on_start=self.start_game,
-            on_settings=self.open_settings,
-            on_quit=exit
-        )
         self.pause_menu = PauseMenu(
             on_resume=self.toggle_pause,
             on_settings=self.open_settings,
@@ -64,6 +55,23 @@ class GameManager:
             visible=False
         )
         self.settings_menu = None
+    
+    # * === MENUS ===
+    def _make_main_menu(self):
+        async def exit(_): await self.page.window.close()
+        self.main_menu = MainMenu(
+            on_start=self.start_game,
+            on_settings=self.open_settings,
+            on_quit=exit
+        )
+        if not self.main_menu in self.stage.controls:
+            self.stage.controls.insert(1, self.main_menu)
+        print(len(self.stage.controls))
+        try_update(self.stage)
+    
+    def _remove_main_menu(self):
+        self.stage.controls.remove(self.main_menu)
+        try_update(self.stage)
     
     # * === IMPORTANT METHODS ===
     async def __call__(self):
@@ -77,21 +85,23 @@ class GameManager:
         self.audio_manager.initialize()
         self.audio_manager.play_music(music.loops.sketchbook.abstraction_2023_11_29)
         km_start()
+        self.register_commands()
         
         # --- Event Handlers ---
         self.page.on_keyboard_event = self._on_keyboard_event
         self.page.window.on_event = self._win_on_event
         
         # Setup UI: Stack all layers
+        self._make_main_menu()
         self.settings_menu = SettingsMenu(self.audio_manager, on_close=self.close_settings)
-        self.stage = ft.Stack(
-            controls=[
-                self.game_layer,
-                self.main_menu,
-                self.pause_menu,
-                self.settings_menu,
-            ], expand=True
-        )
+        self.stage.controls.extend([
+            self.game_layer,
+            self.pause_menu,
+            self.settings_menu,
+        ])
+        
+        # Post Setup for UI
+        self.settings_menu.console_switch.toggle.on_toggle = self._console_on_toggle
         
         self.page.add(self.stage)
         await self.page.window.center()
@@ -114,15 +124,32 @@ class GameManager:
         """
         await asyncio.sleep(self._get_dur(control))
     
+    # * === COMMANDS REGISTRY ===
+    def register_commands(self) -> None:
+        """Registers commands specifically for the `GameManager`."""
+        self._available_entities = ChoiceArg(["player"])
+        
+        async def kill(entity: str) -> None:
+            if entity:
+                if entity == "player":
+                    await self.player.death()
+                else:
+                    raise ValueError("Missing or unknown entity.")
+                self.console.log(f"Killing {entity}.", ft.Colors.RED)
+            else:
+                raise ValueError("Provide an entity to kill.")
+        
+        self.console.register_command(
+            command_structure="kill <entity>",
+            handler=kill,
+            arg_types={"entity": self._available_entities},
+            help_text="Kills an entity in the current scene."
+        )
+    
     # * === UI SETUP ===
     def _setup_game_ui(self):
         """Initializes Player, Stacks, and HUD."""
         # Stacks/Layers
-        self.background_stack = ft.Stack(expand=True)
-        self.foreground_stack = ft.Stack(expand=True)
-        self.entity_stack = ft.Stack(expand=True)
-        self.ui_stack = ft.Stack(expand=True)
-        
         def inf_layer(stack: ft.Stack, index: int):
             add_infinite_layer(stack=stack, index=index, page=self.page)
         
@@ -157,15 +184,12 @@ class GameManager:
         self.ui_stack.controls.extend([buttons_row, self.lups_counter])
         
         # Composition
-        self.game_stage = ft.Stack(
-            expand=True,
-            controls=[
-                self.background_stack,
-                self.entity_stack,
-                self.foreground_stack,
-                self.ui_stack,
-            ]
-        )
+        self.game_stage.controls.extend([
+            self.background_stack,
+            self.entity_stack,
+            self.foreground_stack,
+            self.ui_stack,
+        ])
         
         form = ft.WindowDragArea(self.game_stage, expand=True, maximizable=False)
         
@@ -186,15 +210,51 @@ class GameManager:
     async def _on_keyboard_event(self, e: ft.KeyboardEvent):
         if not self.is_game_running: return
         match e.key:
-            case " ": self.player.jump()
-            case "V": self.player.attack()
-            case "Escape": self.toggle_pause(e)
+            case " ":
+                if not self.console.visible: self.player.jump()
+            case "V":
+                if not self.console.visible: self.player.attack()
+            case "Escape":
+                if self.console.visible: await self.console.toggle()
+                else: self.toggle_pause(e)
+                if self.console.visible:
+                    self.player.states.disable_movement = False
+                    self.main_menu.disabled = False
+                    self.settings_menu.disabled = False
+                    self.pause_menu.disabled = False
             case "F11": self.page.window.maximized = not self.page.window.maximized
+            case "/":
+                if not self.console in self.page.overlay: return
+                await self.console.toggle()
+                if self.console.visible:
+                    self.player.states.disable_movement = True
+                    self.main_menu.disabled = True
+                    self.settings_menu.disabled = True
+                    self.pause_menu.disabled = True
+                else:
+                    self.player.states.disable_movement = False
+                    self.main_menu.disabled = False
+                    self.settings_menu.disabled = False
+                    self.pause_menu.disabled = False
+        await self.console.handle_keyboard(e)
     
     def _win_on_event(self, e: ft.WindowEvent):
         match e.type:
             case ft.WindowEventType.MAXIMIZE | ft.WindowEventType.UNMAXIMIZE:
                 self.settings_menu.fullscreen_toggle.update()
+        self.settings_menu.win_on_update(e)
+    
+    def _console_on_toggle(self, enabled: bool) -> None:
+        if enabled:
+            self._debug_msg("Enabling dev console...")
+            self.page.overlay.append(self.console)
+        else:
+            self._debug_msg("Disabling dev console... 1/2")
+            if self.console in self.page.overlay:
+                self.console.visible = False
+                self.page.overlay.remove(self.console)
+                self._debug_msg("Disabling dev console... 2/2")
+        self.page.update()
     
     # * === MENU EVENTS ===
     async def start_game(self, _):
@@ -204,6 +264,7 @@ class GameManager:
         await self._await_for_dur(self.main_menu)
         self.main_menu.visible = False
         self.main_menu.stop_loop()
+        self._remove_main_menu()
         
         self.game_layer.opacity = 0
         self.game_layer.visible = True
@@ -227,28 +288,23 @@ class GameManager:
             self.settings_menu.opacity = 1
             self.settings_menu.visible = True
             self.settings_menu.subtitle.visible = True
-            self.page.update()
         
-        elif self.main_menu.visible:    
-            self.settings_menu.opacity = 0
+        elif self.main_menu.visible:
+            self.main_menu.disabled = True
             self.settings_menu.visible = True
-            self.settings_menu.subtitle.visible = False
-            try_update(self.settings_menu)
-            await asyncio.sleep(0.1)
-            self.settings_menu.opacity = 1
-            try_update(self.settings_menu)
+            
+        self.page.update()
     
     async def close_settings(self, _):
         if self.is_game_running:
             self.pause_menu.visible = True
             self.settings_menu.visible = False
-            self.page.update()
         
         elif self.main_menu.visible:
-            self.settings_menu.opacity = 0
-            try_update(self.settings_menu)
-            await self._await_for_dur(self.settings_menu)
+            self.main_menu.disabled = False
             self.settings_menu.visible = False
+            
+        self.page.update()
     
     def toggle_pause(self, _):
         """Toggle Pause Overlay"""
@@ -287,6 +343,7 @@ entity_list: {len(self.entity_list)}
 entity_stack: {len(self.entity_stack.controls)}
         """)
         
+        self._make_main_menu()
         self.main_menu.opacity = 0
         self.main_menu.visible = True
         try_update(self.main_menu)
