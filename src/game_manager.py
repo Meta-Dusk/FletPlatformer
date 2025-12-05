@@ -501,7 +501,6 @@ class GameManager:
                     self.close_settings(e)
                 else:
                     self.toggle_pause(e)
-        await self.console.handle_keyboard(e)
         
         # Player Keybinds
         if not self.is_game_running or (self.player and self.player.states.disable_movement):

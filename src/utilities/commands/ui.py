@@ -2,7 +2,7 @@ import flet as ft
 from typing import List
 import inspect, asyncio
 
-from utilities.commands.parser import CommandParser, ChoiceArg, IntArg, CoordinateArg, CommandNameArg
+from utilities.commands.parser import CommandParser, CommandNameArg
 
 
 class DevConsole(ft.Container):
@@ -16,7 +16,7 @@ class DevConsole(ft.Container):
         
         self.syntax_hint = ft.Text(
             value="", 
-            color=ft.Colors.WHITE54, 
+            color=ft.Colors.WHITE_54,
             font_family="Consolas",
             italic=True,
             size=12
@@ -24,7 +24,7 @@ class DevConsole(ft.Container):
         
         self.input_field = ft.TextField(
             hint_text="Type a command (try 'help')...",
-            bgcolor=ft.Colors.BLACK87,
+            bgcolor=ft.Colors.BLACK_87,
             border_radius=0,
             text_style=ft.TextStyle(font_family="Consolas", color=ft.Colors.GREEN),
             on_change=self._on_input_change,
@@ -72,14 +72,6 @@ class DevConsole(ft.Container):
             self.syntax_hint.value = ""
             self.suggestion_view.controls.clear()
             self.update()
-            
-    async def handle_keyboard(self, e: ft.KeyboardEvent) -> None:
-        if not self.visible: return
-
-        if e.key == "Tab":
-            if self._current_suggestions:
-                best_guess = self._current_suggestions[0]
-                await self._apply_smart_suggestion(best_guess)
                 
     def log(self, message: str, color: str = ft.Colors.WHITE) -> None:
         self.log_view.controls.append(ft.Text(message, color=color, font_family="Consolas"))
@@ -151,15 +143,20 @@ class DevConsole(ft.Container):
         # Update UI Chips
         self.suggestion_view.controls.clear()
         for s in suggestions:
-            self.suggestion_view.controls.append(
-                ft.Container(
-                    content=ft.Text(s, font_family="Consolas", size=12),
+            # This makes the suggestion focusable via Tab.
+            # Pressing 'Enter' or Click on the button triggers on_click automatically.
+            btn = ft.Button(
+                content=ft.Text(s, font_family="Consolas", size=12),
+                style=ft.ButtonStyle(
+                    shape=ft.RoundedRectangleBorder(radius=5),
+                    padding=ft.Padding.symmetric(horizontal=10, vertical=0),
+                    color=ft.Colors.WHITE,
                     bgcolor=ft.Colors.GREEN_900,
-                    padding=5,
-                    border_radius=5,
-                    on_click=lambda _, val=s: self.page.run_task(self._apply_smart_suggestion, val)
-                )
+                ),
+                height=30,
+                on_click=lambda _, val=s: self.page.run_task(self._apply_smart_suggestion, val)
             )
+            self.suggestion_view.controls.append(btn)
         self.update()
         
     async def _apply_smart_suggestion(self, suggestion_value: str) -> None:
