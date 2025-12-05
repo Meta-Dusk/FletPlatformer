@@ -7,7 +7,7 @@ from setup import FontStyles
 
 class FullscreenToggle(ft.Container):
     def __init__(self):
-        self.toggle = CustomSwitch(value=False)
+        self.switch = CustomSwitch(value=False)
         label = ft.Container(
             content=ft.Text(
                 "Borderless Fullscreen", size=30,
@@ -19,7 +19,7 @@ class FullscreenToggle(ft.Container):
         
         main_container = ft.Container(
             content=ft.Row(
-                controls=[label, spacer, self.toggle], expand=True,
+                controls=[label, spacer, self.switch], expand=True,
                 alignment=ft.MainAxisAlignment.CENTER,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER
             ),
@@ -34,17 +34,17 @@ class FullscreenToggle(ft.Container):
     
     def did_mount(self):
         self.update()
-        self.toggle.on_toggle = self._on_toggle
+        self.switch.on_toggle = self._on_toggle
         self._update_callback = self._update_data
     
     def _on_toggle(self, data: bool):
         self.page.window.maximized = data
     
     def _update_data(self):
-        print(f"Setting data: {self.toggle.data} -> {self.page.window.maximized}")
-        self.toggle.data = self.page.window.maximized
+        print(f"Setting data: {self.switch.data} -> {self.page.window.maximized}")
+        self.switch.data = self.page.window.maximized
     
     def update(self):
         if self._update_callback: self._update_callback()
-        self.toggle._toggle_state()
+        self.switch._toggle_state()
         super().update()

@@ -103,11 +103,12 @@ class GameManager:
         ])
         
         # Post Setup for UI
-        self.settings_menu.console_switch.toggle.on_toggle = self._console_on_toggle
+        self.settings_menu.console_switch.switch.on_toggle = self._console_on_toggle
         self.perf_monitor = PerformanceMonitor()
-        self.settings_menu.perf_toggles.monitor_switch.toggle.on_toggle = self._perf_monitor_toggle
-        self.settings_menu.perf_toggles.ups_switch.toggle.on_toggle = self._pm_ups_toggle
-        self.settings_menu.perf_toggles.lag_switch.toggle.on_toggle = self._pm_lag_toggle
+        perf_toggles = self.settings_menu.perf_toggles
+        perf_toggles.monitor_switch.switch.on_toggle = self._perf_monitor_toggle
+        perf_toggles.ups_switch.switch.on_toggle = lambda b: self.perf_monitor.toggle_ups(b)
+        perf_toggles.lag_switch.switch.on_toggle = lambda b: self.perf_monitor.toggle_latency(b)
         
         self.page.add(self.stage)
         await self.page.window.center()

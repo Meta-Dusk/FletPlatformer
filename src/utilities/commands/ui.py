@@ -66,12 +66,12 @@ class DevConsole(ft.Container):
     async def toggle(self) -> None:
         self.visible = not self.visible
         self.update()
-        if self.visible:
-            await self.input_field.focus()
-            self.input_field.value = ""
-            self.syntax_hint.value = ""
-            self.suggestion_view.controls.clear()
-            self.update()
+        if not self.visible: return
+        await self.input_field.focus()
+        self.input_field.value = ""
+        self.syntax_hint.value = ""
+        self.suggestion_view.controls.clear()
+        self.update()
                 
     def log(self, message: str, color: str = ft.Colors.WHITE) -> None:
         self.log_view.controls.append(ft.Text(message, color=color, font_family="Consolas"))
@@ -112,16 +112,16 @@ class DevConsole(ft.Container):
             self.log("--- Available Commands ---", ft.Colors.GREEN_ACCENT)
             self.log(cmds_str)
             self.log("Type 'help <command>' for details.", ft.Colors.GREY)
-
+            
         def print_specific_help(cmd_name: str) -> None:
             """Handler for 'help <cmd>'"""
             desc = self.parser.get_command_help(cmd_name)
             self.log(f"Help: {cmd_name}", ft.Colors.GREEN_ACCENT)
             self.log(desc)
-
+            
         # Register 'help'
         self.parser.register("help", print_all_help, help_text="Lists all available commands.")
-
+        
         # Register 'help <command>' using the new DYNAMIC argument
         self.parser.register(
             "help <command_name>", print_specific_help,

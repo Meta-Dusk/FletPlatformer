@@ -18,12 +18,12 @@ class PerfMonitorToggles(ft.Container):
         self.ups_switch = TextAndToggle(
             label_text="Show UPS",
             spacer_width=185,
-            toggle_value=True
+            switch_value=True
         )
         self.lag_switch = TextAndToggle(
             label_text="Show Latency",
             spacer_width=130,
-            toggle_value=True
+            switch_value=True
         )
         
         main_column = ft.Column(

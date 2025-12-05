@@ -91,9 +91,9 @@ class TextAndToggle(ft.Container):
         label_text: str = "",
         label_offset: ft.Offset = ft.Offset(0.0, 0.0),
         spacer_width: int = 60,
-        toggle_value: bool = False
+        switch_value: bool = False
     ):
-        self.toggle = CustomSwitch(value=toggle_value)
+        self.switch = CustomSwitch(value=switch_value)
         label = ft.Container(
             content=ft.Text(
                 value=label_text, size=30,
@@ -105,7 +105,7 @@ class TextAndToggle(ft.Container):
         
         main_container = ft.Container(
             content=ft.Row(
-                controls=[label, spacer, self.toggle], expand=True,
+                controls=[label, spacer, self.switch], expand=True,
                 alignment=ft.MainAxisAlignment.CENTER,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER
             ),
