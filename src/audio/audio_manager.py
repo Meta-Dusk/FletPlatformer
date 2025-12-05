@@ -18,11 +18,7 @@ class AudioManager:
         self.directional_sfx = directional_sfx
         self.debug = debug
         
-        # Optimization: Cache loaded sounds so we don't read from disk every time
-        # Key: Path (The exact argument passed), Value: pygame.mixer.Sound
         self._sfx_cache: dict[Path, pygame.mixer.Sound] = {}
-        
-        # Optimization: Cooldowns to prevent audio spam (Phasing/Distortion)
         self._sfx_cooldowns: dict[Path, float] = {}
     
     @property
@@ -34,9 +30,6 @@ class AudioManager:
     def sfx_volume(self, volume: float):
         """Automatically clamps volume for sfx between 0.0 and 1.0."""
         self._sfx_volume = round(clamp(volume), 1)
-        # if len(self._sfx_cache) <= 0: return
-        # for _, sfx in self._sfx_cache.items():
-        #     sfx.set_volume(self._sfx_volume)
     
     @property
     def music_volume(self) -> float:
@@ -58,7 +51,7 @@ class AudioManager:
         os.environ['SDL_AUDIODRIVER'] = 'directsound'
         
         try:
-            pygame.mixer.pre_init(channels=2)
+            pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
             pygame.mixer.init()
             pygame.mixer.set_num_channels(32)
             
@@ -66,7 +59,7 @@ class AudioManager:
             self._debug_msg(f"MIXER STATUS: Frequency={freq}, Size={size}, Channels={channels}")
             
             pygame.mixer.music.set_volume(self.music_volume)
-            self._debug_msg("Successfully initialized pygame.mixer")
+            self._debug_msg("Successfully initialized pygame.mixer (DirectSound)")
         except Exception as e:
             self._debug_msg(f"Error initializing pygame.mixer: {e}")
     

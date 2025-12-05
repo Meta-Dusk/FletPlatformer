@@ -1,7 +1,7 @@
 import asyncio
+from typing import Any
 
-
-def silence_event_loop_closed(loop: asyncio.AbstractEventLoop, context: dict[str, any]) -> None:
+def silence_event_loop_closed(loop: asyncio.AbstractEventLoop, context: dict[str, Any]) -> None:
     """Custom exception handler to silence the specific 'WinError 64' on Windows shutdown."""
     exception = context.get("exception")
     

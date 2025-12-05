@@ -10,7 +10,7 @@ from utilities.tasks import attempt_cancel
 from entities.player import Player
 from utilities.components import try_update
 from utilities.commands.ui import DevConsole
-from utilities.commands.parser import FloatArg, ArgType, CoordinateArg, IntArg, ChoiceArg
+from utilities.commands.parser import FloatArg, ArgType, CoordinateArg, IntArg, ChoiceArg, BoolArg
 from utilities.performance_monitor import PerformanceMonitor
 from entities.enemy import EnemyType, Enemy
 from entities.entity import Entity
@@ -27,6 +27,8 @@ class GameManager:
         self.page: ft.Page = page
         self.player: Player = None
         self.audio_manager: AudioManager = None
+        
+        # UI Layers
         self.background_stack = ft.Stack(expand=True)
         self.foreground_stack = ft.Stack(expand=True)
         self.entity_stack = ft.Stack(expand=True)
@@ -302,11 +304,8 @@ class GameManager:
             msg_count = "entities" if len(new_entities) > 1 else "entity"
             self.console.log(f"Summoned {len(new_entities)} {msg_count} ({e_enum.name}).", ft.Colors.CYAN)
         
-        def toggle_hb_show_handler(enabled: Literal["True", "False"]) -> None:
-            if enabled == "True":
-                _enabled = True
-            else:
-                _enabled = False
+        def toggle_hb_show_handler(enabled: Literal["true", "false"]) -> None:
+            _enabled = True if enabled == "true" else False
             self.console.log(f"Setting 'show_borders' to: {_enabled}", ft.Colors.BLUE)
             self.show_borders = _enabled
             for entity in self.entity_list:
@@ -372,15 +371,37 @@ class GameManager:
             # Print to Console
             self.console.log(f"[{var}] {filter} -> {output_msg}", ft.Colors.CYAN)
         
+        def heal_handler(
+            target: str, amount: float, overheal: Literal["true", "false"],
+            x: int = None, y: int = None, count: int = None
+        ) -> None:
+            _overheal = True if overheal == "true" else False
+            final_count = resolve_count(target, count)
+            loc = x if x else None
+            
+            entities = self._get_targets(target, final_count, loc)
+            
+            if not entities:
+                self.console.log("No targets found.", ft.Colors.GREEN)
+                return
+            
+            heal_count = 0
+            for e in entities:
+                if not e.states.dead:
+                    self.page.run_task(e.heal, amount, _overheal)
+                    heal_count += 1
+            
+            if heal_count > 0:
+                msg_count = "entities" if heal_count > 1 else "entity"
+                self.console.log(f"Healed {heal_count} {msg_count} for {amount}.", ft.Colors.GREEN)
+        
         # * --- REGISTRATION ---
         # ? KILL
-        # "kill <entity>"
         self.console.register_command(
             "kill <entity>", kill_handler, 
             {"entity": entity_arg},
             help_text="Kills specific entity or type."
         )
-        # "kill <entity> <x> <y> <count>"
         self.console.register_command(
             "kill <entity> <x> <y> <count>", kill_handler,
             {"entity": entity_arg, "x": coords_arg, "y": coords_arg, "count": IntArg()},
@@ -388,13 +409,11 @@ class GameManager:
         )
         
         # ? DAMAGE
-        # "damage <entity> <amount>"
         self.console.register_command(
             "damage <entity> <amount>", damage_handler,
             {"entity": entity_arg, "amount": FloatArg()},
             help_text="Damages target entity."
         )
-        # "damage <entity> <amount> <x> <y> <count>"
         self.console.register_command(
             "damage <entity> <amount> <x> <y> <count>", damage_handler,
             {"entity": entity_arg, "amount": FloatArg(), "x": coords_arg, "y": coords_arg, "count": IntArg()},
@@ -402,13 +421,11 @@ class GameManager:
         )
         
         # ? REVIVE
-        # "revive <entity>"
         self.console.register_command(
             "revive <entity>", revive_handler,
             {"entity": entity_arg},
             help_text="Revives target."
         )
-        # "revive <entity> <x> <y> <count>"
         self.console.register_command(
             "revive <entity> <x> <y> <count>", revive_handler,
             {"entity": entity_arg, "x": coords_arg, "y": coords_arg, "count": IntArg()},
@@ -416,14 +433,12 @@ class GameManager:
         )
         
         # ? SUMMON
-        # "summon <type>"
         self.console.register_command(
             "summon <enemy_type>", summon_handler,
             {"enemy_type": EnemyTypeArg()},
             help_text="Summons 1 enemy with random positioning."
         )
         
-        # "summon <type> <x> <y> <count>"
         self.console.register_command(
             "summon <enemy_type> <x> <y> <count>", summon_handler,
             {"enemy_type": EnemyTypeArg(), "x": coords_arg, "y": coords_arg, "count": IntArg()},
@@ -441,11 +456,31 @@ class GameManager:
             help_text="Get debug data. Filter 'all' for total count."
         )
         
+        # ? HEAL
+        self.console.register_command(
+            "heal <entity> <amount> <overheal>", heal_handler,
+            {
+                "entity": entity_arg, "amount": FloatArg(),
+                "overheal": BoolArg()
+            },
+            help_text="Heals target entity."
+        )
+        self.console.register_command(
+            "damage <entity> <amount> <overheal> <x> <y> <count>", heal_handler,
+            {
+                "entity": entity_arg,
+                "amount": FloatArg(),
+                "overheal": BoolArg(),
+                "x": coords_arg, "y": coords_arg,
+                "count": IntArg()
+            },
+            help_text="Heals <count> of the closest entities."
+        )
+        
         # ? Single Argument Commands
-        # "show_borders <enabled>"
         self.console.register_command(
             "show_borders <enabled>", toggle_hb_show_handler,
-            {"enabled": ChoiceArg(["True", "False"])},
+            {"enabled": BoolArg()},
             help_text="If enabled, shows all the hitboxes that each entity use."
         )
         
@@ -502,6 +537,7 @@ class GameManager:
                     self.close_settings(e)
                 else:
                     self.toggle_pause(e)
+        await self.console.handle_keyboard(e)
         
         # Player Keybinds
         if not self.is_game_running or (self.player and self.player.states.disable_movement):
@@ -529,12 +565,6 @@ class GameManager:
                 self._debug_msg("Disabling dev console... 2/2")
         self.page.update()
         self._update_ui_focus()
-    
-    def _pm_ups_toggle(self, enabled: bool) -> None:
-        self.perf_monitor.toggle_ups(enabled)
-    
-    def _pm_lag_toggle(self, enabled: bool) -> None:
-        self.perf_monitor.toggle_latency(enabled)
     
     def _perf_monitor_toggle(self, enabled: bool) -> None:
         if enabled:

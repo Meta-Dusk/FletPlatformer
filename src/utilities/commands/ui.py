@@ -1,5 +1,5 @@
 import flet as ft
-from typing import List
+from typing import Callable, Any
 import inspect, asyncio
 
 from utilities.commands.parser import CommandParser, CommandNameArg
@@ -8,25 +8,22 @@ from utilities.commands.parser import CommandParser, CommandNameArg
 class DevConsole(ft.Container):
     def __init__(self, visible: bool = False) -> None:
         self.parser = CommandParser()
-        self._current_suggestions: List[str] = []
+        self._current_suggestions: list[str] = []
         
         # --- UI Components ---
         self.log_view = ft.ListView(scroll=ft.ScrollMode.ALWAYS, expand=True, auto_scroll=True)
         self.suggestion_view = ft.Row(wrap=True, spacing=5)
         
         self.syntax_hint = ft.Text(
-            value="", 
-            color=ft.Colors.WHITE_54,
-            font_family="Consolas",
-            italic=True,
-            size=12
+            value="", color=ft.Colors.WHITE_54,
+            italic=True, size=12
         )
         
         self.input_field = ft.TextField(
             hint_text="Type a command (try 'help')...",
             bgcolor=ft.Colors.BLACK_87,
             border_radius=0,
-            text_style=ft.TextStyle(font_family="Consolas", color=ft.Colors.GREEN),
+            text_style=ft.TextStyle(color=ft.Colors.GREEN),
             on_change=self._on_input_change,
             on_submit=self._on_submit,
             autofocus=True,
@@ -72,13 +69,23 @@ class DevConsole(ft.Container):
         self.syntax_hint.value = ""
         self.suggestion_view.controls.clear()
         self.update()
-                
+    
+    async def handle_keyboard(self, e: ft.KeyboardEvent) -> None:
+        if not self.visible: return
+        
+        if ( # ? Only get suggestion with 1 'Tab' press if only 1 suggestion available
+            e.key == "Tab" and self._current_suggestions
+            and len(self.suggestion_view.controls) == 1
+        ):
+            best_guess = self._current_suggestions[0]
+            await self._apply_smart_suggestion(best_guess)
+    
     def log(self, message: str, color: str = ft.Colors.WHITE) -> None:
-        self.log_view.controls.append(ft.Text(message, color=color, font_family="Consolas"))
+        self.log_view.controls.append(ft.Text(message, color=color))
         self.update()
     
     def register_command(
-        self, command_structure: str, handler: callable,
+        self, command_structure: str, handler: Callable[..., Any],
         arg_types: dict = None, help_text: str | list[str] = ""
     ) -> None:
         """
@@ -146,12 +153,24 @@ class DevConsole(ft.Container):
             # This makes the suggestion focusable via Tab.
             # Pressing 'Enter' or Click on the button triggers on_click automatically.
             btn = ft.Button(
-                content=ft.Text(s, font_family="Consolas", size=12),
+                content=ft.Text(s, size=12),
                 style=ft.ButtonStyle(
-                    shape=ft.RoundedRectangleBorder(radius=5),
-                    padding=ft.Padding.symmetric(horizontal=10, vertical=0),
-                    color=ft.Colors.WHITE,
-                    bgcolor=ft.Colors.GREEN_900,
+                    shape={
+                        ft.ControlState.DEFAULT: ft.RoundedRectangleBorder(radius=0)
+                    },
+                    padding={
+                        ft.ControlState.DEFAULT: ft.Padding.symmetric(horizontal=10, vertical=0)
+                    },
+                    color={
+                        ft.ControlState.DEFAULT: ft.Colors.WHITE
+                    },
+                    bgcolor={
+                        ft.ControlState.DEFAULT: ft.Colors.GREEN_900,
+                        ft.ControlState.FOCUSED: ft.Colors.GREEN,
+                    },
+                    mouse_cursor={
+                        ft.ControlState.DEFAULT: ft.MouseCursor.CLICK,
+                    }
                 ),
                 height=30,
                 on_click=lambda _, val=s: self.page.run_task(self._apply_smart_suggestion, val)

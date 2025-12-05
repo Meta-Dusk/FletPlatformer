@@ -7,7 +7,7 @@ from images import Sprite
 from audio.audio_manager import AudioManager
 from utilities.values import pathify
 from utilities.components import try_update
-from components.popup_text import DamageText
+from components.popup_text import HealthText
 from entities.features.hitboxes import DamageHitbox
 from entities.features.entity_data import Factions, EntityStats, EntityStates
 
@@ -326,7 +326,7 @@ class Entity(DamageHitbox):
         return True
         # ? Implement the rest of the logic here
     
-    async def take_damage(self, damage_amount: float) -> bool:
+    def take_damage(self, damage_amount: float) -> bool:
         """
         Base implementation for taking damage.
         Handles: Checks, Health Subtraction, and Safety Reset.
@@ -347,7 +347,10 @@ class Entity(DamageHitbox):
         self.stats.health -= damage_amount
         self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(-{damage_amount})")
         self.stack.controls.append(
-            DamageText(left=(self.stack.width / 2) + 35, top=18, value=damage_amount)
+            HealthText(
+                left=(self.stack.width / 2) + 35, top=18,
+                value=f"-{damage_amount}", color=ft.Colors.RED
+            )
         )
         try_update(self.stack)
         return True
@@ -376,3 +379,30 @@ class Entity(DamageHitbox):
             return False
         return True
         # ? Implement the rest of the logic here
+        
+    def heal(self, heal_amount: float, overheal: bool = False) -> bool:
+        """
+        Base implementation for healing.
+        Handles: Checks, Health Addition, and Safety Reset.
+        Returns `True` if heal was successfully applied.
+        """
+        if self.states.dead:
+            self._debug_msg(f"{self.name} is already dead")
+            return False
+        
+        if self.stats.health >= self.stats.max_health and not overheal:
+            self._debug_msg(f"{self.name} health is already at or above max")
+            return False
+        
+        if not overheal and (self.stats.health + heal_amount) > self.stats.max_health:
+            self.stats.health = self.stats.max_health
+        self.stats.health += heal_amount
+        self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(+{heal_amount})")
+        self.stack.controls.append(
+            HealthText(
+                left=(self.stack.width / 2) + 35, top=18,
+                value=f"+{heal_amount}", color=ft.Colors.GREEN
+            )
+        )
+        try_update(self.stack)
+        return True

@@ -17,7 +17,8 @@ async def main(page: ft.Page):
             await console.toggle()
         elif e.key == "Escape" and console.visible:
             await console.toggle()
-    
+        await console.handle_keyboard(e)
+        
     page.on_keyboard_event = on_kb
     page.add(ft.Text("Press '/' to open developer console", color=ft.Colors.BLACK))
     await page.window.center()

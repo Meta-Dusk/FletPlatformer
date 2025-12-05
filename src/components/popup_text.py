@@ -4,21 +4,21 @@ import asyncio
 from utilities.components import try_update
 
 
-class DamageText(ft.Text):
+class HealthText(ft.Text):
     """A simple text display for the damage numbers."""
     def __init__(
         self, left: int = None, top: int = None,
-        value: ft.Number = 0
+        value: str = "", color: ft.ColorValue = None
     ):
         """
         This control is expected to be in a stack, but it also supports
         non-stack layout controls.
         """
         super().__init__(
-            value=f"-{value}", size=18, left=left, top=top,
+            value=value, size=18, left=left, top=top,
             animate_opacity=ft.Animation(200, ft.AnimationCurve.LINEAR),
             animate_position=ft.Animation(500, ft.AnimationCurve.EASE_IN_OUT),
-            text_align=ft.TextAlign.CENTER, opacity=0, color=ft.Colors.RED
+            text_align=ft.TextAlign.CENTER, opacity=0, color=color
         )
         self.cleanup_ready: bool = False
     

@@ -1,15 +1,15 @@
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Self
+from typing import Callable, Optional, Self, Any
 from abc import ABC, abstractmethod
 
 # * --- Types of Arguments ---
 class ArgType(ABC):
     """Base class for argument types (String, Int, Float, Choice, etc.)"""
     @abstractmethod
-    def parse(self, value: str) -> any:
+    def parse(self, value: str) -> Any:
         ...
     
-    def get_suggestions(self, current_input: str) -> List[str]:
+    def get_suggestions(self, current_input: str) -> list[str]:
         return []
 
 class StringArg(ArgType):
@@ -23,7 +23,7 @@ class IntArg(ArgType):
         except ValueError:
             raise ValueError(f"'{value}' is not a valid integer")
     
-    def get_suggestions(self, current_input: str) -> List[str]:
+    def get_suggestions(self, current_input: str) -> list[str]:
         if current_input == "":
             return ["1", "2", "3"]
         return []
@@ -35,14 +35,14 @@ class FloatArg(ArgType):
         except ValueError:
             raise ValueError(f"'{value}' is not a valid float")
     
-    def get_suggestions(self, current_input: str) -> List[str]:
+    def get_suggestions(self, current_input: str) -> list[str]:
         if current_input == "":
             return ["1.0", "1.5", "2.0"]
         return []
 
 class ChoiceArg(ArgType):
     """Restricts input to a specific list of options (e.g., 'goblin', 'orc')"""
-    def __init__(self, choices: List[str]) -> None:
+    def __init__(self, choices: list[str]) -> None:
         self.choices = choices
 
     def parse(self, value: str) -> str:
@@ -50,8 +50,13 @@ class ChoiceArg(ArgType):
             raise ValueError(f"'{value}' is not one of {self.choices}")
         return value
 
-    def get_suggestions(self, current_input: str) -> List[str]:
+    def get_suggestions(self, current_input: str) -> list[str]:
         return [c for c in self.choices if c.startswith(current_input)]
+
+class BoolArg(ChoiceArg):
+    """Restricts input to either 'true' or 'false'"""
+    def __init__(self):
+        super().__init__(["true", "false"])
 
 class CoordinateArg(ArgType):
     """
@@ -83,7 +88,7 @@ class CoordinateArg(ArgType):
         except ValueError:
             raise ValueError(f"'{value}' is not a valid coordinate")
 
-    def get_suggestions(self, current_input: str) -> List[str]:
+    def get_suggestions(self, current_input: str) -> list[str]:
         # Suggest tilde if they haven't started typing a number
         if current_input == "":
             return ["~", "~1", "~-1"]
@@ -97,7 +102,7 @@ class CommandNode:
     name: str
     arg_type: Optional[ArgType] = None
     children: dict[str, Self] = field(default_factory=dict)
-    handler: Optional[Callable[..., any]] = None
+    handler: Optional[Callable[..., Any]] = None
     help_text: str = ""
 
     def add_child(self, name: str, arg_type: Optional[ArgType] = None) -> Self:
@@ -111,12 +116,11 @@ class CommandParser:
         self.root = CommandNode("root")
         
     def register(
-        self, 
-        command_structure: str, 
-        handler: Callable[..., any], 
+        self,
+        command_structure: str,
+        handler: Callable[..., Any],
         arg_types: Optional[dict[str, ArgType]] = None,
-        # CHANGE: Type hint now allows str OR List[str]
-        help_text: str | List[str] = "No description provided." 
+        help_text: str | list[str] = "No description provided."
     ) -> None:
         """
         Register a command. 'help_text' can be a single string or a list of lines.
@@ -155,7 +159,7 @@ class CommandParser:
         else:
             current.help_text = help_text
         
-    def get_suggestions(self, full_text: str) -> List[str]:
+    def get_suggestions(self, full_text: str) -> list[str]:
         """
         Returns a list of valid next words based on incomplete input.
         Uses Backtracking to find ALL valid suggestions from ALL matching paths.
@@ -221,9 +225,9 @@ class CommandParser:
         # If trailing space, all parts are complete.
         traverse_parts = parts if is_trailing_space else parts[:-1]
         
-        valid_paths: List[str] = []
+        valid_paths: list[str] = []
 
-        def build_hint(node: CommandNode, index: int, path_str: List[str]):
+        def build_hint(node: CommandNode, index: int, path_str: list[str]):
             # BASE CASE: We consumed all user tokens. Now look at the FUTURE.
             if index >= len(traverse_parts):
                 
@@ -288,7 +292,7 @@ class CommandParser:
         # This solves the ambiguity: "summon goblin 5" -> prefers "<x> <y> <count>" over "<count>"
         return max(valid_paths, key=len)
 
-    def _get_best_future_path(self, node: CommandNode) -> List[str]:
+    def _get_best_future_path(self, node: CommandNode) -> list[str]:
         """Helper to find one valid 'future' path from a node to a leaf."""
         future = []
         current = node
@@ -302,15 +306,15 @@ class CommandParser:
             current = first_child
         return future
     
-    def execute(self, full_text: str) -> any:
+    def execute(self, full_text: str) -> Any:
         """
         Parses and runs the command handler using Backtracking.
         Returns a tuple to correctly handle functions that return None.
         """
         parts = full_text.split()
         
-        # Returns: (success: bool, return_value: any)
-        def attempt_parse(node: CommandNode, token_index: int, args_collected: List[any]) -> tuple[bool, any]:
+        # Returns: (success: bool, return_value: Any)
+        def attempt_parse(node: CommandNode, token_index: int, args_collected: list[Any]) -> tuple[bool, Any]:
             # BASE CASE: End of input
             if token_index >= len(parts):
                 if node.handler:
@@ -350,7 +354,7 @@ class CommandParser:
         else:
             raise ValueError(f"Unknown command or invalid arguments: '{full_text}'")
 
-    def get_root_commands(self) -> List[str]:
+    def get_root_commands(self) -> list[str]:
         """Returns a list of all top-level command names."""
         return [child.name for child in self.root.children.values()]
     
@@ -363,7 +367,7 @@ class CommandParser:
             return "Command not found."
 
         root_node = self.root.children[command_name]
-        help_lines: List[str] = []
+        help_lines: list[str] = []
 
         def traverse(node: CommandNode, current_path: str) -> None:
             # 1. If this node is executable (has a handler), record its help
@@ -423,7 +427,7 @@ class CommandNameArg(ArgType):
             raise ValueError(f"Unknown command: {value}")
         return value
 
-    def get_suggestions(self, current_input: str) -> List[str]:
+    def get_suggestions(self, current_input: str) -> list[str]:
         # Generate suggestions from the LIVE list
         valid_cmds = self.parser.get_root_commands()
         return [c for c in valid_cmds if c.startswith(current_input)]

@@ -27,11 +27,11 @@ class EntityStates:
 @dataclass
 class EntityStats:
     """Includes health, movement speed, etc."""
-    health: float = 20
-    max_health: float = 20
+    health: float = 20.0
+    max_health: float = 20.0
     movement_speed: int = 10
-    attack_damage: float = 5
-    attack_speed: float = 2
+    attack_damage: float = 5.0
+    attack_speed: float = 2.0
     jump_distance: int = 100
     jump_strength: float = 1.5
     jump_air_time: float = 0.1

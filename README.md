@@ -45,3 +45,9 @@ The player can be controlled with the following mapped keys:
 | --- | ------ |
 | **Escape** | Pauses the game, or closes a menu. |
 | **F11** | Toggles the borderless fullscreen mode. |
+
+## Known Issues
+
+| No. | Issue | Description |
+| --- | ----- | ----------- |
+| 1 | Audio blocks game updates when playing multiple sounds in a very short time span. | This issue always occurs, such as if you hover over the UI buttons rapidly, it will seem like the audio gets queued, and blocks UI interaction. |

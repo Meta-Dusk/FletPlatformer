@@ -118,10 +118,10 @@ class Player(Entity):
                         self._knockback_self(entity)
                         return
     
-    async def _handle_hit_logic(self, target_enemy: Entity):
+    def _handle_hit_logic(self, target_enemy: Entity):
         """Applies damage to a specific enemy and updates game stats if they die."""
         # Apply Damage
-        did_die = await target_enemy.take_damage(self.stats.attack_damage)
+        did_die = target_enemy.take_damage(self.stats.attack_damage)
         
         # Check Result
         if not did_die: return
@@ -152,7 +152,7 @@ class Player(Entity):
                 r2_left=e_left, r2_bottom=e_bottom, r2_w=e_w, r2_h=e_h # Enemy Body
             ):
                 self._debug_msg(f"Hit enemy: {enemy.name}")
-                self.page.run_task(self._handle_hit_logic, enemy)
+                self._handle_hit_logic(enemy)
     
     # * === CUSTOM MOVEMENT LOOP ===
     async def _movement_loop(self):
@@ -353,7 +353,7 @@ class Player(Entity):
         
     async def take_damage(self, damage_amount: float):
         """Decrease player's health with logic."""
-        if not await super().take_damage(damage_amount): return
+        if not super().take_damage(damage_amount): return
         
         if self.states.is_attacking:
             attempt_cancel(self._attack_task)
@@ -368,6 +368,13 @@ class Player(Entity):
         else:
             if self._take_hit_task: attempt_cancel(self._take_hit_task)
             self._take_hit_task = self.page.run_task(self._take_hit_anim)
+    
+    async def heal(self, heal_amount: float, overheal: bool = False):
+        if not super().heal(heal_amount, overheal): return
+        self._update_health_bar()
+        self._apply_tint(ft.Colors.GREEN)
+        await asyncio.sleep(0.1)
+        self._reset_tint()
     
     async def revive(self):
         if not super().revive(): return
