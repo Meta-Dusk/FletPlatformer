@@ -2,7 +2,7 @@ import flet as ft
 import asyncio, random
 from typing import Literal
 
-from audio.audio_manager import AudioManager, global_audio_manager
+from audio.audio_manager import global_audio_manager
 from audio.music_data import MusicLibrary
 from components.menus import MainMenu, PauseMenu, SettingsMenu
 from utilities.keyboard_manager import held_keys, start as km_start
@@ -19,6 +19,7 @@ from bg_loops import light_mv_loop, stage_panning_loop
 from backgrounds import add_infinite_layer
 
 music = MusicLibrary()
+audio_manager = global_audio_manager
 
 class GameManager:
     """Central hub for the game UI and states."""
@@ -26,7 +27,6 @@ class GameManager:
         # State Variables (References)
         self.page: ft.Page = page
         self.player: Player = None
-        self.audio_manager: AudioManager = None
         
         # UI Layers
         self.background_stack = ft.Stack(expand=True)
@@ -85,9 +85,7 @@ class GameManager:
     async def initialize(self):
         """The entry point called by Flet."""
         # --- Setup ---
-        self.audio_manager = global_audio_manager
-        self.audio_manager.initialize()
-        self.audio_manager.play_music(music.loops.sketchbook.abstraction_2023_11_29)
+        audio_manager.play_music(music.loops.sketchbook.abstraction_2023_11_29)
         km_start()
         self.register_commands()
         
@@ -97,7 +95,7 @@ class GameManager:
         
         # Setup UI: Stack all layers
         self._make_main_menu()
-        self.settings_menu = SettingsMenu(self.audio_manager, on_close=self.close_settings)
+        self.settings_menu = SettingsMenu(audio_manager, on_close=self.close_settings)
         self.stage.controls.extend([
             self.game_layer,
             self.pause_menu,
@@ -173,9 +171,7 @@ class GameManager:
             candidates.sort(key=lambda e: abs(((e.stack.left + e.stack.width) / 2 or 0) - target_x))
 
         # 3. Apply Count Limit
-        if count > 0:
-            return candidates[:count]
-        
+        if count > 0: return candidates[:count]
         return candidates
     
     # * === COMMANDS REGISTRY ===
@@ -659,7 +655,7 @@ class GameManager:
         try_update(self.game_layer)
         await self._await_for_dur(self.game_layer)
         
-        self.audio_manager.play_music(music.loops.sketchbook.abstraction_2024_03_20_02)
+        audio_manager.play_music(music.loops.sketchbook.abstraction_2024_03_20_02)
         self.is_game_running = True
         self.start_tasks()
         self._update_ui_focus()
@@ -731,7 +727,7 @@ entity_stack: {len(self.entity_stack.controls)}
         self.main_menu.visible = True
         try_update(self.main_menu)
         await asyncio.sleep(0.1)
-        self.audio_manager.play_music(music.loops.sketchbook.abstraction_2023_11_29)
+        audio_manager.play_music(music.loops.sketchbook.abstraction_2023_11_29)
         self.main_menu.opacity = 1
         try_update(self.main_menu)
         await self._await_for_dur(self.main_menu)

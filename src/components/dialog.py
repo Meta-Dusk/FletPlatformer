@@ -1,0 +1,27 @@
+import flet as ft
+
+
+class DialogBox(ft.Container):
+    def __init__(
+        self
+    ) -> None:
+        self.dialog_text: str = "Insert message"
+        self.speaker_name: str = "Insert name"
+        
+        super().__init__(
+            
+        )
+    
+    def add_dialogue(self, msg: str) -> None:
+        pass
+    
+class FloatingText(ft.Container):
+    def __init__(
+        self
+    ):
+        controls: list[ft.Control] = []
+        
+        
+        super().__init__(
+            
+        )

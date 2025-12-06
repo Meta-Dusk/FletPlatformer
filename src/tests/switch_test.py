@@ -9,8 +9,6 @@ audio_manager = global_audio_manager
 async def test(page: ft.Page):
     await test_init(page)
     
-    audio_manager.initialize()
-    
     page.add(CustomSwitch())
 
 ft.run(test, assets_dir="../assets")

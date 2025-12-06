@@ -131,3 +131,4 @@ class AudioManager:
             self._debug_msg(f"Failed to play SFX: {e}")
 
 global_audio_manager = AudioManager(debug=False)
+global_audio_manager.initialize()

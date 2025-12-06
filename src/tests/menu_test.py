@@ -9,10 +9,7 @@ async def test(page: ft.Page):
     await test_init(page)
     page.bgcolor = ft.Colors.WHITE
     
-    audio_manager = global_audio_manager
-    audio_manager.initialize()
-    
-    settings_menu = SettingsMenu(audio_manager)
+    settings_menu = SettingsMenu(global_audio_manager)
     settings_menu.visible = True
     
     page.add(settings_menu)

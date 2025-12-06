@@ -12,7 +12,6 @@ async def test(page: ft.Page):
     await test_init(page)
     
     audio_manager = global_audio_manager
-    audio_manager.initialize()
     
     entity_spr = Sprite("images/enemies/goblin/idle_0.png", width=150, height=150)
     entity_spr.color = ft.Colors.with_opacity(0.2, ft.Colors.RED)

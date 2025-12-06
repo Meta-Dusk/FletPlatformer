@@ -8,9 +8,6 @@ from tests.test_templates import test_init
 async def test(page: ft.Page):
     await test_init(page)
     
-    audio_manager = global_audio_manager
-    audio_manager.initialize()
-    
     buttons_column = ft.Column()
     for i in range(5):
         buttons_column.controls.append(

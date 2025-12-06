@@ -14,7 +14,6 @@ async def test(page: ft.Page):
     await test_init(page)
     
     audio_manager = global_audio_manager
-    audio_manager.initialize()
     
     async def on_death(_): await enemy.death()
     def on_change_mv(e: ft.ControlEvent):
