@@ -503,7 +503,8 @@ class GameManager:
         
         # Buttons / HUD
         self.controls_tutorial = ControlsTutorial()
-        self.ui_stack.controls.append(self.controls_tutorial)
+        if not self.finished_tutorial:
+            self.ui_stack.controls.append(self.controls_tutorial)
         
         # Composition
         self.game_stage.controls.extend([
@@ -550,9 +551,9 @@ class GameManager:
         else:
             if len(self.tutorial_state) >= 10:
                 self.finished_tutorial = True
-                print("Finished tutorial!")
-                self.controls_tutorial.visible = False
-                self.controls_tutorial.update()
+                self._debug_msg("Finished tutorial!")
+                self.ui_stack.controls.remove(self.controls_tutorial)
+                self.ui_stack.update()
                 return
         tutorial = self.controls_tutorial
         
