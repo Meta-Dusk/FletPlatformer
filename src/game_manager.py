@@ -1,10 +1,12 @@
 import flet as ft
 import asyncio, random
 from typing import Literal
+from pynput import keyboard
 
 from audio.audio_manager import global_audio_manager
 from audio.music_data import MusicLibrary
 from components.menus import MainMenu, PauseMenu, SettingsMenu
+from components.tutorials import ControlsTutorial
 from utilities.keyboard_manager import held_keys, start as km_start
 from utilities.tasks import attempt_cancel
 from entities.player import Player
@@ -47,6 +49,8 @@ class GameManager:
         self.death_count: int = 0
         self.is_game_running: bool = False
         self.show_borders: bool = False
+        self.finished_tutorial: bool = False
+        self.tutorial_state: set[str] = set()
         
         # Scenes
         self.main_menu = None
@@ -498,9 +502,8 @@ class GameManager:
         inf_layer(self.foreground_stack, 10)
         
         # Buttons / HUD
-        buttons_row = ft.Row(alignment=ft.MainAxisAlignment.CENTER, top=0, left=0)
-        
-        self.ui_stack.controls.append(buttons_row)
+        self.controls_tutorial = ControlsTutorial()
+        self.ui_stack.controls.append(self.controls_tutorial)
         
         # Composition
         self.game_stage.controls.extend([
@@ -542,6 +545,50 @@ class GameManager:
         match e.key:
             case " ": self.player.jump()
             case "V": self.player.attack()
+        
+        if self.finished_tutorial: return
+        else:
+            if len(self.tutorial_state) >= 10:
+                self.finished_tutorial = True
+                print("Finished tutorial!")
+                self.controls_tutorial.visible = False
+                self.controls_tutorial.update()
+                return
+        tutorial = self.controls_tutorial
+        
+        if 'a' in held_keys:
+            tutorial.set_finish(tutorial.mv_key_a)
+            self.tutorial_state.add("mv_key_a")
+        if 'd' in held_keys:
+            tutorial.set_finish(tutorial.mv_key_d)
+            self.tutorial_state.add("mv_key_d")
+        if ('a' or 'd') and keyboard.Key.shift in held_keys:
+            if 'a' in held_keys:
+                tutorial.set_finish(tutorial.sprint_key_a)
+                self.tutorial_state.add("sprint_key_a")
+            if 'd' in held_keys:
+                tutorial.set_finish(tutorial.sprint_key_d)
+                self.tutorial_state.add("sprint_key_d")
+            tutorial.set_finish(tutorial.sprint_shift)
+            self.tutorial_state.add("sprint_shift")
+        if ('a' or 'd') and 'c' in held_keys:
+            if 'a' in held_keys:
+                tutorial.set_finish(tutorial.dash_key_a)
+                self.tutorial_state.add("dash_key_a")
+            if 'd' in held_keys:
+                tutorial.set_finish(tutorial.dash_key_d)
+                self.tutorial_state.add("dash_key_d")
+            tutorial.set_finish(tutorial.dash_key_c)
+            self.tutorial_state.add("dash_key_c")
+            
+        match e.key:
+            case ' ':
+                tutorial.set_finish(tutorial.jump_key)
+                self.tutorial_state.add("jump_key")
+            case 'V':
+                tutorial.set_finish(tutorial.attack_key)
+                self.tutorial_state.add("attack_key")
+            
     
     def _win_on_event(self, e: ft.WindowEvent):
         match e.type:
@@ -862,7 +909,7 @@ class GameManagerMixin:
         """
         return {
             "page": self.game_manager.page,
-            "audio_manager": self.game_manager.audio_manager,
+            "audio_manager": audio_manager,
             "entity_list": self.game_manager.entity_list,
             "debug": debug
         }

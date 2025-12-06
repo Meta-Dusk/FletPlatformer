@@ -51,10 +51,15 @@ class IconSprite(ft.Container):
             error_content=ft.Container(
                 content=ft.Text("Error", ft.Colors.ON_ERROR_CONTAINER),
                 bgcolor=ft.Colors.ERROR_CONTAINER, width=_width, height=_height
-            )
+            ),
+            color_blend_mode=ft.BlendMode.MODULATE
         )
         
         super().__init__(content=self.spr, padding=padding, alignment=ft.Alignment.CENTER)
+    
+    def set_tint(self, color: ft.ColorValue, opacity: float = 1.0) -> None:
+        self.spr.color = ft.Colors.with_opacity(opacity, color)
+        self.spr.update()
 
 class Sprite(ft.Image):
     """All sprites will have twice their scale for better visuals."""

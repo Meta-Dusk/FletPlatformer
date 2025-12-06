@@ -15,13 +15,3 @@ class DialogBox(ft.Container):
     def add_dialogue(self, msg: str) -> None:
         pass
     
-class FloatingText(ft.Container):
-    def __init__(
-        self
-    ):
-        controls: list[ft.Control] = []
-        
-        
-        super().__init__(
-            
-        )
