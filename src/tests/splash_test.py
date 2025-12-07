@@ -3,7 +3,7 @@ import asyncio
 
 from tests.test_templates import test_init
 from utilities.splash_handler import SplashHandler
-from setup import FontStyles
+# from setup import FontStyles
 
 
 async def test_splash(page: ft.Page) -> None:
@@ -14,29 +14,33 @@ async def test_splash(page: ft.Page) -> None:
     splash_handler = SplashHandler()
     splash_handler.on_cleanup = on_cleanup
     
-    text = ft.Text(
-        value="Splash 1", size=50, opacity=0, color=ft.Colors.ORANGE,
+    splash_img = ft.Image(
+        src="images/splash/brand.png", width=355, height=265,
+        fit=ft.BoxFit.COVER, gapless_playback=True,
+        filter_quality=ft.FilterQuality.HIGH,
         animate_opacity=ft.Animation(1000, ft.AnimationCurve.LINEAR),
-        font_family=FontStyles.DUNGEON
+        opacity=0
     )
-    page.add(text)
+    page.add(splash_img)
     page.on_keyboard_event = splash_handler.on_skip_event
     
     @splash_handler.skippable_animation()
     async def splash_animation():
         await asyncio.sleep(0.1)
-        text.opacity = 1
-        text.update()
+        splash_img.opacity = 1
+        splash_img.update()
+        await asyncio.sleep(2)
+        splash_img.opacity = 0
+        splash_img.update()
         await asyncio.sleep(1)
-        text.opacity = 0
-        text.update()
-        await asyncio.sleep(1)
-        text.value = "Splash 2"
-        text.opacity = 1
-        text.update()
-        await asyncio.sleep(1)
-        text.opacity = 0
-        text.update()
+        splash_img.src = "icon.png"
+        splash_img.width = 1024 / 2
+        splash_img.height = 1024 / 2
+        splash_img.opacity = 1
+        splash_img.update()
+        await asyncio.sleep(2)
+        splash_img.opacity = 0
+        splash_img.update()
         await asyncio.sleep(1)
     
     success = await splash_animation()
@@ -47,7 +51,7 @@ async def test(page: ft.Page) -> None:
     await test_splash(page)
     await test_init(page)
     
-    page.add(ft.Text("Hello :)", size=40))
+    page.add(ft.Text("That was a splash animation :)", size=40))
     
     
 ft.run(test, assets_dir="../assets")

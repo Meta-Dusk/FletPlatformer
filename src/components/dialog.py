@@ -11,6 +11,7 @@ audio_manager = global_audio_manager
 sfx = SFXLibrary()
 
 class DialogBox(ft.Container):
+    """A visual novel styled dialog box."""
     def __init__(
         self, 
         speaker_name: str | list[str] = "Insert name",
@@ -23,13 +24,11 @@ class DialogBox(ft.Container):
         on_finish: Callable[[None], None] = lambda: print("Finished dialog.")
     ) -> None:
         """
-        A visual novel styled dialog box.
-        
         Args:
-            speaker_name (str | list[str]): If a list is provided, each dialog is mapped per item in the list. If only
-                                            one name is provided, it will be the only speaker.
+            speaker_name (str | list[str]): If a list is provided, each `dialog_text` is mapped per item in the list.
+                                            If only one name is provided, it will be the only speaker.
             dialog_text (str | list[str]): Each string is treated as its own dialog sequence.
-            speaker_colors (dict[str, str]): Color mapping for each `speaker_name`.
+            speaker_colors (dict[str, ColorValue]): Color mapping for each `speaker_name`.
             char_anim_duration (float): The animation duration (in seconds) per character.
             indicator_blink_duration (int): The animation duration (in milliseconds) for the blink indicator.
             cleanup (bool): If `True`, removes self from the page's overlay.
@@ -139,7 +138,7 @@ class DialogBox(ft.Container):
                 self.update()
                 self._on_finish()
     
-    def _start_dialog_sequence(self):
+    def _start_dialog_sequence(self) -> None:
         """Resets UI for the current index and starts animation tasks."""
         # Update Speaker Name
         current_name = self.speaker_names[self._current_idx]
@@ -165,8 +164,9 @@ class DialogBox(ft.Container):
         
         self._anim_text_task = self.page.run_task(self._animate_text)
         self._anim_ind_task = self.page.run_task(self._animate_indicator)
-
-    async def _animate_indicator(self):
+        
+    async def _animate_indicator(self) -> None:
+        """The animation for the indicator."""
         try:
             while True:
                 if self._anim_text_task and not self._anim_text_task.done():
@@ -184,7 +184,8 @@ class DialogBox(ft.Container):
             self.indicator.opacity = 0
             self.indicator.update()
     
-    async def _animate_text(self):
+    async def _animate_text(self) -> None:
+        """The typewriter-effect animation for the dialog text."""
         full_text = self.current_msg
         try:
             self.dialog_text.value = ""
@@ -196,15 +197,28 @@ class DialogBox(ft.Container):
             self.dialog_text.value = full_text
             self.dialog_text.update()
     
-    def _on_finish(self):
+    def _on_finish(self) -> None:
+        """
+        Calls the `on_finish` function once 
+        dialog sequence finishes.
+        """
         result = self.on_finish()
         if inspect.isawaitable(result):
             self.page.run_task(result)
     
-    def did_mount(self):
+    def did_mount(self) -> None:
+        """
+        Automatically starts the dialog sequence once
+        self attached to a page's controls.
+        """
         self._start_dialog_sequence()
     
-    def will_unmount(self):
+    def will_unmount(self) -> None:
+        """
+        Automatically cancels running tasks and calls the
+        `_on_finish` callable before removing self from a
+        page's controls.
+        """
         attempt_cancel(self._anim_ind_task)
         attempt_cancel(self._anim_text_task)
         self._on_finish()

@@ -173,7 +173,7 @@ class GameManager:
             target_x, is_rel = coords
             if is_rel: target_x += (self.page.width / 2)
             candidates.sort(key=lambda e: abs(((e.stack.left + e.stack.width) / 2 or 0) - target_x))
-
+            
         # 3. Apply Count Limit
         if count > 0: return candidates[:count]
         return candidates
@@ -208,7 +208,7 @@ class GameManager:
             if not entities:
                 self.console.log(f"No targets found for '{target}'", ft.Colors.DEEP_PURPLE)
                 return
-
+            
             killed_count = 0
             for e in entities:
                 if not e.states.dead:
@@ -216,11 +216,11 @@ class GameManager:
                     killed_count += 1
             
             if killed_count > 0:
-                msg_count = "entities" if killed_count > 1 else "entity"
+                msg_count = "entity" if killed_count == 1 else "entities"
                 self.console.log(f"Killed {killed_count} {msg_count}.", ft.Colors.DEEP_PURPLE)
             else:
                 self.console.log("Targets are already dead.", ft.Colors.GREY)
-
+                
         def damage_handler(target: str, amount: float, x: int = None, y: int = None, count: int = None) -> None:
             final_count = resolve_count(target, count)
             loc = x if x else None
@@ -230,7 +230,7 @@ class GameManager:
             if not entities:
                 self.console.log("No targets found.", ft.Colors.PURPLE)
                 return
-
+            
             hit_count = 0
             for e in entities:
                 if not e.states.dead:
@@ -238,7 +238,7 @@ class GameManager:
                     hit_count += 1
             
             if hit_count > 0:
-                msg_count = "entities" if hit_count > 1 else "entity"
+                msg_count = "entity" if hit_count == 1 else "entities"
                 self.console.log(f"Damaged {hit_count} {msg_count} for {amount}.", ft.Colors.PURPLE)
                 
         def revive_handler(target: str, x: int = None, y: int = None, count: int = None) -> None:
@@ -257,7 +257,7 @@ class GameManager:
                     else:
                         raise NotImplementedError("Revival only implemented for the player so far.")
             
-            msg_count = "entities" if revived_count > 1 else "entity"
+            msg_count = "entity" if revived_count == 1 else "entities"
             self.console.log(f"Revived {revived_count} {msg_count}.", ft.Colors.GREEN)
         
         def summon_handler(enemy_type: str, x: tuple = None, y: tuple = None, count: int = 1) -> None:
@@ -301,7 +301,7 @@ class GameManager:
                     e.stack.left = final_x + offset
                     try_update(e.stack)
                     
-            msg_count = "entities" if len(new_entities) > 1 else "entity"
+            msg_count = "entity" if len(new_entities) == 1 else "entities"
             self.console.log(f"Summoned {len(new_entities)} {msg_count} ({e_enum.name}).", ft.Colors.CYAN)
         
         def toggle_hb_show_handler(enabled: Literal["true", "false"]) -> None:
@@ -632,27 +632,27 @@ class GameManager:
         if self.console in self.page.overlay and self.console.visible:
             self._set_interactivity()
             return
-
+        
         # 2. Check Settings (Can be opened from Main Menu OR Pause Menu)
         if self.settings_menu.visible:
             self._set_interactivity(settings=True)
             return
-
+        
         # 3. Check Pause Menu (In-Game Overlay)
         if self.pause_menu.visible:
             self._set_interactivity(pause=True)
             return
-
+        
         # 4. Check Main Menu (Start Screen)
         if self.main_menu in self.stage.controls and self.main_menu.visible:
             self._set_interactivity(main_menu=True)
             return
-
+        
         # 5. Game Layer (Lowest Priority - only active if nothing else is)
         if self.is_game_running and self.game_layer.visible:
             self._set_interactivity(game_hud=True)
             return
-
+        
     def _set_interactivity(
         self,
         settings: bool = False,
@@ -875,22 +875,20 @@ class EntitySelectorArg(ArgType):
         return value
 
 class EnemyTypeArg(ArgType):
-    """
-    Strictly selects available EnemyTypes (i.e.; 'goblin').
-    """
+    """Strictly selects available EnemyTypes (i.e.; 'goblin')."""
     def get_suggestions(self, current_input: str) -> list[str]:
         return [
             e.name.lower() 
             for e in EnemyType 
             if e.name.lower().startswith(current_input.lower())
         ]
-
+        
     def parse(self, value: str) -> str:
         # Validate that the input is actually a valid enum
         if not any(e.name.lower() == value.lower() for e in EnemyType):
             raise ValueError(f"'{value}' is not a valid Entity Type.")
         return value
-
+    
 # * === MIXINS ===
 class GameManagerMixin:
     """Mixin to bridge GameManager data into Entities."""
