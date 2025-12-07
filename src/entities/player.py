@@ -324,23 +324,12 @@ class Player(Entity):
     # * === DASH COOLDOWN ===
     def _make_dash_cooldown(self):
         dash_cooldown = ft.Image(
-            src="images/icons/gold_feather.png",
-            filter_quality=ft.FilterQuality.NONE,
-            scale=2, fit=ft.BoxFit.COVER,
-            color_blend_mode=ft.BlendMode.MODULATE
-        )
-        outline = ft.Image(
-            src="images/icons/silver_feather.png",
-            filter_quality=ft.FilterQuality.NONE,
-            scale=2, fit=ft.BoxFit.COVER
-        )
-        stack = ft.Stack(
-            controls=[outline, dash_cooldown],
-            alignment=ft.Alignment.CENTER,
+            src="images/icons/gold_feather.png", filter_quality=ft.FilterQuality.NONE,
+            scale=2, fit=ft.BoxFit.COVER, color_blend_mode=ft.BlendMode.MODULATE,
             right=-15, top=6
         )
         
-        self._stamina_bar_stack.controls.append(stack)
+        self._stamina_bar_stack.controls.append(dash_cooldown)
         return dash_cooldown
     
     # * === CALLABLE PLAYER ACTIONS/EVENTS ===
@@ -382,9 +371,8 @@ class Player(Entity):
         try_update(self.stack)
         
         async def timer():
-            inv_dur = round(self.stats.dash_cooldown * self.stats.dash_inv_perc, 3)
-            cooldown = round(self.stats.dash_cooldown - inv_dur, 3)
-            await asyncio.sleep(inv_dur)
+            cooldown = round(self.stats.dash_cooldown - self.stats.dash_inv_time, 3)
+            await asyncio.sleep(self.stats.dash_inv_time)
             self._reset_tint()
             self.states.invincible = False
             await asyncio.sleep(cooldown)

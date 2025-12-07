@@ -61,12 +61,11 @@ class EntityStats:
     dash_distance: int = 100
     dash_strength: float = 1.0
     dash_cooldown: float = 1.0
-    dash_inv_perc: float = 0.3
+    dash_inv_time: float = 0.3
     dash_st_cost: float = 5.0
     
     # Damage
     attack_damage: float = 5.0
-    attack_speed: float = 2.0
     attack_knockback: int = 20
     
     # Resistance
