@@ -9,7 +9,7 @@ from utilities.values import pathify
 from utilities.components import try_update
 from components.popup_text import HealthText
 from entities.features.hitboxes import DamageHitbox
-from entities.features.entity_data import Factions, EntityStats, EntityStates
+from entities.features.entity_data import Factions, EntityStats, EntityStates, ARMOR_SCALING_CONSTANT
 
 
 class Entity(DamageHitbox):
@@ -36,7 +36,7 @@ class Entity(DamageHitbox):
         self._spr_path: Path = pathify(sprite.src)
         self.health_bar: ft.ProgressBar = None
         self._health_bar_stack: ft.Stack = None
-        self.nametag: ft.Control = None
+        self.nametag: ft.Stack = None
         self._show_border: bool = False
         self._cleanup_ready: bool = False
         if not hasattr(self, "_atk_hb_show"):
@@ -182,9 +182,9 @@ class Entity(DamageHitbox):
     
     def _make_hud(self):
         if self.nametag is None:
-            print("Missing nametag!")
+            self._debug_msg("Missing nametag!")
         if self.health_bar is None or self._health_bar_stack is None:
-            print("Missing healthbar!")
+            self._debug_msg("Missing healthbar!")
         return ft.Container(
             ft.Column(
                 controls=[self.nametag, self._health_bar_stack],
@@ -208,7 +208,13 @@ class Entity(DamageHitbox):
         
         solid_text = ft.Text(value=self.name, size=20, color=ft.Colors.WHITE)
         
-        return ft.Stack([outline_text, solid_text])
+        stack = ft.Stack(
+            controls=[outline_text, solid_text],
+            clip_behavior=ft.ClipBehavior.NONE,
+            alignment=ft.Alignment.CENTER
+        )
+        
+        return stack
     
     def _make_health_bar(self):
         healthbar = ft.ProgressBar(
@@ -229,7 +235,14 @@ class Entity(DamageHitbox):
                 ft.TextSpan(self.stats.max_health)
             ], left=5, top=-3
         )
-        return ft.Stack([healthbar_container, healthbar_label])
+        
+        stack = ft.Stack(
+            controls=[healthbar_container, healthbar_label],
+            clip_behavior=ft.ClipBehavior.NONE,
+            alignment=ft.Alignment.CENTER
+        )
+        
+        return stack
     
     def _get_spr_path(self, state: str, index: int, *, debug: bool = False):
         """Returns a formatted str path for sprites."""
@@ -342,14 +355,16 @@ class Entity(DamageHitbox):
             self._debug_msg(f"{self.name} cannot be damaged during i-frames")
             return False
         
+        damage_reduction: float = ARMOR_SCALING_CONSTANT / (ARMOR_SCALING_CONSTANT + self.stats.armor)
+        _damage_amount = round(damage_amount * damage_reduction, 1)
         self.states.taking_damage = True
         self.states.stunned = True
-        self.stats.health -= damage_amount
-        self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(-{damage_amount})")
+        self.stats.health -= _damage_amount
+        self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health} (-{_damage_amount}[{damage_reduction*100:.2}% of {damage_amount}])")
         self.stack.controls.append(
             HealthText(
                 left=(self.stack.width / 2) + 35, top=18,
-                value=f"-{damage_amount}", color=ft.Colors.RED
+                value=f"-{_damage_amount}", color=ft.Colors.RED
             )
         )
         try_update(self.stack)

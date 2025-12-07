@@ -28,7 +28,8 @@ class Player(Entity):
         super().__init__(
             sprite=sprite, name=self.name, page=page,
             audio_manager=audio_manager, faction=Factions.HUMAN,
-            entity_list=entity_list, debug=debug
+            entity_list=entity_list, debug=debug,
+            stats=EntityStats(armor=100)
         )
         self.held_keys = held_keys
         self._handler_str = "Player"
@@ -42,6 +43,7 @@ class Player(Entity):
         )
         self._make_self_hitbox(width=95, height=110, r_left=55)
         self._has_dashed: bool = False
+        self.dash_indicator: ft.Image = self._make_dash_cooldown()
     
     # * === LOOPING ANIMATIONS ===
     async def _animation_loop(self):
@@ -294,8 +296,30 @@ class Player(Entity):
         self._take_hit_task = None
         self._reset_tint()
     
+    # * === DASH COOLDOWN ===
+    def _make_dash_cooldown(self):
+        dash_cooldown = ft.Image(
+            src="images/icons/gold_feather.png",
+            filter_quality=ft.FilterQuality.NONE,
+            scale=2, fit=ft.BoxFit.COVER,
+            color_blend_mode=ft.BlendMode.MODULATE
+        )
+        outline = ft.Image(
+            src="images/icons/silver_feather.png",
+            filter_quality=ft.FilterQuality.NONE,
+            scale=2, fit=ft.BoxFit.COVER
+        )
+        stack = ft.Stack(
+            controls=[outline, dash_cooldown],
+            alignment=ft.Alignment.CENTER,
+            right=-15, top=6
+        )
+        
+        self._health_bar_stack.controls.append(stack)
+        return dash_cooldown
+    
     # * === CALLABLE PLAYER ACTIONS/EVENTS ===
-    async def death(self):
+    async def death(self) -> None:
         """Cancels all running tasks, and plays the death animation."""
         if not super().death(): return
         self._debug_msg(f"{self.name} has died!")
@@ -321,18 +345,24 @@ class Player(Entity):
         self.states.invincible = True
         self._apply_tint(ft.Colors.PURPLE)
         
-        if dx > 0: self.stack.left += 100
-        else: self.stack.left -= 100
+        if dx > 0: self.stack.left += self.stats.dash_distance
+        else: self.stack.left -= self.stats.dash_distance
         self._play_sfx(sfx.whoosh.motion, 0.5)
         try_update(self.stack)
         
         async def timer():
-            await asyncio.sleep(0.3)
+            inv_dur = round(self.stats.dash_cooldown * self.stats.dash_inv_perc, 3)
+            cooldown = round(self.stats.dash_cooldown - inv_dur, 3)
+            await asyncio.sleep(inv_dur)
             self._reset_tint()
             self.states.invincible = False
-            await asyncio.sleep(0.7)
+            await asyncio.sleep(cooldown)
             self._has_dashed = False
+            self.dash_indicator.color = None
+            try_update(self.dash_indicator)
         self.page.run_task(timer)
+        self.dash_indicator.color = ft.Colors.BLACK
+        try_update(self.dash_indicator)
     
     def jump(self):
         """Player jump action."""
