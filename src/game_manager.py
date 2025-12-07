@@ -547,6 +547,7 @@ class GameManager:
             case " ": self.player.jump()
             case "V": self.player.attack()
         
+        # * --- Tutorial Check ---
         if self.finished_tutorial: return
         else:
             if len(self.tutorial_state) >= 10:
@@ -560,19 +561,22 @@ class GameManager:
         if 'a' in held_keys:
             tutorial.set_finish(tutorial.mv_key_a)
             self.tutorial_state.add("mv_key_a")
+            
         if 'd' in held_keys:
             tutorial.set_finish(tutorial.mv_key_d)
             self.tutorial_state.add("mv_key_d")
-        if ('a' or 'd') and keyboard.Key.shift in held_keys:
-            if 'a' in held_keys:
+            
+        if self.player.states.is_sprinting:
+            if ('a' or 'A') in held_keys:
                 tutorial.set_finish(tutorial.sprint_key_a)
                 self.tutorial_state.add("sprint_key_a")
-            if 'd' in held_keys:
+            if ('d' or 'D') in held_keys:
                 tutorial.set_finish(tutorial.sprint_key_d)
                 self.tutorial_state.add("sprint_key_d")
             tutorial.set_finish(tutorial.sprint_shift)
             self.tutorial_state.add("sprint_shift")
-        if ('a' or 'd') and 'c' in held_keys:
+            
+        if 'c' in held_keys:
             if 'a' in held_keys:
                 tutorial.set_finish(tutorial.dash_key_a)
                 self.tutorial_state.add("dash_key_a")
@@ -582,13 +586,13 @@ class GameManager:
             tutorial.set_finish(tutorial.dash_key_c)
             self.tutorial_state.add("dash_key_c")
             
-        match e.key:
-            case ' ':
-                tutorial.set_finish(tutorial.jump_key)
-                self.tutorial_state.add("jump_key")
-            case 'V':
-                tutorial.set_finish(tutorial.attack_key)
-                self.tutorial_state.add("attack_key")
+        if self.player.states.jumped:
+            tutorial.set_finish(tutorial.jump_key)
+            self.tutorial_state.add("jump_key")
+            
+        if self.player.states.is_attacking:
+            tutorial.set_finish(tutorial.attack_key)
+            self.tutorial_state.add("attack_key")
             
     
     def _win_on_event(self, e: ft.WindowEvent):

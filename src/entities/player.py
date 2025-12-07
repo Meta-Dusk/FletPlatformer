@@ -43,7 +43,12 @@ class Player(Entity):
         )
         self._make_self_hitbox(width=95, height=110, r_left=55)
         self._has_dashed: bool = False
+        
+        self._stamina_bar_stack = self._make_stamina_bar()
         self.dash_indicator: ft.Image = self._make_dash_cooldown()
+        hud_col: ft.Column = self.hud.content
+        hud_col.controls.append(self._stamina_bar_stack)
+        self.hud.top -= 25
     
     # * === LOOPING ANIMATIONS ===
     async def _animation_loop(self):
@@ -64,7 +69,13 @@ class Player(Entity):
             # Running animation
             if self.states.is_moving and not self.states.is_falling:
                 if index > 7: index = 0
-                wait_time = 0.05 if self.states.sprint else 0.075
+                if self.states.is_sprinting and not self.states.exhausted:
+                    wait_time = 0.05
+                else:
+                    if self.states.exhausted:
+                        wait_time = 0.15
+                    else:
+                        wait_time = 0.075
                 await asyncio.sleep(wait_time)
                 self.sprite.change_src(self._get_spr_path("run", index))
                 if index == 2:
@@ -170,7 +181,13 @@ class Player(Entity):
                 not self.states.disable_movement
             ):
                 is_shift_held = keyboard.Key.shift in self.held_keys
-                step = self.stats.movement_speed * 2 if is_shift_held else self.stats.movement_speed
+                if is_shift_held and self.stats.stamina > 0 and not self.states.exhausted:
+                    step = int(self.stats.movement_speed * self.stats.sprint_mult)
+                else:
+                    if self.states.exhausted:
+                        step = int(self.stats.movement_speed * 0.5)
+                    else:
+                        step = self.stats.movement_speed
                 dx, dy = 0, 0
                 
                 if 'a' in self.held_keys: dx -= step
@@ -179,7 +196,14 @@ class Player(Entity):
                 if self.stack.left <= 0 or self.stack.left + self.sprite.width >= self.page.width: dx = 0
                 
                 # ? Movement
-                def primary_callback(): self.states.sprint = True if is_shift_held else False
+                def primary_callback():
+                    self.states.is_sprinting = True if is_shift_held else False
+                    if self.states.is_sprinting and self.stats.stamina > 0:
+                        self.stats.stamina -= self.stats.st_usage_tick
+                        self._update_stamina_bar()
+                    elif self.stats.stamina <= 0:
+                        self.states.exhausted = True
+                        self.stats.stamina = 0
                 
                 self._check_movement(
                     dx, dy, primary_callback=primary_callback,
@@ -189,7 +213,7 @@ class Player(Entity):
             else:
                 # ? Reset state if doing nothing or window not focused
                 self.states.is_moving = False
-                self.states.sprint = False
+                self.states.is_sprinting = False
             
             # ? Grounding
             if self.stack.bottom < self.ground_level:
@@ -295,6 +319,7 @@ class Player(Entity):
         self.states.stunned = False
         self._take_hit_task = None
         self._reset_tint()
+        self._start_hp_loop()
     
     # * === DASH COOLDOWN ===
     def _make_dash_cooldown(self):
@@ -315,7 +340,7 @@ class Player(Entity):
             right=-15, top=6
         )
         
-        self._health_bar_stack.controls.append(stack)
+        self._stamina_bar_stack.controls.append(stack)
         return dash_cooldown
     
     # * === CALLABLE PLAYER ACTIONS/EVENTS ===
@@ -327,6 +352,8 @@ class Player(Entity):
         self._reset_stats(EntityStats(health=0))
         
         attempt_cancel(self._animation_loop_task)
+        attempt_cancel(self._health_loop_task)
+        attempt_cancel(self._stamina_loop_task)
         self._cancel_temp_tasks()
         if hasattr(self, "game_manager"):
             count_str = "times" if self.game_manager.death_count > 0 else "time"
@@ -339,10 +366,14 @@ class Player(Entity):
     async def dash(self, dx: int):
         if self._has_dashed: return
         elif dx == 0: return
+        elif self.stats.stamina <= 0: return
+        elif (self.stats.stamina - self.stats.dash_st_cost) <= 0: return
         
         self._debug_msg(f"Dashing to the {"left" if dx < 0 else "right"}!")
         self._has_dashed = True
         self.states.invincible = True
+        self.stats.stamina -= self.stats.dash_st_cost
+        self._update_stamina_bar()
         self._apply_tint(ft.Colors.PURPLE)
         
         if dx > 0: self.stack.left += self.stats.dash_distance
@@ -367,6 +398,12 @@ class Player(Entity):
     def jump(self):
         """Player jump action."""
         if self.stack.bottom != self.ground_level or self._interrupt_action(): return
+        elif self.stats.stamina <= 0: return
+        elif (self.stats.stamina - self.stats.jump_st_cost) <= 0: return
+        elif self.states.exhausted: return
+        
+        self.stats.stamina -= self.stats.jump_st_cost
+        self._update_stamina_bar()
         self.stack.bottom += self._get_jump_dy()
         try_update(self.stack)
         self.states.jumped = True
@@ -440,13 +477,17 @@ class Player(Entity):
         """Cancels all running looping tasks."""
         tasks = [
             self._movement_loop_task,
-            self._animation_loop_task
+            self._animation_loop_task,
+            self._stamina_loop_task,
+            self._health_loop_task
         ]
         for task in tasks: attempt_cancel(task)
     
     def _start_loops(self):
         self._start_animation_loop()
         self._start_movement_loop()
+        self._start_st_loop()
+        self._start_hp_loop()
     
     def _interrupt_action(self, cancel_temp_tasks: bool = True):
         """

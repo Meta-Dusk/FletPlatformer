@@ -27,7 +27,12 @@ class SplashHandler:
             await result
         
     async def skippable_delay(self, seconds: float) -> bool:
-        """Skips the delay once 'on_skip_event' gets called."""
+        """
+        Skips the delay once `on_skip_event` gets called.
+        
+        Returns:
+            bool: `False` if it has been skipped, else `True` if delay finished.
+        """
         if not self.active:
             return False
         try:
