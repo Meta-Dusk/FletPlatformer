@@ -28,7 +28,8 @@ class Player(Entity):
         super().__init__(
             sprite=sprite, name=self.name, page=page,
             audio_manager=audio_manager, faction=Factions.HUMAN,
-            entity_list=entity_list, debug=debug
+            entity_list=entity_list, debug=debug,
+            stats=EntityStats(armor=100, crit_chance=10)
         )
         self.held_keys = held_keys
         self._handler_str = "Player"
@@ -42,6 +43,12 @@ class Player(Entity):
         )
         self._make_self_hitbox(width=95, height=110, r_left=55)
         self._has_dashed: bool = False
+        
+        self._stamina_bar_stack = self._make_stamina_bar()
+        self.dash_indicator: ft.Image = self._make_dash_cooldown()
+        hud_col: ft.Column = self.hud.content
+        hud_col.controls.append(self._stamina_bar_stack)
+        self.hud.top -= 25
     
     # * === LOOPING ANIMATIONS ===
     async def _animation_loop(self):
@@ -62,7 +69,13 @@ class Player(Entity):
             # Running animation
             if self.states.is_moving and not self.states.is_falling:
                 if index > 7: index = 0
-                wait_time = 0.05 if self.states.sprint else 0.075
+                if self.states.is_sprinting and not self.states.exhausted:
+                    wait_time = 0.05
+                else:
+                    if self.states.exhausted:
+                        wait_time = 0.15
+                    else:
+                        wait_time = 0.075
                 await asyncio.sleep(wait_time)
                 self.sprite.change_src(self._get_spr_path("run", index))
                 if index == 2:
@@ -113,15 +126,17 @@ class Player(Entity):
                         r1_left=p_left, r1_bottom=p_bottom, r1_w=p_w, r1_h=p_h, # Player Body
                         r2_left=e_hb_left, r2_bottom=e_hb_bottom, r2_w=atk_hb.width, r2_h=atk_hb.height # Enemy Weapon
                     ):
-                        self._debug_msg(f"Hit by {entity.name}!")
-                        await self.take_damage(entity.stats.attack_damage)
+                        self._debug_msg(f"Hit by {entity.name}!", debug_handler=self._debug_logs.damage)
+                        dmg, is_crit = self._calculate_damage()
+                        await self.take_damage(dmg, is_crit)
                         self._knockback_self(entity)
                         return
     
-    async def _handle_hit_logic(self, target_enemy: Entity):
+    def _handle_hit_logic(self, target_enemy: Entity):
         """Applies damage to a specific enemy and updates game stats if they die."""
         # Apply Damage
-        did_die = await target_enemy.take_damage(self.stats.attack_damage)
+        dmg, is_crit = self._calculate_damage()
+        did_die = target_enemy.take_damage(dmg, is_crit)
         
         # Check Result
         if not did_die: return
@@ -151,8 +166,8 @@ class Player(Entity):
                 r1_left=w_left, r1_bottom=w_bottom, r1_w=active_hb.width, r1_h=active_hb.height, # Player Weapon
                 r2_left=e_left, r2_bottom=e_bottom, r2_w=e_w, r2_h=e_h # Enemy Body
             ):
-                self._debug_msg(f"Hit enemy: {enemy.name}")
-                self.page.run_task(self._handle_hit_logic, enemy)
+                self._debug_msg(f"Hit enemy: {enemy.name}", debug_handler=self._debug_logs.attack)
+                self._handle_hit_logic(enemy)
     
     # * === CUSTOM MOVEMENT LOOP ===
     async def _movement_loop(self):
@@ -168,7 +183,13 @@ class Player(Entity):
                 not self.states.disable_movement
             ):
                 is_shift_held = keyboard.Key.shift in self.held_keys
-                step = self.stats.movement_speed * 2 if is_shift_held else self.stats.movement_speed
+                if is_shift_held and self.stats.stamina > 0 and not self.states.exhausted:
+                    step = int(self.stats.movement_speed * self.stats.sprint_mult)
+                else:
+                    if self.states.exhausted:
+                        step = int(self.stats.movement_speed * 0.5)
+                    else:
+                        step = self.stats.movement_speed
                 dx, dy = 0, 0
                 
                 if 'a' in self.held_keys: dx -= step
@@ -177,7 +198,14 @@ class Player(Entity):
                 if self.stack.left <= 0 or self.stack.left + self.sprite.width >= self.page.width: dx = 0
                 
                 # ? Movement
-                def primary_callback(): self.states.sprint = True if is_shift_held else False
+                def primary_callback():
+                    self.states.is_sprinting = True if is_shift_held else False
+                    if self.states.is_sprinting and self.stats.stamina > 0:
+                        self.stats.stamina -= self.stats.st_usage_tick
+                        self._update_stamina_bar()
+                    elif self.stats.stamina <= 0:
+                        self.states.exhausted = True
+                        self.stats.stamina = 0
                 
                 self._check_movement(
                     dx, dy, primary_callback=primary_callback,
@@ -187,7 +215,7 @@ class Player(Entity):
             else:
                 # ? Reset state if doing nothing or window not focused
                 self.states.is_moving = False
-                self.states.sprint = False
+                self.states.is_sprinting = False
             
             # ? Grounding
             if self.stack.bottom < self.ground_level:
@@ -237,7 +265,7 @@ class Player(Entity):
         """Handles the player's attack animations with combos."""
         prefix = f"attack-{self.states.attack_phase}"
         for i in range(7):
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(self.stats.attack_frame_delay)
             if self.states.attack_phase == 1: # Upward slash
                 if i == 0: self._modify_self_hitbox(r_left=45, width=85)
                 if i == 2: # TODO: Optimize audio by combining into one SFX
@@ -293,16 +321,31 @@ class Player(Entity):
         self.states.stunned = False
         self._take_hit_task = None
         self._reset_tint()
+        self._start_hp_loop()
+    
+    # * === DASH COOLDOWN ===
+    def _make_dash_cooldown(self):
+        _scale = 0.25
+        dash_cooldown = ft.Image(
+            src="images/icons/dash.png", filter_quality=ft.FilterQuality.NONE,
+            scale=_scale, fit=ft.BoxFit.COVER, color_blend_mode=ft.BlendMode.MODULATE,
+            right=-40, top=-21, width=256 * _scale, height=256 * _scale
+        )
+        
+        self._stamina_bar_stack.controls.append(dash_cooldown)
+        return dash_cooldown
     
     # * === CALLABLE PLAYER ACTIONS/EVENTS ===
-    async def death(self):
+    async def death(self) -> None:
         """Cancels all running tasks, and plays the death animation."""
         if not super().death(): return
-        self._debug_msg(f"{self.name} has died!")
+        self._debug_msg(f"{self.name} has died!", debug_handler=self._debug_logs.death)
         self._reset_states(EntityStates(dead=True))
         self._reset_stats(EntityStats(health=0))
         
         attempt_cancel(self._animation_loop_task)
+        attempt_cancel(self._health_loop_task)
+        attempt_cancel(self._stamina_loop_task)
         self._cancel_temp_tasks()
         if hasattr(self, "game_manager"):
             count_str = "times" if self.game_manager.death_count > 0 else "time"
@@ -315,28 +358,43 @@ class Player(Entity):
     async def dash(self, dx: int):
         if self._has_dashed: return
         elif dx == 0: return
+        elif self.stats.stamina <= 0: return
+        elif (self.stats.stamina - self.stats.dash_st_cost) <= 0: return
         
-        self._debug_msg(f"Dashing to the {"left" if dx < 0 else "right"}!")
+        self._debug_msg(f"Dashing to the {"left" if dx < 0 else "right"}!", debug_handler=self._debug_logs.dash)
         self._has_dashed = True
         self.states.invincible = True
+        self.stats.stamina -= self.stats.dash_st_cost
+        self._update_stamina_bar()
         self._apply_tint(ft.Colors.PURPLE)
         
-        if dx > 0: self.stack.left += 100
-        else: self.stack.left -= 100
+        if dx > 0: self.stack.left += self.stats.dash_distance
+        else: self.stack.left -= self.stats.dash_distance
         self._play_sfx(sfx.whoosh.motion, 0.5)
         try_update(self.stack)
         
         async def timer():
-            await asyncio.sleep(0.3)
+            cooldown = round(self.stats.dash_cooldown - self.stats.dash_inv_time, 3)
+            await asyncio.sleep(self.stats.dash_inv_time)
             self._reset_tint()
             self.states.invincible = False
-            await asyncio.sleep(0.7)
+            await asyncio.sleep(cooldown)
             self._has_dashed = False
+            self.dash_indicator.color = None
+            try_update(self.dash_indicator)
         self.page.run_task(timer)
+        self.dash_indicator.color = ft.Colors.with_opacity(0.75, ft.Colors.GREY)
+        try_update(self.dash_indicator)
     
     def jump(self):
         """Player jump action."""
         if self.stack.bottom != self.ground_level or self._interrupt_action(): return
+        elif self.stats.stamina <= 0: return
+        elif (self.stats.stamina - self.stats.jump_st_cost) <= 0: return
+        elif self.states.exhausted: return
+        
+        self.stats.stamina -= self.stats.jump_st_cost
+        self._update_stamina_bar()
         self.stack.bottom += self._get_jump_dy()
         try_update(self.stack)
         self.states.jumped = True
@@ -347,13 +405,13 @@ class Player(Entity):
         if not super().attack(): return
         self.states.attack_phase += 1
         if self.states.attack_phase > 2 or self.states.jumped: self.states.attack_phase = 1
-        self._debug_msg(f"Attacking! Phase: {self.states.attack_phase}")
+        self._debug_msg(f"Attacking! Phase: {self.states.attack_phase}", debug_handler=self._debug_logs.attack)
         self.states.is_attacking = True
         self._attack_task = self.page.run_task(self._attack_anim)
         
-    async def take_damage(self, damage_amount: float):
+    async def take_damage(self, damage_amount: float, is_crit: bool = False):
         """Decrease player's health with logic."""
-        if not await super().take_damage(damage_amount): return
+        if not super().take_damage(damage_amount, is_crit): return
         
         if self.states.is_attacking:
             attempt_cancel(self._attack_task)
@@ -369,10 +427,17 @@ class Player(Entity):
             if self._take_hit_task: attempt_cancel(self._take_hit_task)
             self._take_hit_task = self.page.run_task(self._take_hit_anim)
     
+    async def heal(self, heal_amount: float, overheal: bool = False):
+        if not super().heal(heal_amount, overheal): return
+        self._update_health_bar()
+        self._apply_tint(ft.Colors.GREEN)
+        await asyncio.sleep(0.1)
+        self._reset_tint()
+    
     async def revive(self):
         if not super().revive(): return
         self.states.revivable = False
-        self._debug_msg(f"Reviving: {self.name}")
+        self._debug_msg(f"Reviving: {self.name}", debug_handler=self._debug_logs.revive)
         await self._revive_anim()
         self._reset_states()
         self._reset_stats()
@@ -403,13 +468,17 @@ class Player(Entity):
         """Cancels all running looping tasks."""
         tasks = [
             self._movement_loop_task,
-            self._animation_loop_task
+            self._animation_loop_task,
+            self._stamina_loop_task,
+            self._health_loop_task
         ]
         for task in tasks: attempt_cancel(task)
     
     def _start_loops(self):
         self._start_animation_loop()
         self._start_movement_loop()
+        self._start_st_loop()
+        self._start_hp_loop()
     
     def _interrupt_action(self, cancel_temp_tasks: bool = True):
         """

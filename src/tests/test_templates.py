@@ -1,6 +1,6 @@
 import flet as ft
 
-from setup import FONT_STYLES
+from setup import FONT_STYLES, FontStyles
 
 async def test_init(page: ft.Page):
     """The usual page setups for these tests."""
@@ -9,6 +9,7 @@ async def test_init(page: ft.Page):
     page.fonts = FONT_STYLES
     page.padding = 0
     page.window.title_bar_hidden = True
+    page.theme = ft.Theme(font_family=FontStyles.LIEF)
     
     async def on_keyboard_event(e: ft.KeyboardEvent):
         """Fast exit with key: `[Escape]`."""

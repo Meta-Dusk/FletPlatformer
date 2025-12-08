@@ -2,15 +2,19 @@ import flet as ft
 import asyncio, random
 from typing import Literal
 
-from audio.audio_manager import AudioManager, global_audio_manager
+from audio.audio_manager import global_audio_manager
 from audio.music_data import MusicLibrary
 from components.menus import MainMenu, PauseMenu, SettingsMenu
+from components.tutorials import ControlsTutorial
+from components.buttons import SimpleButton
+from components.displays import StatsDisplay
+from components.custom_switches import TextAndToggle
 from utilities.keyboard_manager import held_keys, start as km_start
 from utilities.tasks import attempt_cancel
 from entities.player import Player
 from utilities.components import try_update
 from utilities.commands.ui import DevConsole
-from utilities.commands.parser import FloatArg, ArgType, CoordinateArg, IntArg, ChoiceArg
+from utilities.commands.parser import FloatArg, ArgType, CoordinateArg, IntArg, ChoiceArg, BoolArg
 from utilities.performance_monitor import PerformanceMonitor
 from entities.enemy import EnemyType, Enemy
 from entities.entity import Entity
@@ -19,6 +23,7 @@ from bg_loops import light_mv_loop, stage_panning_loop
 from backgrounds import add_infinite_layer
 
 music = MusicLibrary()
+audio_manager = global_audio_manager
 
 class GameManager:
     """Central hub for the game UI and states."""
@@ -26,25 +31,29 @@ class GameManager:
         # State Variables (References)
         self.page: ft.Page = page
         self.player: Player = None
-        self.audio_manager: AudioManager = None
-        self.background_stack = ft.Stack(expand=True)
-        self.foreground_stack = ft.Stack(expand=True)
-        self.entity_stack = ft.Stack(expand=True)
-        self.ui_stack = ft.Stack(expand=True)
-        self.stage = ft.Stack(expand=True)
-        self.game_stage = ft.Stack(expand=True)
+        
+        # UI Layers
+        self.background_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
+        self.foreground_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
+        self.entity_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
+        self.ui_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
+        self.stage = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
+        self.game_stage = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
         self.entity_list: list[Entity] = []
         self.console = DevConsole()
+        self.stats_panel: StatsDisplay = None
         
         # Task Management
         self.running_tasks: list[asyncio.Task] = []
         
         # World Configuration
         self.ground_level: int = 30
-        self.kill_count: int = 0
-        self.death_count: int = 0
+        self._kill_count: int = 0
+        self._death_count: int = 0
         self.is_game_running: bool = False
         self.show_borders: bool = False
+        self.finished_tutorial: bool = False
+        self.tutorial_state: set[str] = set()
         
         # Scenes
         self.main_menu = None
@@ -58,6 +67,39 @@ class GameManager:
             visible=False
         )
         self.settings_menu = None
+    
+    # * === GAME PROPERTIES ===
+    @property
+    def kill_count(self) -> int:
+        """Returns the current kills of the player."""
+        return self._kill_count
+    
+    @kill_count.setter
+    def kill_count(self, amount: int) -> None:
+        """
+        Increases the player's kill count by `amount` and
+        updates the associated UI control.
+        """
+        self._kill_count = amount
+        if hasattr(self, "kill_count_text"):
+            self.kill_count_text.spans[1].text = self._kill_count
+            try_update(self.kill_count_text)
+    
+    @property
+    def death_count(self) -> int:
+        """Returns the current deaths of the player."""
+        return self._death_count
+    
+    @death_count.setter
+    def death_count(self, amount: int) -> None:
+        """
+        Increases the player's death count by `amount` and
+        updates the associated UI control.
+        """
+        self._death_count = amount
+        if hasattr(self, "death_count_text"):
+            self.death_count_text.spans[1].text = self._death_count
+            try_update(self.death_count_text)
     
     # * === MENUS ===
     def _make_main_menu(self):
@@ -83,9 +125,7 @@ class GameManager:
     async def initialize(self):
         """The entry point called by Flet."""
         # --- Setup ---
-        self.audio_manager = global_audio_manager
-        self.audio_manager.initialize()
-        self.audio_manager.play_music(music.loops.sketchbook.abstraction_2023_11_29)
+        audio_manager.play_music(music.loops.sketchbook.abstraction_2023_11_29)
         km_start()
         self.register_commands()
         
@@ -95,7 +135,7 @@ class GameManager:
         
         # Setup UI: Stack all layers
         self._make_main_menu()
-        self.settings_menu = SettingsMenu(self.audio_manager, on_close=self.close_settings)
+        self.settings_menu = SettingsMenu(audio_manager, on_close=self.close_settings)
         self.stage.controls.extend([
             self.game_layer,
             self.pause_menu,
@@ -103,11 +143,12 @@ class GameManager:
         ])
         
         # Post Setup for UI
-        self.settings_menu.console_switch.toggle.on_toggle = self._console_on_toggle
+        self.settings_menu.console_switch.switch.on_toggle = self._console_on_toggle
         self.perf_monitor = PerformanceMonitor()
-        self.settings_menu.perf_toggles.monitor_switch.toggle.on_toggle = self._perf_monitor_toggle
-        self.settings_menu.perf_toggles.ups_switch.toggle.on_toggle = self._pm_ups_toggle
-        self.settings_menu.perf_toggles.lag_switch.toggle.on_toggle = self._pm_lag_toggle
+        perf_toggles = self.settings_menu.perf_toggles
+        perf_toggles.monitor_switch.switch.on_toggle = self._perf_monitor_toggle
+        perf_toggles.ups_switch.switch.on_toggle = lambda b: self.perf_monitor.toggle_ups(b)
+        perf_toggles.lag_switch.switch.on_toggle = lambda b: self.perf_monitor.toggle_latency(b)
         
         self.page.add(self.stage)
         await self.page.window.center()
@@ -168,11 +209,9 @@ class GameManager:
             target_x, is_rel = coords
             if is_rel: target_x += (self.page.width / 2)
             candidates.sort(key=lambda e: abs(((e.stack.left + e.stack.width) / 2 or 0) - target_x))
-
+            
         # 3. Apply Count Limit
-        if count > 0:
-            return candidates[:count]
-        
+        if count > 0: return candidates[:count]
         return candidates
     
     # * === COMMANDS REGISTRY ===
@@ -205,7 +244,7 @@ class GameManager:
             if not entities:
                 self.console.log(f"No targets found for '{target}'", ft.Colors.DEEP_PURPLE)
                 return
-
+            
             killed_count = 0
             for e in entities:
                 if not e.states.dead:
@@ -213,11 +252,11 @@ class GameManager:
                     killed_count += 1
             
             if killed_count > 0:
-                msg_count = "entities" if killed_count > 1 else "entity"
+                msg_count = "entity" if killed_count == 1 else "entities"
                 self.console.log(f"Killed {killed_count} {msg_count}.", ft.Colors.DEEP_PURPLE)
             else:
                 self.console.log("Targets are already dead.", ft.Colors.GREY)
-
+                
         def damage_handler(target: str, amount: float, x: int = None, y: int = None, count: int = None) -> None:
             final_count = resolve_count(target, count)
             loc = x if x else None
@@ -227,7 +266,7 @@ class GameManager:
             if not entities:
                 self.console.log("No targets found.", ft.Colors.PURPLE)
                 return
-
+            
             hit_count = 0
             for e in entities:
                 if not e.states.dead:
@@ -235,7 +274,7 @@ class GameManager:
                     hit_count += 1
             
             if hit_count > 0:
-                msg_count = "entities" if hit_count > 1 else "entity"
+                msg_count = "entity" if hit_count == 1 else "entities"
                 self.console.log(f"Damaged {hit_count} {msg_count} for {amount}.", ft.Colors.PURPLE)
                 
         def revive_handler(target: str, x: int = None, y: int = None, count: int = None) -> None:
@@ -254,7 +293,7 @@ class GameManager:
                     else:
                         raise NotImplementedError("Revival only implemented for the player so far.")
             
-            msg_count = "entities" if revived_count > 1 else "entity"
+            msg_count = "entity" if revived_count == 1 else "entities"
             self.console.log(f"Revived {revived_count} {msg_count}.", ft.Colors.GREEN)
         
         def summon_handler(enemy_type: str, x: tuple = None, y: tuple = None, count: int = 1) -> None:
@@ -298,14 +337,11 @@ class GameManager:
                     e.stack.left = final_x + offset
                     try_update(e.stack)
                     
-            msg_count = "entities" if len(new_entities) > 1 else "entity"
+            msg_count = "entity" if len(new_entities) == 1 else "entities"
             self.console.log(f"Summoned {len(new_entities)} {msg_count} ({e_enum.name}).", ft.Colors.CYAN)
         
-        def toggle_hb_show_handler(enabled: Literal["True", "False"]) -> None:
-            if enabled == "True":
-                _enabled = True
-            else:
-                _enabled = False
+        def toggle_hb_show_handler(enabled: Literal["true", "false"]) -> None:
+            _enabled = True if enabled == "true" else False
             self.console.log(f"Setting 'show_borders' to: {_enabled}", ft.Colors.BLUE)
             self.show_borders = _enabled
             for entity in self.entity_list:
@@ -371,15 +407,37 @@ class GameManager:
             # Print to Console
             self.console.log(f"[{var}] {filter} -> {output_msg}", ft.Colors.CYAN)
         
+        def heal_handler(
+            target: str, amount: float, overheal: Literal["true", "false"],
+            x: int = None, y: int = None, count: int = None
+        ) -> None:
+            _overheal = True if overheal == "true" else False
+            final_count = resolve_count(target, count)
+            loc = x if x else None
+            
+            entities = self._get_targets(target, final_count, loc)
+            
+            if not entities:
+                self.console.log("No targets found.", ft.Colors.GREEN)
+                return
+            
+            heal_count = 0
+            for e in entities:
+                if not e.states.dead:
+                    self.page.run_task(e.heal, amount, _overheal)
+                    heal_count += 1
+            
+            if heal_count > 0:
+                msg_count = "entities" if heal_count > 1 else "entity"
+                self.console.log(f"Healed {heal_count} {msg_count} for {amount}.", ft.Colors.GREEN)
+        
         # * --- REGISTRATION ---
         # ? KILL
-        # "kill <entity>"
         self.console.register_command(
             "kill <entity>", kill_handler, 
             {"entity": entity_arg},
             help_text="Kills specific entity or type."
         )
-        # "kill <entity> <x> <y> <count>"
         self.console.register_command(
             "kill <entity> <x> <y> <count>", kill_handler,
             {"entity": entity_arg, "x": coords_arg, "y": coords_arg, "count": IntArg()},
@@ -387,13 +445,11 @@ class GameManager:
         )
         
         # ? DAMAGE
-        # "damage <entity> <amount>"
         self.console.register_command(
             "damage <entity> <amount>", damage_handler,
             {"entity": entity_arg, "amount": FloatArg()},
             help_text="Damages target entity."
         )
-        # "damage <entity> <amount> <x> <y> <count>"
         self.console.register_command(
             "damage <entity> <amount> <x> <y> <count>", damage_handler,
             {"entity": entity_arg, "amount": FloatArg(), "x": coords_arg, "y": coords_arg, "count": IntArg()},
@@ -401,13 +457,11 @@ class GameManager:
         )
         
         # ? REVIVE
-        # "revive <entity>"
         self.console.register_command(
             "revive <entity>", revive_handler,
             {"entity": entity_arg},
             help_text="Revives target."
         )
-        # "revive <entity> <x> <y> <count>"
         self.console.register_command(
             "revive <entity> <x> <y> <count>", revive_handler,
             {"entity": entity_arg, "x": coords_arg, "y": coords_arg, "count": IntArg()},
@@ -415,14 +469,12 @@ class GameManager:
         )
         
         # ? SUMMON
-        # "summon <type>"
         self.console.register_command(
             "summon <enemy_type>", summon_handler,
             {"enemy_type": EnemyTypeArg()},
             help_text="Summons 1 enemy with random positioning."
         )
         
-        # "summon <type> <x> <y> <count>"
         self.console.register_command(
             "summon <enemy_type> <x> <y> <count>", summon_handler,
             {"enemy_type": EnemyTypeArg(), "x": coords_arg, "y": coords_arg, "count": IntArg()},
@@ -440,11 +492,31 @@ class GameManager:
             help_text="Get debug data. Filter 'all' for total count."
         )
         
+        # ? HEAL
+        self.console.register_command(
+            "heal <entity> <amount> <overheal>", heal_handler,
+            {
+                "entity": entity_arg, "amount": FloatArg(),
+                "overheal": BoolArg()
+            },
+            help_text="Heals target entity."
+        )
+        self.console.register_command(
+            "damage <entity> <amount> <overheal> <x> <y> <count>", heal_handler,
+            {
+                "entity": entity_arg,
+                "amount": FloatArg(),
+                "overheal": BoolArg(),
+                "x": coords_arg, "y": coords_arg,
+                "count": IntArg()
+            },
+            help_text="Heals <count> of the closest entities."
+        )
+        
         # ? Single Argument Commands
-        # "show_borders <enabled>"
         self.console.register_command(
             "show_borders <enabled>", toggle_hb_show_handler,
-            {"enabled": ChoiceArg(["True", "False"])},
+            {"enabled": BoolArg()},
             help_text="If enabled, shows all the hitboxes that each entity use."
         )
         
@@ -456,6 +528,9 @@ class GameManager:
     # * === UI SETUP ===
     def _setup_game_ui(self):
         """Initializes Player, Stacks, and HUD."""
+        # Player
+        self.player = NewPlayer(self)
+        
         # Stacks/Layers
         def inf_layer(stack: ft.Stack, index: int):
             add_infinite_layer(stack=stack, index=index, page=self.page)
@@ -466,9 +541,33 @@ class GameManager:
         inf_layer(self.foreground_stack, 10)
         
         # Buttons / HUD
-        buttons_row = ft.Row(alignment=ft.MainAxisAlignment.CENTER, top=0, left=0)
+        self.controls_tutorial = ControlsTutorial()
+        stats_switch = TextAndToggle(
+            label_text="Show Stats", label_size=15, right=200, top=10,
+            spacer_width=0, width=50, height=25
+        )
+        stats_switch.switch.on_toggle = self._toggle_stats_panel
+        self.stats_panel = StatsDisplay(self.player.stats)
+        self.ui_stack.controls.extend([self.controls_tutorial, stats_switch, self.stats_panel])
         
-        self.ui_stack.controls.append(buttons_row)
+        self.kill_count_text = ft.Text(
+            spans=[
+                ft.TextSpan("Kills: "),
+                ft.TextSpan(self.kill_count)
+            ], size=20, text_align=ft.TextAlign.START
+        )
+        self.death_count_text = ft.Text(
+            spans=[
+                ft.TextSpan("Deaths: "),
+                ft.TextSpan(self.death_count)
+            ], size=20, text_align=ft.TextAlign.START
+        )
+        self.stats_view = ft.Column(
+            controls=[self.kill_count_text, self.death_count_text],
+            spacing=4, left=10, top=10,
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.START,
+        )
         
         # Composition
         self.game_stage.controls.extend([
@@ -479,12 +578,14 @@ class GameManager:
         ])
         
         form = ft.WindowDragArea(self.game_stage, expand=True, maximizable=False)
-        
-        # Player
-        self.player = NewPlayer(self)
         return form
         
     # * === EVENT HANDLERS ===
+    def _toggle_stats_panel(self, enabled: bool):
+        self.stats_panel.visible = enabled
+        self.stats_panel._update_texts()
+        try_update(self.stats_panel)
+    
     async def _on_keyboard_event(self, e: ft.KeyboardEvent):
         # Window and Dev keybinds
         match e.key:
@@ -510,6 +611,54 @@ class GameManager:
         match e.key:
             case " ": self.player.jump()
             case "V": self.player.attack()
+        
+        # * --- Tutorial Check ---
+        if self.finished_tutorial: return
+        else:
+            if len(self.tutorial_state) >= 10:
+                self.finished_tutorial = True
+                self._debug_msg("Finished tutorial!")
+                self.ui_stack.controls.remove(self.controls_tutorial)
+                self.ui_stack.controls.append(self.stats_view)
+                self.ui_stack.update()
+                return
+        tutorial = self.controls_tutorial
+        
+        if 'a' in held_keys:
+            tutorial.set_finish(tutorial.mv_key_a)
+            self.tutorial_state.add("mv_key_a")
+            
+        if 'd' in held_keys:
+            tutorial.set_finish(tutorial.mv_key_d)
+            self.tutorial_state.add("mv_key_d")
+            
+        if self.player.states.is_sprinting:
+            if ('a' or 'A') in held_keys:
+                tutorial.set_finish(tutorial.sprint_key_a)
+                self.tutorial_state.add("sprint_key_a")
+            if ('d' or 'D') in held_keys:
+                tutorial.set_finish(tutorial.sprint_key_d)
+                self.tutorial_state.add("sprint_key_d")
+            tutorial.set_finish(tutorial.sprint_shift)
+            self.tutorial_state.add("sprint_shift")
+            
+        if 'c' in held_keys:
+            if 'a' in held_keys:
+                tutorial.set_finish(tutorial.dash_key_a)
+                self.tutorial_state.add("dash_key_a")
+            if 'd' in held_keys:
+                tutorial.set_finish(tutorial.dash_key_d)
+                self.tutorial_state.add("dash_key_d")
+            tutorial.set_finish(tutorial.dash_key_c)
+            self.tutorial_state.add("dash_key_c")
+            
+        if self.player.states.jumped:
+            tutorial.set_finish(tutorial.jump_key)
+            self.tutorial_state.add("jump_key")
+            
+        if self.player.states.is_attacking:
+            tutorial.set_finish(tutorial.attack_key)
+            self.tutorial_state.add("attack_key")
     
     def _win_on_event(self, e: ft.WindowEvent):
         match e.type:
@@ -529,12 +678,6 @@ class GameManager:
                 self._debug_msg("Disabling dev console... 2/2")
         self.page.update()
         self._update_ui_focus()
-    
-    def _pm_ups_toggle(self, enabled: bool) -> None:
-        self.perf_monitor.toggle_ups(enabled)
-    
-    def _pm_lag_toggle(self, enabled: bool) -> None:
-        self.perf_monitor.toggle_latency(enabled)
     
     def _perf_monitor_toggle(self, enabled: bool) -> None:
         if enabled:
@@ -558,27 +701,27 @@ class GameManager:
         if self.console in self.page.overlay and self.console.visible:
             self._set_interactivity()
             return
-
+        
         # 2. Check Settings (Can be opened from Main Menu OR Pause Menu)
         if self.settings_menu.visible:
             self._set_interactivity(settings=True)
             return
-
+        
         # 3. Check Pause Menu (In-Game Overlay)
         if self.pause_menu.visible:
             self._set_interactivity(pause=True)
             return
-
+        
         # 4. Check Main Menu (Start Screen)
         if self.main_menu in self.stage.controls and self.main_menu.visible:
             self._set_interactivity(main_menu=True)
             return
-
+        
         # 5. Game Layer (Lowest Priority - only active if nothing else is)
         if self.is_game_running and self.game_layer.visible:
             self._set_interactivity(game_hud=True)
             return
-
+        
     def _set_interactivity(
         self,
         settings: bool = False,
@@ -629,7 +772,7 @@ class GameManager:
         try_update(self.game_layer)
         await self._await_for_dur(self.game_layer)
         
-        self.audio_manager.play_music(music.loops.sketchbook.abstraction_2024_03_20_02)
+        audio_manager.play_music(music.loops.sketchbook.abstraction_2024_03_20_02)
         self.is_game_running = True
         self.start_tasks()
         self._update_ui_focus()
@@ -701,7 +844,7 @@ entity_stack: {len(self.entity_stack.controls)}
         self.main_menu.visible = True
         try_update(self.main_menu)
         await asyncio.sleep(0.1)
-        self.audio_manager.play_music(music.loops.sketchbook.abstraction_2023_11_29)
+        audio_manager.play_music(music.loops.sketchbook.abstraction_2023_11_29)
         self.main_menu.opacity = 1
         try_update(self.main_menu)
         await self._await_for_dur(self.main_menu)
@@ -801,22 +944,20 @@ class EntitySelectorArg(ArgType):
         return value
 
 class EnemyTypeArg(ArgType):
-    """
-    Strictly selects available EnemyTypes (i.e.; 'goblin').
-    """
+    """Strictly selects available EnemyTypes (i.e.; 'goblin')."""
     def get_suggestions(self, current_input: str) -> list[str]:
         return [
             e.name.lower() 
             for e in EnemyType 
             if e.name.lower().startswith(current_input.lower())
         ]
-
+        
     def parse(self, value: str) -> str:
         # Validate that the input is actually a valid enum
         if not any(e.name.lower() == value.lower() for e in EnemyType):
             raise ValueError(f"'{value}' is not a valid Entity Type.")
         return value
-
+    
 # * === MIXINS ===
 class GameManagerMixin:
     """Mixin to bridge GameManager data into Entities."""
@@ -836,7 +977,7 @@ class GameManagerMixin:
         """
         return {
             "page": self.game_manager.page,
-            "audio_manager": self.game_manager.audio_manager,
+            "audio_manager": audio_manager,
             "entity_list": self.game_manager.entity_list,
             "debug": debug
         }

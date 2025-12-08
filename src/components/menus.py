@@ -6,7 +6,7 @@ from setup import FontStyles
 from components.buttons import SimpleButton
 from components.volume_controls import VolumeControl, DirectionalVolumeToggle
 from components.window_controls import FullscreenToggle
-from components.game_controls import ConsoleToggle, PerfMonitorToggles
+from components.game_controls import ConsoleToggle, PerfMonitorToggles, BackgroundToggles
 from backgrounds import add_infinite_layer
 from bg_loops import light_mv_loop
 from utilities.components import try_update
@@ -152,7 +152,7 @@ class SettingsMenu(Menu):
         
         volume_column = ft.Column(
             controls=[
-                ft.Text("Volume", size=40, font_family=FontStyles.LIEF, color=ft.Colors.WHITE_54),
+                self._section_text("Volume"),
                 self._new_volume_control("music", "Music Volume"),
                 self._new_volume_control("sfx", "SFX Volume"),
                 DirectionalVolumeToggle(self.audio_manager),
@@ -168,7 +168,7 @@ class SettingsMenu(Menu):
         self.fullscreen_toggle = FullscreenToggle()
         self.window_column = ft.Column(
             controls=[
-                ft.Text("Window", size=40, font_family=FontStyles.LIEF, color=ft.Colors.WHITE_54),
+                self._section_text("Window"),
                 self.fullscreen_toggle,
             ],
             alignment=ft.MainAxisAlignment.CENTER,
@@ -183,7 +183,7 @@ class SettingsMenu(Menu):
         self.perf_toggles = PerfMonitorToggles()
         game_column = ft.Column(
             controls=[
-                ft.Text("Game", size=40, font_family=FontStyles.LIEF, color=ft.Colors.WHITE_54),
+                self._section_text("Game"),
                 self.console_switch,
                 self.perf_toggles
             ],
@@ -195,6 +195,20 @@ class SettingsMenu(Menu):
             alignment=ft.Alignment.CENTER
         )
         
+        # self.bg_toggles = BackgroundToggles()
+        # bg_settings_column = ft.Column(
+        #     controls=[
+        #         self._section_text("Backgrounds"),
+        #         self.bg_toggles
+        #     ],
+        #     alignment=ft.MainAxisAlignment.CENTER,
+        #     horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        # )
+        # bg_settings = ft.Container(
+        #     content=bg_settings_column, bgcolor=ft.Colors.GREY_900,
+        #     alignment=ft.Alignment.CENTER
+        # )
+        
         self.settings_container = ft.Container(
             padding=8, offset=ft.Offset(0.0, -0.1),
             content=ft.Container(
@@ -202,7 +216,8 @@ class SettingsMenu(Menu):
                     controls=[
                         volume_settings,
                         window_settings,
-                        game_settings
+                        game_settings,
+                        # bg_settings
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -241,3 +256,9 @@ class SettingsMenu(Menu):
         if e.type == ft.WindowEventType.RESIZED:
             self.settings_container.height = self.page.height / 2
             try_update(self.settings_container)
+    
+    def _section_text(self, text: str) -> None:
+        return ft.Text(
+            value=text, size=40, font_family=FontStyles.LIEF,
+            color=ft.Colors.WHITE_54
+        )

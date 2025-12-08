@@ -20,6 +20,7 @@ It's a somewhat difficult side-scroller genre of a game (which is basically just
 | **Various Entity States** | Entities such as the player and the goblin, can die, move, attack, etc. | v0.3.X |
 | **Somewhat Intelligent "AI"** | Enemies such as the goblin are now a bit smarter, attempting to predict the player's moves. | v0.4.X |
 | **Menus** | There's a main menu, settings menu, and a pause menu now. | v0.4.X |
+| **Commands System** | There's an entire system for handling dev stuff now! | v0.5.X |
 
 ## Controls
 
@@ -42,5 +43,11 @@ The player can be controlled with the following mapped keys:
 
 | Key | Action |
 | --- | ------ |
-| **Escape** | Pauses the game. |
+| **Escape** | Pauses the game, or closes a menu. |
 | **F11** | Toggles the borderless fullscreen mode. |
+
+## Known Issues
+
+| No. | Issue | Description |
+| --- | ----- | ----------- |
+| 1 | Audio blocks game updates when playing multiple sounds in a very short time span. | This issue always occurs, such as if you hover over the UI buttons rapidly, it will seem like the audio gets queued, and blocks UI interaction. |

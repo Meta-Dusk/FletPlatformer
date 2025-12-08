@@ -1,6 +1,6 @@
 [project]
 name = "fushi-the-beckoning"
-version = "0.5.0"
+version = "0.5.8"
 description = "A Platformer Game Made with Flet"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -8,9 +8,9 @@ authors = [{ name = "MetaDusk", email = "andredcxxv@gmail.com" }]
 license = { text = "AGPL-3.0" }
 
 dependencies = [
-    "flet==0.70.0.dev6907",
-    "flet-cli==0.70.0.dev6907",
-    "flet-desktop==0.70.0.dev6907",
+    "flet==0.70.0.dev6957",
+    "flet-cli==0.70.0.dev6957",
+    "flet-desktop==0.70.0.dev6957",
     "pygame>=2.6.1",
     "pynput>=1.8.1",
 ]

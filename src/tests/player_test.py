@@ -10,13 +10,11 @@ async def test(page: ft.Page):
     """Test for the `Player` class; a simple implementation"""
     await test_init(page)
     
-    audio_manager = global_audio_manager
-    audio_manager.initialize()
     km_start()
     
-    async def player_dmg(_): await player.take_damage(5)
+    async def player_dmg(_): await player.take_damage(5, is_crit=True)
     
-    player = Player(page, audio_manager, held_keys, debug=True)
+    player = Player(page, global_audio_manager, held_keys, debug=True)
     player._atk_hb_show = True
     player.toggle_show_border(True)
     take_dmg_btn = ft.Button(content="Take Damage", on_click=player_dmg, left=60, top=20)

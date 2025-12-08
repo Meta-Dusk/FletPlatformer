@@ -14,10 +14,9 @@ async def test(page: ft.Page):
     await test_init(page)
     
     audio_manager = global_audio_manager
-    audio_manager.initialize()
     
     async def on_death(_): await enemy.death()
-    async def on_damage(_): await enemy.take_damage(5)
+    
     def on_change_mv(e: ft.ControlEvent):
         if e.data:
             dummy_player._start_movement_loop()
@@ -26,6 +25,7 @@ async def test(page: ft.Page):
             attempt_cancel(dummy_player._movement_loop_task)
             dummy_player.stack.animate_position.duration = 100
             dummy_player._safe_update(dummy_player.stack)
+            
     def on_change_death(e: ft.ControlEvent):
         dummy_player.states.dead = e.data
         if e.data:
@@ -40,7 +40,7 @@ async def test(page: ft.Page):
     
     attack_btn = ft.Button("Attack", on_click=lambda _: enemy.attack())
     death_btn = ft.Button("Death", on_click=on_death)
-    damage_btn = ft.Button("Take Damage", on_click=on_damage)
+    damage_btn = ft.Button("Take Damage", on_click=lambda _: enemy.take_damage(5, is_crit=True))
     toggle_player_btn = ft.Switch(adaptive=True, value=False, label="Toggle Player Death", on_change=on_change_death)
     toggle_player_mv_loop = ft.Switch(adaptive=True, value=True, label="Toggle Player Movement", on_change=on_change_mv)
     buttons_row = ft.Row(

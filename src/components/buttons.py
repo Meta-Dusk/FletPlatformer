@@ -21,7 +21,11 @@ class SimpleButton(ft.Button):
         on_focus_sfx: Path = sfx.ui.buttons.hover_1,
         width: ft.Number = None,
         height: ft.Number = None,
-        font_family: FontStyles = FontStyles.ADAPA
+        font_family: FontStyles = FontStyles.ADAPA,
+        left: ft.Number = None,
+        right: ft.Number = None,
+        top: ft.Number = None,
+        bottom: ft.Number = None,
     ):
         self.user_on_click = on_click
         self.user_on_hover = on_hover
@@ -32,7 +36,7 @@ class SimpleButton(ft.Button):
         super().__init__(
             content=content,
             on_click=self._on_click,
-            on_hover=self._on_hover,
+            # on_hover=self._on_hover,
             on_focus=self._on_focus,
             width=width, height=height,
             style=ft.ButtonStyle(
@@ -40,7 +44,8 @@ class SimpleButton(ft.Button):
                     side=ft.BorderSide(color=ft.Colors.WHITE),
                     radius=0
                 )
-            )
+            ),
+            left=left, right=right, top=top, bottom=bottom
         )
         if isinstance(self.content, ft.Text):
             self.content.font_family = font_family

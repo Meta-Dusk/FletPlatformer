@@ -134,7 +134,7 @@ class Enemy(Entity):
             # ? Chase Target (if out of range)
             if not self._is_target_in_range():
                 if self.target and not self.target.states.dead:
-                    self._debug_msg(f"Chasing {self.target.name}", end=" -> ")
+                    self._debug_msg(f"Chasing {self.target.name}", end=" -> ", debug_handler=self._debug_logs.movement)
                     if self._get_center_point(self.target) > self._get_center_point(self):
                         if self.target.states.dealing_damage:
                             dx = -self.stats.movement_speed
@@ -148,7 +148,7 @@ class Enemy(Entity):
                 
             else: # ? Attack Target (if in range)
                 if self.target and not self.target.states.dead:
-                    self._debug_msg("Attacking target")
+                    self._debug_msg("Attacking target", debug_handler=self._debug_logs.attack)
                     
                     # Predict target if target is jumping
                     if self.target.states.jumped:
@@ -184,8 +184,9 @@ class Enemy(Entity):
     async def _attack_anim(self):
         """Handles the enemy's attack animations with combos."""
         prefix = f"attack-{self.states.attack_phase}"
+        mod_atk_delay = self.stats.attack_frame_delay * 1.5
         for i in range(8):
-            await asyncio.sleep(0.15 if self.states.stun_immune else 0.1)
+            await asyncio.sleep(mod_atk_delay if self.states.stun_immune else self.stats.attack_frame_delay)
             if self.states.attack_phase == 1:
                 if i == 2 and random.randint(1, 2) > 1:
                     self._apply_tint(ft.Colors.YELLOW)
@@ -244,15 +245,17 @@ class Enemy(Entity):
         """Removes `self` from `stage` and `_entity_list`."""
         entity_stack = self._get_parent()
         
-        self._debug_msg(f"Attempting to remove self from entity_stack: {len(entity_stack.controls)} -> ", end="")
+        msg_1 = "Attempting to remove self from entity_stack:"
+        self._debug_msg(f"{msg_1} {len(entity_stack.controls)} -> ", end="", debug_handler=self._debug_logs.cleanup)
         if self.stack in entity_stack.controls:
             entity_stack.controls.remove(self.stack)
             try_update(entity_stack)
-        self._debug_msg(len(entity_stack.controls), include_handler=False)
+        self._debug_msg(len(entity_stack.controls), include_handler=False, debug_handler=self._debug_logs.cleanup)
         
-        self._debug_msg(f"Attempting to remove self from _entity_list: {len(self._entity_list)} -> ", end="")
+        msg_2 = "Attempting to remove self from _entity_list:"
+        self._debug_msg(f"{msg_2} {len(self._entity_list)} -> ", end="", debug_handler=self._debug_logs.cleanup)
         if self._entity_list is not None and self in self._entity_list: self._entity_list.remove(self)
-        self._debug_msg(len(self._entity_list), include_handler=False)
+        self._debug_msg(len(self._entity_list), include_handler=False, debug_handler=self._debug_logs.cleanup)
     
     # * === CALLABLE PLAYER ACTIONS/EVENTS ===
     def __call__(self, *, start_loops: bool = True, center_spawn: bool = True):
@@ -276,7 +279,7 @@ class Enemy(Entity):
         # ? Death states and stats
         self._reset_states(EntityStates(dead=True))
         self._reset_stats(self._init_stats)
-        self._debug_msg(f"{self.name} has died!")
+        self._debug_msg(f"{self.name} has died!", debug_handler=self._debug_logs.death)
         self._update_health_bar()
         self._apply_tint(ft.Colors.RED)
         
@@ -304,14 +307,14 @@ class Enemy(Entity):
         if not super().attack(): return
         self.states.attack_phase += 1
         if self.states.attack_phase > 2: self.states.attack_phase = 1
-        self._debug_msg(f"Attacking! Phase: {self.states.attack_phase}")
+        self._debug_msg(f"Attacking! Phase: {self.states.attack_phase}", debug_handler=self._debug_logs.attack)
         self.states.is_attacking = True
         self.states.dealing_damage = False
         self._attack_task = self.page.run_task(self._attack_anim)
     
-    async def take_damage(self, damage_amount: float):
+    def take_damage(self, damage_amount: float, is_crit: bool = False):
         """Decrease enemy's health with logic. Returns `True` if entity has died."""
-        if not await super().take_damage(damage_amount): return False
+        if not super().take_damage(damage_amount, is_crit): return False
         self.states.is_moving = False
         
         if self.states.is_attacking:

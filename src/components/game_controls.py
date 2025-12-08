@@ -18,12 +18,12 @@ class PerfMonitorToggles(ft.Container):
         self.ups_switch = TextAndToggle(
             label_text="Show UPS",
             spacer_width=185,
-            toggle_value=True
+            switch_value=True
         )
         self.lag_switch = TextAndToggle(
             label_text="Show Latency",
             spacer_width=130,
-            toggle_value=True
+            switch_value=True
         )
         
         main_column = ft.Column(
@@ -38,4 +38,30 @@ class PerfMonitorToggles(ft.Container):
         super().__init__(
             content=main_column, alignment=ft.Alignment.CENTER,
             padding=4, expand=True
+        )
+        
+class BackgroundToggles(ft.Container):
+    def __init__(self):
+        self.parallax_bg_switch = TextAndToggle(
+            label_text="Allow Parallax Movement",
+            spacer_width=10,
+            switch_value=True
+        )
+        self.animated_bg_switch = TextAndToggle(
+            label_text="Allow Animated Layers",
+            spacer_width=35,
+            switch_value=True
+        )
+        
+        main_column = ft.Column(
+            controls=[
+                self.parallax_bg_switch,
+                self.animated_bg_switch
+            ],
+            alignment=ft.Alignment.CENTER
+        )
+        
+        super().__init__(
+            content=main_column, alignment=ft.Alignment.CENTER,
+            padding=4, expand=True, disabled=True
         )

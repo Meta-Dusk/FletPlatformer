@@ -36,7 +36,7 @@ class CustomSwitch(ft.Container):
             ),
             width=width, height=height,
             on_click=self._on_click,
-            on_hover=self._on_hover,
+            # on_hover=self._on_hover,
             on_focus=self._on_focus,
         )
         
@@ -90,13 +90,20 @@ class TextAndToggle(ft.Container):
         self,
         label_text: str = "",
         label_offset: ft.Offset = ft.Offset(0.0, 0.0),
+        label_size: ft.Number = 30,
         spacer_width: int = 60,
-        toggle_value: bool = False
+        switch_value: bool = False,
+        left: ft.Number = None,
+        right: ft.Number = None,
+        top: ft.Number = None,
+        bottom: ft.Number = None,
+        width: ft.Number = 100,
+        height: ft.Number = 50
     ):
-        self.toggle = CustomSwitch(value=toggle_value)
+        self.switch = CustomSwitch(value=switch_value, width=width, height=height)
         label = ft.Container(
             content=ft.Text(
-                value=label_text, size=30,
+                value=label_text, size=label_size,
                 font_family=FontStyles.ADAPA, color=ft.Colors.WHITE_70
             ),
             alignment=ft.Alignment.CENTER, offset=label_offset
@@ -105,7 +112,7 @@ class TextAndToggle(ft.Container):
         
         main_container = ft.Container(
             content=ft.Row(
-                controls=[label, spacer, self.toggle], expand=True,
+                controls=[label, spacer, self.switch], expand=True,
                 alignment=ft.MainAxisAlignment.CENTER,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER
             ),
@@ -114,5 +121,5 @@ class TextAndToggle(ft.Container):
         
         super().__init__(
             content=main_container, alignment=ft.Alignment.CENTER,
-            padding=4, expand=True
+            padding=4, expand=True, left=left, right=right, top=top, bottom=bottom
         )
