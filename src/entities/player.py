@@ -127,16 +127,14 @@ class Player(Entity):
                         r2_left=e_hb_left, r2_bottom=e_hb_bottom, r2_w=atk_hb.width, r2_h=atk_hb.height # Enemy Weapon
                     ):
                         self._debug_msg(f"Hit by {entity.name}!", debug_handler=self._debug_logs.damage)
-                        dmg, is_crit = self._calculate_damage()
-                        await self.take_damage(dmg, is_crit)
+                        await self.take_damage(*self._calculate_damage())
                         self._knockback_self(entity)
                         return
     
     def _handle_hit_logic(self, target_enemy: Entity):
         """Applies damage to a specific enemy and updates game stats if they die."""
         # Apply Damage
-        dmg, is_crit = self._calculate_damage()
-        did_die = target_enemy.take_damage(dmg, is_crit)
+        did_die = target_enemy.take_damage(*self._calculate_damage())
         
         # Check Result
         if not did_die: return

@@ -412,10 +412,12 @@ class Entity(DamageHitbox):
         Returns:
             tuple: (`damage_amount`, `is_crit`)
         """
+        is_crit: bool = False
+        dmg: float = self.stats.attack_damage
         if self.stats.crit_chance >= random.randint(1, 100):
             dmg = self.stats.attack_damage * self.stats.crit_damage
-            return dmg, True
-        else: return self.stats.attack_damage, False
+            is_crit = True
+        return dmg, is_crit
     
     # * === CALLABLE ACTIONS/EVENTS ===
     def __repr__(self) -> str:
