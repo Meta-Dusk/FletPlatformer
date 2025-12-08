@@ -45,9 +45,10 @@ The player can be controlled with the following mapped keys:
 | --- | ------ |
 | **Escape** | Pauses the game, or closes a menu. |
 | **F11** | Toggles the borderless fullscreen mode. |
+| **/** | Toggles the developer console (you must enable it first in the settings menu). |
 
 ## Known Issues
 
-| No. | Issue | Description |
-| --- | ----- | ----------- |
-| 1 | Audio blocks game updates when playing multiple sounds in a very short time span. | This issue always occurs, such as if you hover over the UI buttons rapidly, it will seem like the audio gets queued, and blocks UI interaction. |
+| No. | Issue | Description | Solution |
+| --- | ----- | ----------- | -------- |
+| 1 | Audio blocks game updates when playing multiple sounds in a very short time span. | This issue always occurs, such as if you hover over the UI buttons rapidly, it will seem like the audio gets queued, and blocks UI interaction. | Applied a very simple solution as of `v0.5.8` and above that simply removes this `on_hover` callback. |
