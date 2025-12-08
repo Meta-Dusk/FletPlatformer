@@ -48,7 +48,7 @@ class EntityStats:
     max_stamina: float = 20.0
     stamina_regen: float = 0.25
     st_regen_tick: float = 0.1
-    st_regen_delay: float = 4.0
+    st_regen_delay: float = 3.0
     st_usage_tick: float = 0.1
     
     # Movement
@@ -67,7 +67,21 @@ class EntityStats:
     # Damage
     attack_damage: float = 5.0
     attack_knockback: int = 20
+    attack_frame_delay: float = 0.1
     
     # Resistance
     knockback_resistance: float = 1.0
     armor: int = 0
+    
+@dataclass
+class DebugLogs:
+    movement: bool = False
+    dash: bool = False
+    attack: bool = False
+    damage: bool = False
+    health: bool = False
+    death: bool = False
+    revive: bool = False
+    stamina: bool = False
+    setup: bool = False
+    cleanup: bool = False

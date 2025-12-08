@@ -10,7 +10,7 @@ from utilities.components import try_update
 from utilities.tasks import attempt_cancel
 from components.popup_text import HealthText
 from entities.features.hitboxes import DamageHitbox
-from entities.features.entity_data import Factions, EntityStats, EntityStates, ARMOR_SCALING_CONSTANT
+from entities.features.entity_data import Factions, EntityStats, EntityStates, ARMOR_SCALING_CONSTANT, DebugLogs
 
 
 class Entity(DamageHitbox):
@@ -42,6 +42,7 @@ class Entity(DamageHitbox):
         
         # References
         self._spr_path: Path = pathify(sprite.src)
+        self._debug_logs = DebugLogs()
         
         # Components
         self.health_bar: ft.ProgressBar = None
@@ -68,11 +69,18 @@ class Entity(DamageHitbox):
             try_update(self.stack)
     
     # * === FUNCTIONAL WRAPPERS ===
-    def _debug_msg(self, msg: str, *, end: str = None, include_handler: bool = True) -> None:
+    def _debug_msg(
+        self, msg: str, *, end: str = None, include_handler: bool = True,
+        debug_handler: bool = True
+    ) -> None:
         """A simple debug message for simple logging."""
         if not self.debug: return
-        if include_handler: print(f"[{self._handler_str}] {msg}", end=end)
-        else: print(msg, end=end)
+        if include_handler:
+            if debug_handler:
+                print(f"[{self._handler_str}] {msg}", end=end)
+        else:
+            if debug_handler:
+                print(msg, end=end)
     
     def _play_sfx(self, sfx: Path, volume: float = None) -> None:
         """Play an SFX with support for directional playback."""
@@ -110,7 +118,7 @@ class Entity(DamageHitbox):
     
     def _start_st_loop(self) -> None:
         """Starts the stamina regen loop and stores it in a variable."""
-        self._debug_msg("Starting Movement Loop!")
+        self._debug_msg("Starting Stamina Loop!", debug_handler=self._debug_logs.stamina)
         self._stamina_loop_task = self.page.run_task(self._stamina_regen_loop)
     
     async def _health_regen_loop(self) -> None:
@@ -132,7 +140,7 @@ class Entity(DamageHitbox):
     
     def _start_hp_loop(self) -> None:
         """Starts the health regen loop and stores it in a variable."""
-        self._debug_msg("Starting Movement Loop!")
+        self._debug_msg("Starting Health Loop!", debug_handler=self._debug_logs.health)
         self._health_loop_task = self.page.run_task(self._health_regen_loop)
     
     # * === MOVEMENT LOOP ===
@@ -149,7 +157,7 @@ class Entity(DamageHitbox):
             secondary_callback(Callable): This function is called if the facing direction has changed.
         """
         if dx != 0 or dy != 0:
-            self._debug_msg(f"Moving with: ({dx}, {dy})")
+            self._debug_msg(f"Moving with: ({dx}, {dy})", debug_handler=self._debug_logs.movement)
             self.states.is_moving = True
             self.stack.left += dx
             self.stack.bottom += dy
@@ -167,7 +175,7 @@ class Entity(DamageHitbox):
             
             if rand_m == 0 or random.randint(1, 10) > 8:
                 idle_time = round(random.uniform(1.0, 2.0), 3)
-                self._debug_msg(f"Idling for: {idle_time}s")
+                self._debug_msg(f"Idling for: {idle_time}s", debug_handler=self._debug_logs.movement)
                 await asyncio.sleep(idle_time)
                 continue
             
@@ -181,7 +189,7 @@ class Entity(DamageHitbox):
     
     def _start_movement_loop(self) -> None:
         """Starts the movement loop and stores it in a variable."""
-        self._debug_msg("Starting Movement Loop!")
+        self._debug_msg("Starting Movement Loop!", debug_handler=self._debug_logs.movement)
         self._movement_loop_task = self.page.run_task(self._movement_loop)
     
     # * === COMPONENT TOGGLES ===
@@ -246,9 +254,9 @@ class Entity(DamageHitbox):
     
     def _make_hud(self) -> None:
         if self.nametag is None:
-            self._debug_msg("Missing nametag!")
+            self._debug_msg("Missing nametag!", debug_handler=self._debug_logs.setup)
         if self.health_bar is None or self._health_bar_stack is None:
-            self._debug_msg("Missing healthbar!")
+            self._debug_msg("Missing healthbar!", debug_handler=self._debug_logs.setup)
         
         self.hud = ft.Container(
             ft.Column(
@@ -339,12 +347,12 @@ class Entity(DamageHitbox):
         _parent = self._spr_path.parent
         _suffix = self._spr_path.suffix
         spr_path = _parent / f"{state}_{index}{_suffix}"
-        if debug: self._debug_msg(f"Generated spr_path: {spr_path}")
+        if debug: self._debug_msg(f"Generated spr_path: {spr_path}", debug_handler=self._debug_logs.setup)
         return spr_path.as_posix()
     
     def _make_stack(self) -> ft.Stack:
         """Returns a stack positioned at the bottom-center of the screen."""
-        self._debug_msg(f"Created Entity of faction: {self.faction}")
+        self._debug_msg(f"Created Entity of faction: {self.faction}", debug_handler=self._debug_logs.setup)
         return ft.Stack(
             controls=[ft.Container(self.sprite, data=self.faction)],
             left=(self.page.width / 2) - (self.sprite.width / 2), bottom=self.ground_level,
@@ -426,13 +434,13 @@ class Entity(DamageHitbox):
         Returns `False` if action is interrupted.
         """
         if self.states.is_attacking:
-            self._debug_msg(f"{self.name} is already attacking")
+            self._debug_msg(f"{self.name} is already attacking", debug_handler=self._debug_logs.attack)
             return False
         elif self.states.dead:
-            self._debug_msg(f"{self.name} cannot attack while dead")
+            self._debug_msg(f"{self.name} cannot attack while dead", debug_handler=self._debug_logs.attack)
             return False
         elif self.states.taking_damage:
-            self._debug_msg(f"{self.name} cannot attack while being damaged")
+            self._debug_msg(f"{self.name} cannot attack while being damaged", debug_handler=self._debug_logs.attack)
             return False
         return True
         # ? Implement the rest of the logic here
@@ -444,13 +452,13 @@ class Entity(DamageHitbox):
         Returns `True` if damage was successfully applied.
         """
         if self.states.dead:
-            self._debug_msg(f"{self.name} is already dead")
+            self._debug_msg(f"{self.name} is already dead", debug_handler=self._debug_logs.damage)
             return False
         elif self.states.taking_damage:
-            self._debug_msg(f"{self.name} cannot be damaged again yet")
+            self._debug_msg(f"{self.name} cannot be damaged again yet", debug_handler=self._debug_logs.damage)
             return False
         elif self.states.invincible:
-            self._debug_msg(f"{self.name} cannot be damaged during i-frames")
+            self._debug_msg(f"{self.name} cannot be damaged during i-frames", debug_handler=self._debug_logs.damage)
             return False
         
         damage_reduction: float = round(ARMOR_SCALING_CONSTANT / (ARMOR_SCALING_CONSTANT + self.stats.armor), 1)
@@ -459,7 +467,8 @@ class Entity(DamageHitbox):
         self.states.stunned = True
         attempt_cancel(self._health_loop_task)
         self.stats.health -= _damage_amount
-        self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health} (-{_damage_amount} [{damage_reduction*100}% of {damage_amount}])")
+        damage_log = f"(-{_damage_amount} [{damage_reduction*100}% of {damage_amount}])"
+        self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health} {damage_log}", debug_handler=self._debug_logs.damage)
         self.stack.controls.append(
             HealthText(
                 left=(self.stack.width / 2) + 35, top=-6,
@@ -475,7 +484,7 @@ class Entity(DamageHitbox):
         Returns `False` if action is interrupted.
         """
         if self.states.dead:
-            self._debug_msg(f"{self.name} is already dead")
+            self._debug_msg(f"{self.name} is already dead", debug_handler=self._debug_logs.death)
             return False
         return True
         # ? Implement the rest of the logic here
@@ -486,10 +495,10 @@ class Entity(DamageHitbox):
         Returns `False` if action is interrupted.
         """
         if not self.states.dead:
-            self._debug_msg(f"{self.name} is not dead")
+            self._debug_msg(f"{self.name} is not dead", debug_handler=self._debug_logs.revive)
             return False
         elif not self.states.revivable:
-            self._debug_msg(f"{self.name} is not yet ready to be revived")
+            self._debug_msg(f"{self.name} is not yet ready to be revived", debug_handler=self._debug_logs.revive)
             return False
         return True
         # ? Implement the rest of the logic here
@@ -501,17 +510,17 @@ class Entity(DamageHitbox):
         Returns `True` if heal was successfully applied.
         """
         if self.states.dead:
-            self._debug_msg(f"{self.name} is already dead")
+            self._debug_msg(f"{self.name} is already dead", debug_handler=self._debug_logs.health)
             return False
         
         if self.stats.health >= self.stats.max_health and not overheal:
-            self._debug_msg(f"{self.name} health is already at or above max")
+            self._debug_msg(f"{self.name} health is already at or above max", debug_handler=self._debug_logs.health)
             return False
         
         if not overheal and (self.stats.health + heal_amount) > self.stats.max_health:
             self.stats.health = self.stats.max_health
         self.stats.health += heal_amount
-        self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(+{heal_amount})")
+        self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(+{heal_amount})", debug_handler=self._debug_logs.health)
         self.stack.controls.append(
             HealthText(
                 left=(self.stack.width / 2) + 35, top=18,

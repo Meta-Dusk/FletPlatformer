@@ -7,6 +7,7 @@ from audio.audio_manager import global_audio_manager
 from audio.music_data import MusicLibrary
 from components.menus import MainMenu, PauseMenu, SettingsMenu
 from components.tutorials import ControlsTutorial
+from components.buttons import SimpleButton
 from utilities.keyboard_manager import held_keys, start as km_start
 from utilities.tasks import attempt_cancel
 from entities.player import Player
@@ -45,8 +46,8 @@ class GameManager:
         
         # World Configuration
         self.ground_level: int = 30
-        self.kill_count: int = 0
-        self.death_count: int = 0
+        self._kill_count: int = 0
+        self._death_count: int = 0
         self.is_game_running: bool = False
         self.show_borders: bool = False
         self.finished_tutorial: bool = False
@@ -64,6 +65,39 @@ class GameManager:
             visible=False
         )
         self.settings_menu = None
+    
+    # * === GAME PROPERTIES ===
+    @property
+    def kill_count(self) -> int:
+        """Returns the current kills of the player."""
+        return self._kill_count
+    
+    @kill_count.setter
+    def kill_count(self, amount: int) -> None:
+        """
+        Increases the player's kill count by `amount` and
+        updates the associated UI control.
+        """
+        self._kill_count = amount
+        if hasattr(self, "kill_count_text"):
+            self.kill_count_text.spans[1].text = self._kill_count
+            try_update(self.kill_count_text)
+    
+    @property
+    def death_count(self) -> int:
+        """Returns the current deaths of the player."""
+        return self._death_count
+    
+    @death_count.setter
+    def death_count(self, amount: int) -> None:
+        """
+        Increases the player's death count by `amount` and
+        updates the associated UI control.
+        """
+        self._death_count = amount
+        if hasattr(self, "death_count_text"):
+            self.death_count_text.spans[1].text = self._death_count
+            try_update(self.death_count_text)
     
     # * === MENUS ===
     def _make_main_menu(self):
@@ -503,8 +537,29 @@ class GameManager:
         
         # Buttons / HUD
         self.controls_tutorial = ControlsTutorial()
+        stats_btn = SimpleButton("Show Stats", right=200, top=10)
         if not self.finished_tutorial:
-            self.ui_stack.controls.append(self.controls_tutorial)
+            self.ui_stack.controls.extend([self.controls_tutorial, stats_btn])
+        
+        self.kill_count_text = ft.Text(
+            spans=[
+                ft.TextSpan("Kills: "),
+                ft.TextSpan(self.kill_count)
+            ], size=20, text_align=ft.TextAlign.START
+        )
+        self.death_count_text = ft.Text(
+            spans=[
+                ft.TextSpan("Deaths: "),
+                ft.TextSpan(self.death_count)
+            ], size=20, text_align=ft.TextAlign.START
+        )
+        self.stats_view = ft.Column(
+            controls=[self.kill_count_text, self.death_count_text],
+            spacing=4,
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.START,
+            left=10, top=10
+        )
         
         # Composition
         self.game_stage.controls.extend([
@@ -554,6 +609,7 @@ class GameManager:
                 self.finished_tutorial = True
                 self._debug_msg("Finished tutorial!")
                 self.ui_stack.controls.remove(self.controls_tutorial)
+                self.ui_stack.controls.append(self.stats_view)
                 self.ui_stack.update()
                 return
         tutorial = self.controls_tutorial

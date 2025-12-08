@@ -126,7 +126,7 @@ class Player(Entity):
                         r1_left=p_left, r1_bottom=p_bottom, r1_w=p_w, r1_h=p_h, # Player Body
                         r2_left=e_hb_left, r2_bottom=e_hb_bottom, r2_w=atk_hb.width, r2_h=atk_hb.height # Enemy Weapon
                     ):
-                        self._debug_msg(f"Hit by {entity.name}!")
+                        self._debug_msg(f"Hit by {entity.name}!", debug_handler=self._debug_logs.damage)
                         await self.take_damage(entity.stats.attack_damage)
                         self._knockback_self(entity)
                         return
@@ -164,7 +164,7 @@ class Player(Entity):
                 r1_left=w_left, r1_bottom=w_bottom, r1_w=active_hb.width, r1_h=active_hb.height, # Player Weapon
                 r2_left=e_left, r2_bottom=e_bottom, r2_w=e_w, r2_h=e_h # Enemy Body
             ):
-                self._debug_msg(f"Hit enemy: {enemy.name}")
+                self._debug_msg(f"Hit enemy: {enemy.name}", debug_handler=self._debug_logs.attack)
                 self._handle_hit_logic(enemy)
     
     # * === CUSTOM MOVEMENT LOOP ===
@@ -263,7 +263,7 @@ class Player(Entity):
         """Handles the player's attack animations with combos."""
         prefix = f"attack-{self.states.attack_phase}"
         for i in range(7):
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(self.stats.attack_frame_delay)
             if self.states.attack_phase == 1: # Upward slash
                 if i == 0: self._modify_self_hitbox(r_left=45, width=85)
                 if i == 2: # TODO: Optimize audio by combining into one SFX
@@ -323,10 +323,11 @@ class Player(Entity):
     
     # * === DASH COOLDOWN ===
     def _make_dash_cooldown(self):
+        _scale = 0.25
         dash_cooldown = ft.Image(
-            src="images/icons/gold_feather.png", filter_quality=ft.FilterQuality.NONE,
-            scale=2, fit=ft.BoxFit.COVER, color_blend_mode=ft.BlendMode.MODULATE,
-            right=-15, top=6
+            src="images/icons/dash.png", filter_quality=ft.FilterQuality.NONE,
+            scale=_scale, fit=ft.BoxFit.COVER, color_blend_mode=ft.BlendMode.MODULATE,
+            right=-40, top=-21, width=256 * _scale, height=256 * _scale
         )
         
         self._stamina_bar_stack.controls.append(dash_cooldown)
@@ -336,7 +337,7 @@ class Player(Entity):
     async def death(self) -> None:
         """Cancels all running tasks, and plays the death animation."""
         if not super().death(): return
-        self._debug_msg(f"{self.name} has died!")
+        self._debug_msg(f"{self.name} has died!", debug_handler=self._debug_logs.death)
         self._reset_states(EntityStates(dead=True))
         self._reset_stats(EntityStats(health=0))
         
@@ -358,7 +359,7 @@ class Player(Entity):
         elif self.stats.stamina <= 0: return
         elif (self.stats.stamina - self.stats.dash_st_cost) <= 0: return
         
-        self._debug_msg(f"Dashing to the {"left" if dx < 0 else "right"}!")
+        self._debug_msg(f"Dashing to the {"left" if dx < 0 else "right"}!", debug_handler=self._debug_logs.dash)
         self._has_dashed = True
         self.states.invincible = True
         self.stats.stamina -= self.stats.dash_st_cost
@@ -380,7 +381,7 @@ class Player(Entity):
             self.dash_indicator.color = None
             try_update(self.dash_indicator)
         self.page.run_task(timer)
-        self.dash_indicator.color = ft.Colors.BLACK
+        self.dash_indicator.color = ft.Colors.with_opacity(0.75, ft.Colors.GREY)
         try_update(self.dash_indicator)
     
     def jump(self):
@@ -402,7 +403,7 @@ class Player(Entity):
         if not super().attack(): return
         self.states.attack_phase += 1
         if self.states.attack_phase > 2 or self.states.jumped: self.states.attack_phase = 1
-        self._debug_msg(f"Attacking! Phase: {self.states.attack_phase}")
+        self._debug_msg(f"Attacking! Phase: {self.states.attack_phase}", debug_handler=self._debug_logs.attack)
         self.states.is_attacking = True
         self._attack_task = self.page.run_task(self._attack_anim)
         
@@ -434,7 +435,7 @@ class Player(Entity):
     async def revive(self):
         if not super().revive(): return
         self.states.revivable = False
-        self._debug_msg(f"Reviving: {self.name}")
+        self._debug_msg(f"Reviving: {self.name}", debug_handler=self._debug_logs.revive)
         await self._revive_anim()
         self._reset_states()
         self._reset_stats()
