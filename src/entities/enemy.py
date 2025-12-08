@@ -312,9 +312,9 @@ class Enemy(Entity):
         self.states.dealing_damage = False
         self._attack_task = self.page.run_task(self._attack_anim)
     
-    def take_damage(self, damage_amount: float):
+    def take_damage(self, damage_amount: float, is_crit: bool = False):
         """Decrease enemy's health with logic. Returns `True` if entity has died."""
-        if not super().take_damage(damage_amount): return False
+        if not super().take_damage(damage_amount, is_crit): return False
         self.states.is_moving = False
         
         if self.states.is_attacking:

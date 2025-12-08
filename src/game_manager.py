@@ -1,13 +1,14 @@
 import flet as ft
 import asyncio, random
 from typing import Literal
-from pynput import keyboard
 
 from audio.audio_manager import global_audio_manager
 from audio.music_data import MusicLibrary
 from components.menus import MainMenu, PauseMenu, SettingsMenu
 from components.tutorials import ControlsTutorial
 from components.buttons import SimpleButton
+from components.displays import StatsDisplay
+from components.custom_switches import TextAndToggle
 from utilities.keyboard_manager import held_keys, start as km_start
 from utilities.tasks import attempt_cancel
 from entities.player import Player
@@ -32,14 +33,15 @@ class GameManager:
         self.player: Player = None
         
         # UI Layers
-        self.background_stack = ft.Stack(expand=True)
-        self.foreground_stack = ft.Stack(expand=True)
-        self.entity_stack = ft.Stack(expand=True)
-        self.ui_stack = ft.Stack(expand=True)
-        self.stage = ft.Stack(expand=True)
-        self.game_stage = ft.Stack(expand=True)
+        self.background_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
+        self.foreground_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
+        self.entity_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
+        self.ui_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
+        self.stage = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
+        self.game_stage = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
         self.entity_list: list[Entity] = []
         self.console = DevConsole()
+        self.stats_panel: StatsDisplay = None
         
         # Task Management
         self.running_tasks: list[asyncio.Task] = []
@@ -526,6 +528,9 @@ class GameManager:
     # * === UI SETUP ===
     def _setup_game_ui(self):
         """Initializes Player, Stacks, and HUD."""
+        # Player
+        self.player = NewPlayer(self)
+        
         # Stacks/Layers
         def inf_layer(stack: ft.Stack, index: int):
             add_infinite_layer(stack=stack, index=index, page=self.page)
@@ -537,9 +542,13 @@ class GameManager:
         
         # Buttons / HUD
         self.controls_tutorial = ControlsTutorial()
-        stats_btn = SimpleButton("Show Stats", right=200, top=10)
-        if not self.finished_tutorial:
-            self.ui_stack.controls.extend([self.controls_tutorial, stats_btn])
+        stats_switch = TextAndToggle(
+            label_text="Show Stats", label_size=15, right=200, top=10,
+            spacer_width=0, width=50, height=25
+        )
+        stats_switch.switch.on_toggle = self._toggle_stats_panel
+        self.stats_panel = StatsDisplay(self.player.stats)
+        self.ui_stack.controls.extend([self.controls_tutorial, stats_switch, self.stats_panel])
         
         self.kill_count_text = ft.Text(
             spans=[
@@ -555,10 +564,9 @@ class GameManager:
         )
         self.stats_view = ft.Column(
             controls=[self.kill_count_text, self.death_count_text],
-            spacing=4,
+            spacing=4, left=10, top=10,
             alignment=ft.MainAxisAlignment.CENTER,
             horizontal_alignment=ft.CrossAxisAlignment.START,
-            left=10, top=10
         )
         
         # Composition
@@ -570,12 +578,14 @@ class GameManager:
         ])
         
         form = ft.WindowDragArea(self.game_stage, expand=True, maximizable=False)
-        
-        # Player
-        self.player = NewPlayer(self)
         return form
         
     # * === EVENT HANDLERS ===
+    def _toggle_stats_panel(self, enabled: bool):
+        self.stats_panel.visible = enabled
+        self.stats_panel._update_texts()
+        try_update(self.stats_panel)
+    
     async def _on_keyboard_event(self, e: ft.KeyboardEvent):
         # Window and Dev keybinds
         match e.key:
@@ -649,7 +659,6 @@ class GameManager:
         if self.player.states.is_attacking:
             tutorial.set_finish(tutorial.attack_key)
             self.tutorial_state.add("attack_key")
-            
     
     def _win_on_event(self, e: ft.WindowEvent):
         match e.type:

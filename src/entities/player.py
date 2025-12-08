@@ -29,7 +29,7 @@ class Player(Entity):
             sprite=sprite, name=self.name, page=page,
             audio_manager=audio_manager, faction=Factions.HUMAN,
             entity_list=entity_list, debug=debug,
-            stats=EntityStats(armor=100)
+            stats=EntityStats(armor=100, crit_chance=10)
         )
         self.held_keys = held_keys
         self._handler_str = "Player"
@@ -127,14 +127,16 @@ class Player(Entity):
                         r2_left=e_hb_left, r2_bottom=e_hb_bottom, r2_w=atk_hb.width, r2_h=atk_hb.height # Enemy Weapon
                     ):
                         self._debug_msg(f"Hit by {entity.name}!", debug_handler=self._debug_logs.damage)
-                        await self.take_damage(entity.stats.attack_damage)
+                        dmg, is_crit = self._calculate_damage()
+                        await self.take_damage(dmg, is_crit)
                         self._knockback_self(entity)
                         return
     
     def _handle_hit_logic(self, target_enemy: Entity):
         """Applies damage to a specific enemy and updates game stats if they die."""
         # Apply Damage
-        did_die = target_enemy.take_damage(self.stats.attack_damage)
+        dmg, is_crit = self._calculate_damage()
+        did_die = target_enemy.take_damage(dmg, is_crit)
         
         # Check Result
         if not did_die: return
@@ -407,9 +409,9 @@ class Player(Entity):
         self.states.is_attacking = True
         self._attack_task = self.page.run_task(self._attack_anim)
         
-    async def take_damage(self, damage_amount: float):
+    async def take_damage(self, damage_amount: float, is_crit: bool = False):
         """Decrease player's health with logic."""
-        if not super().take_damage(damage_amount): return
+        if not super().take_damage(damage_amount, is_crit): return
         
         if self.states.is_attacking:
             attempt_cancel(self._attack_task)

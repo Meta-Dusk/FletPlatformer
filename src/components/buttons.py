@@ -36,7 +36,7 @@ class SimpleButton(ft.Button):
         super().__init__(
             content=content,
             on_click=self._on_click,
-            on_hover=self._on_hover,
+            # on_hover=self._on_hover,
             on_focus=self._on_focus,
             width=width, height=height,
             style=ft.ButtonStyle(

@@ -12,7 +12,7 @@ async def test(page: ft.Page):
     
     km_start()
     
-    async def player_dmg(_): await player.take_damage(5)
+    async def player_dmg(_): await player.take_damage(5, is_crit=True)
     
     player = Player(page, global_audio_manager, held_keys, debug=True)
     player._atk_hb_show = True

@@ -73,7 +73,7 @@ class Entity(DamageHitbox):
         self, msg: str, *, end: str = None, include_handler: bool = True,
         debug_handler: bool = True
     ) -> None:
-        """A simple debug message for simple logging."""
+        """A simple debug message for logging."""
         if not self.debug: return
         if include_handler:
             if debug_handler:
@@ -405,6 +405,18 @@ class Entity(DamageHitbox):
         if new_stats is None: new_stats = EntityStats()
         self.stats = new_stats
     
+    def _calculate_damage(self) -> tuple[float, bool]:
+        """
+        Checks if damage should be a critical hit.
+        
+        Returns:
+            tuple: (`damage_amount`, `is_crit`)
+        """
+        if self.stats.crit_chance >= random.randint(1, 100):
+            dmg = self.stats.attack_damage * self.stats.crit_damage
+            return dmg, True
+        else: return self.stats.attack_damage, False
+    
     # * === CALLABLE ACTIONS/EVENTS ===
     def __repr__(self) -> str:
         # type(self).__name__ dynamically grabs "Enemy", "Player", etc.
@@ -445,7 +457,7 @@ class Entity(DamageHitbox):
         return True
         # ? Implement the rest of the logic here
     
-    def take_damage(self, damage_amount: float) -> bool:
+    def take_damage(self, damage_amount: float, is_crit: bool = False) -> bool:
         """
         Base implementation for taking damage.
         Handles: Checks, Health Subtraction, and Safety Reset.
@@ -471,10 +483,17 @@ class Entity(DamageHitbox):
         self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health} {damage_log}", debug_handler=self._debug_logs.damage)
         self.stack.controls.append(
             HealthText(
-                left=(self.stack.width / 2) + 35, top=-6,
+                left=(self.stack.width / 2) + 35, top=-6 if self.stamina_bar else 18,
                 value=f"-{_damage_amount}", color=ft.Colors.RED
             )
         )
+        if is_crit:
+            self.stack.controls.append(
+                HealthText(
+                    left=(self.stack.width / 2) + 35, top=-25 if self.stamina_bar else -1,
+                    value="CRIT!", color=ft.Colors.ORANGE
+                )
+            )
         try_update(self.stack)
         return True
     

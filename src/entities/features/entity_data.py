@@ -68,6 +68,8 @@ class EntityStats:
     attack_damage: float = 5.0
     attack_knockback: int = 20
     attack_frame_delay: float = 0.1
+    crit_chance: int = 5
+    crit_damage: float = 1.5
     
     # Resistance
     knockback_resistance: float = 1.0
