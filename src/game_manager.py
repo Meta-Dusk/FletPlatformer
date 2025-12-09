@@ -345,8 +345,7 @@ class GameManager:
             self.console.log(f"Setting 'show_borders' to: {_enabled}", ft.Colors.BLUE)
             self.show_borders = _enabled
             for entity in self.entity_list:
-                entity.toggle_show_border(_enabled)
-                entity._atk_hb_show = _enabled
+                entity.toggle_show_border(show_border=_enabled, show_atk_hb=_enabled)
         
         def force_cleanup_handler() -> None:
             entitites_cleaned: int = 0
@@ -966,6 +965,7 @@ class GameManagerMixin:
         self.game_manager = game_manager
         self._atk_hb_show = self.game_manager.show_borders
         self._entity_list = self.game_manager.entity_list
+        self.ground_level = self.game_manager.ground_level
     
     @property
     def ground_level(self) -> int: return self.game_manager.ground_level
@@ -994,8 +994,8 @@ class GameManagerMixin:
             return
         
         # Apply visual settings that required the stack to exist
-        self.toggle_show_border(self.game_manager.show_borders)
-        self._atk_hb_show = self.game_manager.show_borders
+        _show = self.game_manager.show_borders
+        self.toggle_show_border(show_border=_show, show_atk_hb=_show)
         
         # Add to Logic List (if not already there)
         if self not in self.game_manager.entity_list: self.game_manager.entity_list.append(self)

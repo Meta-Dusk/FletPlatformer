@@ -9,6 +9,8 @@ from utilities.values import pathify
 from utilities.components import try_update
 from utilities.tasks import attempt_cancel
 from components.popup_text import HealthText
+from components.resource_bars import StaminaBar, HealthBar
+from components.hud_elements import NameTag
 from entities.features.hitboxes import DamageHitbox
 from entities.features.entity_data import Factions, EntityStats, EntityStates, ARMOR_SCALING_CONSTANT, DebugLogs
 
@@ -21,6 +23,7 @@ class Entity(DamageHitbox):
         entity_list: list[Self] = None, *, show_hud: bool = True,
         debug: bool = False, stats: EntityStats = None
     ) -> None:
+        # Setup
         super().__init__()
         self.sprite = sprite
         self.name = name
@@ -29,11 +32,12 @@ class Entity(DamageHitbox):
         self.debug = debug
         self.faction: Factions = faction
         self._entity_list = entity_list if entity_list is not None else []
-        if stats is None: stats = EntityStats()
-        self.stats: EntityStats = stats
+        self.stats: EntityStats = stats if stats else EntityStats()
         self.show_hud = show_hud
         self._handler_str: str = "Entity"
         self.states: EntityStates = EntityStates()
+        if not hasattr(self, "ground_level"):
+            self.ground_level: int = 0
         
         # Tasks
         self._movement_loop_task: asyncio.Task = None
@@ -44,29 +48,36 @@ class Entity(DamageHitbox):
         self._spr_path: Path = pathify(sprite.src)
         self._debug_logs = DebugLogs()
         
-        # Components
-        self.health_bar: ft.ProgressBar = None
-        self._health_bar_stack: ft.Stack = None
-        self.nametag: ft.Stack = None
-        self.stamina_bar: ft.ProgressBar = None
-        self._stamina_bar_stack: ft.Stack = None
+        # Toggles
         self._show_border: bool = False
         self._cleanup_ready: bool = False
-        if not hasattr(self, "_atk_hb_show"):
-            self._atk_hb_show: bool = False
-        self._atk_hitboxes: list[ft.Container] = []
+        self._atk_hb_show: bool = False
+        
+        # Components
+        self.health_bar: ft.ProgressBar = None
+        self._health_bar_stack: HealthBar = None
+        self.nametag: NameTag = None
+        self.stamina_bar: ft.ProgressBar = None
+        self._stamina_bar_stack: StaminaBar = None
+        self._atk_hitboxes: list[ft.Container] = []        
         self._hitbox: ft.Container = None
-        if not hasattr(self, "ground_level"):
-            self.ground_level: int = 0
         self.stack: ft.Stack = self._make_stack()
         self.hud: ft.Container = None
+            
+        # Finalization
         print(f"Making a {faction.value} entity, named; '{name}', with {self.stats}")
         if self.show_hud:
             self._health_bar_stack = self._make_health_bar()
             self.nametag = self._make_nametag()
             self._make_hud()
-            self.stack.controls.append(self.hud)
-            try_update(self.stack)
+    
+    @property
+    def ground_level(self) -> int:
+        return self._ground_level
+    
+    @ground_level.setter
+    def ground_level(self, value: int) -> None:
+        self._ground_level = value
     
     # * === FUNCTIONAL WRAPPERS ===
     def _debug_msg(
@@ -200,9 +211,11 @@ class Entity(DamageHitbox):
             return True
         return False
     
-    def toggle_show_border(self, show_border: bool = None) -> None:
+    def toggle_show_border(self, show_border: bool = None, show_atk_hb: bool = None) -> None:
         if show_border is not None: self._show_border = show_border
         else: self._show_border = not self._show_border
+        if show_atk_hb is not None: self._atk_hb_show = show_atk_hb
+        else: self._atk_hb_show = not self._atk_hb_show
         
         container: ft.Container = self.stack.controls[0]
         if self._show_border:
@@ -253,6 +266,7 @@ class Entity(DamageHitbox):
         return parent
     
     def _make_hud(self) -> None:
+        """Makes the hud then attaches itself to the `stack`."""
         if self.nametag is None:
             self._debug_msg("Missing nametag!", debug_handler=self._debug_logs.setup)
         if self.health_bar is None or self._health_bar_stack is None:
@@ -263,84 +277,30 @@ class Entity(DamageHitbox):
                 controls=[self.nametag, self._health_bar_stack],
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                tight=True
-            ), top=-20, left=0, right=0
+                tight=True, spacing=0
+            ), top=-25, left=0, right=0, alignment=ft.Alignment.CENTER
         )
+        self.stack.controls.append(self.hud)
+        try_update(self.stack)
     
-    def _make_nametag(self) -> ft.Stack:
-        outline_text = ft.Text(
-            value=self.name, size=20,
-            style=ft.TextStyle(
-                foreground=ft.Paint(
-                    color=ft.Colors.BLACK,
-                    stroke_width=4,
-                    style=ft.PaintingStyle.STROKE
-                )
-            ),
-        )
-        
-        solid_text = ft.Text(value=self.name, size=20, color=ft.Colors.WHITE)
-        
-        stack = ft.Stack(
-            controls=[outline_text, solid_text],
-            clip_behavior=ft.ClipBehavior.NONE,
-            alignment=ft.Alignment.CENTER
-        )
-        
-        return stack
+    def _make_nametag(self) -> NameTag:
+        """Returns a `NameTag` custom component."""
+        return NameTag(self.name)
     
-    def _make_stamina_bar(self) -> ft.Stack:
-        self.stamina_bar = ft.ProgressBar(
-            value=0.0, scale=ft.Scale(scale_x=-1, scale_y=1),
-            color=ft.Colors.GREY_800, bgcolor=ft.Colors.TRANSPARENT, height=18
-        )
-        
-        staminabar_container = ft.Container(
-            width=120, border=ft.Border.all(2, ft.Colors.BLACK),
-            border_radius=5, content=self.stamina_bar,
-            bgcolor=ft.Colors.YELLOW, alignment=ft.Alignment.CENTER
-        )
-        staminabar_label = ft.Text(
-            color=ft.Colors.BLACK, size=18,
-            spans=[
-                ft.TextSpan(self.stats.stamina),
-                ft.TextSpan("/"),
-                ft.TextSpan(self.stats.max_stamina)
-            ], left=5, top=-3
-        )
-        
-        stack = ft.Stack(
-            controls=[staminabar_container, staminabar_label],
-            clip_behavior=ft.ClipBehavior.NONE,
-            alignment=ft.Alignment.CENTER
-        )
-        return stack
+    def _make_stamina_bar(self, *, verbose: bool = False, attach_to_hud: bool = False) -> StaminaBar:
+        """Returns a `StaminaBar` custom component."""
+        stamina_bar = StaminaBar(self.stats, verbose=verbose)
+        self.stamina_bar = stamina_bar.st_bar
+        if attach_to_hud and self.hud:
+            hud_col: ft.Column = self.hud.content
+            hud_col.controls.append(stamina_bar)
+        return stamina_bar
     
-    def _make_health_bar(self) -> ft.Stack:
-        self.health_bar = ft.ProgressBar(
-            value=0.0, scale=ft.Scale(scale_x=-1, scale_y=1),
-            color=ft.Colors.GREY_800, bgcolor=ft.Colors.TRANSPARENT, height=18
-        )
-        
-        healthbar_container = ft.Container(
-            width=120, border=ft.Border.all(2, ft.Colors.BLACK), border_radius=5, content=self.health_bar,
-            bgcolor=ft.Colors.RED if self.faction == Factions.NONHUMAN else ft.Colors.GREEN
-        )
-        healthbar_label = ft.Text(
-            color=ft.Colors.BLACK, size=18,
-            spans=[
-                ft.TextSpan(self.stats.health),
-                ft.TextSpan("/"),
-                ft.TextSpan(self.stats.max_health)
-            ], left=5, top=-3
-        )
-        
-        stack = ft.Stack(
-            controls=[healthbar_container, healthbar_label],
-            clip_behavior=ft.ClipBehavior.NONE,
-            alignment=ft.Alignment.CENTER
-        )
-        return stack
+    def _make_health_bar(self) -> HealthBar:
+        """Returns a `HealthBar` custom component."""
+        health_bar = HealthBar(self.stats, self.faction)
+        self.health_bar = health_bar.hp_bar
+        return health_bar
     
     def _get_spr_path(self, state: str, index: int, *, debug: bool = False) -> str:
         """Returns a formatted str path for sprites."""
@@ -365,17 +325,17 @@ class Entity(DamageHitbox):
         """Updates the health bar if provided."""
         if self.health_bar is None: return
         self.health_bar.value = abs((self.stats.health / self.stats.max_health) - 1)
-        label: ft.Text = self._health_bar_stack.controls[1]
-        label.spans[0].text = round(self.stats.health, 1)
-        try_update(self.health_bar, label)
+        self._health_bar_stack.hp_label.spans[0].text = round(self.stats.health, 1)
+        try_update(self._health_bar_stack)
     
     def _update_stamina_bar(self) -> None:
         """Updates the stamina bar if provided."""
         if self.stamina_bar is None: return
         self.stamina_bar.value = abs((self.stats.stamina / self.stats.max_stamina) - 1)
-        label: ft.Text = self._stamina_bar_stack.controls[1]
-        label.spans[0].text = round(self.stats.stamina, 1)
-        try_update(self.stamina_bar, label)
+        try_update(self.stamina_bar)
+        if self._stamina_bar_stack.verbose:
+            self._stamina_bar_stack.st_label.spans[0].text = round(self.stats.stamina, 1)
+            try_update(self._stamina_bar_stack.st_label)
     
     def _flip_sprite_x(self, dx: int) -> bool:
         """Flips the facing direction of the sprite."""
@@ -421,7 +381,11 @@ class Entity(DamageHitbox):
     
     # * === CALLABLE ACTIONS/EVENTS ===
     def __repr__(self) -> str:
-        # type(self).__name__ dynamically grabs "Enemy", "Player", etc.
+        """
+        Returns a formatted representation of the class.\n
+        Example: '`Player: Hero Knight`'
+        """
+        # `type(self).__name__` dynamically grabs "Enemy", "Player", etc.
         return f"{type(self).__name__}: {self.name}"
     
     def __call__(self) -> ft.Stack:
@@ -457,7 +421,7 @@ class Entity(DamageHitbox):
             self._debug_msg(f"{self.name} cannot attack while being damaged", debug_handler=self._debug_logs.attack)
             return False
         return True
-        # ? Implement the rest of the logic here
+        # ? Implement the rest of the logic after calling this method
     
     def take_damage(self, damage_amount: float, is_crit: bool = False) -> bool:
         """
@@ -477,25 +441,21 @@ class Entity(DamageHitbox):
         
         damage_reduction: float = round(ARMOR_SCALING_CONSTANT / (ARMOR_SCALING_CONSTANT + self.stats.armor), 1)
         _damage_amount = damage_amount * damage_reduction
+        
         self.states.taking_damage = True
         self.states.stunned = True
         attempt_cancel(self._health_loop_task)
+        
         self.stats.health -= _damage_amount
         damage_log = f"(-{_damage_amount} [{damage_reduction*100}% of {damage_amount}])"
         self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health} {damage_log}", debug_handler=self._debug_logs.damage)
-        self.stack.controls.append(
-            HealthText(
-                left=(self.stack.width / 2) + 35, top=-6 if self.stamina_bar else 18,
-                value=f"-{_damage_amount}", color=ft.Colors.RED
-            )
-        )
+        
+        dmg_text = HealthText(value=f"-{_damage_amount}", right=-105, top=4, color=ft.Colors.RED, anim_right=-80)
+        self.stack.controls.append(dmg_text)
         if is_crit:
-            self.stack.controls.append(
-                HealthText(
-                    left=(self.stack.width / 2) + 35, top=-25 if self.stamina_bar else -1,
-                    value="CRIT!", color=ft.Colors.ORANGE
-                )
-            )
+            crit_text = HealthText(value="CRIT!", right=-190, top=4, color=ft.Colors.ORANGE)
+            self.stack.controls.append(crit_text)
+            
         try_update(self.stack)
         return True
     
@@ -508,7 +468,7 @@ class Entity(DamageHitbox):
             self._debug_msg(f"{self.name} is already dead", debug_handler=self._debug_logs.death)
             return False
         return True
-        # ? Implement the rest of the logic here
+        # ? Implement the rest of the logic after calling this method
         
     def revive(self) -> bool:
         """
@@ -522,7 +482,7 @@ class Entity(DamageHitbox):
             self._debug_msg(f"{self.name} is not yet ready to be revived", debug_handler=self._debug_logs.revive)
             return False
         return True
-        # ? Implement the rest of the logic here
+        # ? Implement the rest of the logic after calling this method
         
     def heal(self, heal_amount: float, overheal: bool = False) -> bool:
         """
@@ -540,13 +500,15 @@ class Entity(DamageHitbox):
         
         if not overheal and (self.stats.health + heal_amount) > self.stats.max_health:
             self.stats.health = self.stats.max_health
+            
         self.stats.health += heal_amount
         self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(+{heal_amount})", debug_handler=self._debug_logs.health)
-        self.stack.controls.append(
-            HealthText(
-                left=(self.stack.width / 2) + 35, top=18,
-                value=f"+{heal_amount}", color=ft.Colors.GREEN
-            )
+        
+        heal_text = HealthText(
+            left=(self.stack.width / 2) + 35, top=18,
+            value=f"+{heal_amount}", color=ft.Colors.GREEN
         )
+        
+        self.stack.controls.append(heal_text)
         try_update(self.stack)
         return True

@@ -9,16 +9,28 @@ from tests.test_templates import test_init
 async def test(page: ft.Page):
     """Test for the `Player` class; a simple implementation"""
     await test_init(page)
-    
     km_start()
     
     async def player_dmg(_): await player.take_damage(5, is_crit=True)
+    def toggle_st_verbose(_):
+        if player._stamina_bar_stack is not None:
+            player._stamina_bar_stack.verbose = not player._stamina_bar_stack.verbose
     
     player = Player(page, global_audio_manager, held_keys, debug=True)
-    player._atk_hb_show = True
-    player.toggle_show_border(True)
-    take_dmg_btn = ft.Button(content="Take Damage", on_click=player_dmg, left=60, top=20)
-    stage = ft.Stack(controls=[player(), take_dmg_btn], expand=True)
+    
+    take_dmg_btn = ft.Button(content="Take Damage", on_click=player_dmg)
+    toggle_borders_btn = ft.Button(content="Toggle Borders", on_click=lambda _: player.toggle_show_border())
+    st_verbose_btn = ft.Button(content="Toggle Stamina Verbosity", on_click=toggle_st_verbose)
+    
+    ui_col = ft.Column(
+        controls=[take_dmg_btn, toggle_borders_btn, st_verbose_btn],
+        alignment=ft.MainAxisAlignment.CENTER, top=20, left=20
+    )
+    
+    stage = ft.Stack(
+        controls=[player(), ui_col],
+        expand=True
+    )
     
     async def on_keyboard_event(e: ft.KeyboardEvent):
         """Handles 'on-press' events for the player."""

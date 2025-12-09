@@ -52,8 +52,7 @@ async def test(page: ft.Page):
     dummy_player = Entity(player_spr, "Dummy Hero", page, audio_manager, Factions.HUMAN)
     dummy_player.toggle_show_border(True)
     enemy = Enemy(EnemyType.GOBLIN, page, audio_manager, dummy_player, debug=True)
-    enemy.toggle_show_border(True)
-    enemy._atk_hb_show = True
+    enemy.toggle_show_border(show_border=True, show_atk_hb=True)
     
     stage = ft.Stack(controls=[dummy_player(), enemy(), buttons_row], expand=True)
     
