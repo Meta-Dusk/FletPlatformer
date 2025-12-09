@@ -6,7 +6,7 @@ from setup import FontStyles
 from components.buttons import SimpleButton
 from components.volume_controls import VolumeControl, DirectionalVolumeToggle
 from components.window_controls import FullscreenToggle
-from components.game_controls import ConsoleToggle, PerfMonitorToggles, BackgroundToggles
+from components.game_controls import ConsoleToggle, PerfMonitorToggles, StaminaSettings
 from backgrounds import add_infinite_layer
 from bg_loops import light_mv_loop
 from utilities.components import try_update
@@ -181,11 +181,13 @@ class SettingsMenu(Menu):
         
         self.console_switch = ConsoleToggle()
         self.perf_toggles = PerfMonitorToggles()
+        self.stamina_toggles = StaminaSettings()
         game_column = ft.Column(
             controls=[
                 self._section_text("Game"),
                 self.console_switch,
-                self.perf_toggles
+                self.perf_toggles,
+                self.stamina_toggles
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER
@@ -195,20 +197,6 @@ class SettingsMenu(Menu):
             alignment=ft.Alignment.CENTER
         )
         
-        # self.bg_toggles = BackgroundToggles()
-        # bg_settings_column = ft.Column(
-        #     controls=[
-        #         self._section_text("Backgrounds"),
-        #         self.bg_toggles
-        #     ],
-        #     alignment=ft.MainAxisAlignment.CENTER,
-        #     horizontal_alignment=ft.CrossAxisAlignment.CENTER
-        # )
-        # bg_settings = ft.Container(
-        #     content=bg_settings_column, bgcolor=ft.Colors.GREY_900,
-        #     alignment=ft.Alignment.CENTER
-        # )
-        
         self.settings_container = ft.Container(
             padding=8, offset=ft.Offset(0.0, -0.1),
             content=ft.Container(
@@ -217,7 +205,6 @@ class SettingsMenu(Menu):
                         volume_settings,
                         window_settings,
                         game_settings,
-                        # bg_settings
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,

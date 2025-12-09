@@ -18,7 +18,7 @@ class Player(Entity):
     def __init__(
         self, page: ft.Page, audio_manager: AudioManager,
         held_keys: set = set(), entity_list: list[Entity] = None,
-        *, debug: bool = False
+        *, debug: bool = False, verbose_stamina: bool = False
     ):
         sprite = Sprite(
             src="images/player/idle_0.png", width=180, height=180,
@@ -44,7 +44,7 @@ class Player(Entity):
         self._make_self_hitbox(width=95, height=110, r_left=55)
         self._has_dashed: bool = False
         
-        self._stamina_bar_stack = self._make_stamina_bar(attach_to_hud=True)
+        self._stamina_bar_stack = self._make_stamina_bar(attach_to_hud=True, verbose=verbose_stamina)
         self.dash_indicator = self._make_dash_cooldown()
     
     # * === LOOPING ANIMATIONS ===
@@ -190,7 +190,10 @@ class Player(Entity):
                 if 'a' in self.held_keys: dx -= step
                 if 'd' in self.held_keys: dx += step
                 if ('a' or 'd') and 'c' in self.held_keys: await self.dash(dx)
-                if self.stack.left <= 0 or self.stack.left + self.sprite.width >= self.page.width: dx = 0
+                if ( # ? Stops moving beyond the page's borders
+                    self.stack.left + dx < 0 or
+                    self.stack.left + self.sprite.width + dx > self.page.width
+                ): dx = 0
                 
                 # ? Movement
                 def primary_callback():

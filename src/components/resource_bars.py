@@ -53,10 +53,12 @@ class StaminaBar(ft.Stack):
         """
         if self.verbose:
             self.st_bar.height = 18
-            self.controls.append(self.st_label)
+            if not self.st_label in self.controls:
+                self.controls.append(self.st_label)
         else:
             self.st_bar.height = 5
-            self.controls.remove(self.st_label)
+            if self.st_label in self.controls:
+                self.controls.remove(self.st_label)
         try_update(self)
         
 class HealthBar(ft.Stack):
