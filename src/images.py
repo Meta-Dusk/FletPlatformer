@@ -1,5 +1,5 @@
 import flet as ft
-from typing import Literal
+from typing import Literal, Any
 from dataclasses import dataclass
 
 from utilities.components import try_update
@@ -36,7 +36,7 @@ class IconSprite(ft.Container):
         filter_quality: ft.FilterQuality = ft.FilterQuality.NONE,
         fit: ft.BoxFit = ft.BoxFit.COVER, gapless_playback: bool = True,
         scale: ft.Scale = ft.Scale(scale_x=2, scale_y=2),
-        padding: ft.PaddingValue = 8
+        padding: ft.PaddingValue = 8, data: Any = None
     ) -> None:
         if src is None:
             _src = str_src
@@ -55,7 +55,7 @@ class IconSprite(ft.Container):
             color_blend_mode=ft.BlendMode.MODULATE
         )
         
-        super().__init__(content=self.spr, padding=padding, alignment=ft.Alignment.CENTER)
+        super().__init__(content=self.spr, padding=padding, alignment=ft.Alignment.CENTER, data=data)
     
     def set_tint(self, color: ft.ColorValue, opacity: float = 1.0) -> None:
         self.spr.color = ft.Colors.with_opacity(opacity, color)

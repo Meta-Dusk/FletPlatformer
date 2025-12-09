@@ -6,8 +6,10 @@ spr = SpriteList
 
 class ControlsTutorial(ft.Container):
     def __init__(self):
-        self.mv_key_a = IconSprite(spr.keys.a)
-        self.mv_key_d = IconSprite(spr.keys.d)
+        self.total_keys: int = 0
+        
+        self.mv_key_a = IconSprite(spr.keys.a, data=False)
+        self.mv_key_d = IconSprite(spr.keys.d, data=False)
         movement_row = ft.Row(
             controls=[
                 ft.Text("Move:", size=20),
@@ -20,7 +22,7 @@ class ControlsTutorial(ft.Container):
             vertical_alignment=ft.CrossAxisAlignment.CENTER
         )
         
-        self.jump_key = IconSprite(spr.keys.space, padding=ft.Padding.symmetric(horizontal=16))
+        self.jump_key = IconSprite(spr.keys.space, padding=ft.Padding.symmetric(horizontal=16), data=False)
         jump_row = ft.Row(
             controls=[
                 ft.Text("Jump:", size=20),
@@ -31,9 +33,9 @@ class ControlsTutorial(ft.Container):
             vertical_alignment=ft.CrossAxisAlignment.CENTER
         )
         
-        self.sprint_shift = IconSprite(spr.keys.shift, padding=ft.Padding.symmetric(horizontal=16))
-        self.sprint_key_a = IconSprite(spr.keys.a)
-        self.sprint_key_d = IconSprite(spr.keys.d)
+        self.sprint_shift = IconSprite(spr.keys.shift, padding=ft.Padding.symmetric(horizontal=16), data=False)
+        self.sprint_key_a = IconSprite(spr.keys.a, data=False)
+        self.sprint_key_d = IconSprite(spr.keys.d, data=False)
         sprint_row = ft.Row(
             controls=[
                 ft.Text("Sprint:", size=20),
@@ -48,7 +50,7 @@ class ControlsTutorial(ft.Container):
             vertical_alignment=ft.CrossAxisAlignment.CENTER
         )
         
-        self.attack_key = IconSprite(spr.keys.v)
+        self.attack_key = IconSprite(spr.keys.v, data=False)
         attack_row = ft.Row(
             controls=[
                 ft.Text("Attack:", size=20),
@@ -59,9 +61,9 @@ class ControlsTutorial(ft.Container):
             vertical_alignment=ft.CrossAxisAlignment.CENTER
         )
         
-        self.dash_key_a = IconSprite(spr.keys.a)
-        self.dash_key_d = IconSprite(spr.keys.d)
-        self.dash_key_c = IconSprite(spr.keys.c)
+        self.dash_key_a = IconSprite(spr.keys.a, data=False)
+        self.dash_key_d = IconSprite(spr.keys.d, data=False)
+        self.dash_key_c = IconSprite(spr.keys.c, data=False)
         dash_row = ft.Row(
             controls=[
                 ft.Text("Dash:", size=20),
@@ -89,12 +91,20 @@ class ControlsTutorial(ft.Container):
             tight=True
         )
         
+        for row in column.controls:
+            row: ft.Row
+            for ctrl in row.controls:
+                if isinstance(ctrl, IconSprite):
+                    self.total_keys += 1
+        
+        print(f"[ControlsTutorial] Total tutorial keys mapped: {self.total_keys}")
+        
         super().__init__(
             content=column, alignment=ft.Alignment.CENTER,
             width=200, top=20, left=20
         )
     
     def set_finish(self, icon_sprite: IconSprite):
-        if icon_sprite.data is None or icon_sprite.data:
+        if not icon_sprite.data:
             icon_sprite.set_tint(ft.Colors.GREEN, 0.5)
             icon_sprite.data = True

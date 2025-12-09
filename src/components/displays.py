@@ -72,6 +72,24 @@ class StatsDisplay(ft.Container):
                         ft.DataCell(self._make_text("")),
                     ]
                 ),
+                ft.DataRow(
+                    cells=[
+                        ft.DataCell(self._make_text("Dash")),
+                        ft.DataCell(self._make_text("")),
+                        ft.DataCell(self._make_text("")),
+                        ft.DataCell(self._make_text("")),
+                        ft.DataCell(self._make_text("")),
+                    ]
+                ),
+                ft.DataRow(
+                    cells=[
+                        ft.DataCell(self._make_text("Jump")),
+                        ft.DataCell(self._make_text("")),
+                        ft.DataCell(self._make_text("")),
+                        ft.DataCell(self._make_text("")),
+                        ft.DataCell(self._make_text("")),
+                    ]
+                ),
             ],
             border_radius=8,
             bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
@@ -100,6 +118,8 @@ class StatsDisplay(ft.Container):
         dt_mv = self.data_table.rows[3]
         dt_atk = self.data_table.rows[4]
         dt_cs = self.data_table.rows[5]
+        dt_d = self.data_table.rows[6]
+        dt_j = self.data_table.rows[7]
         
         # Health
         hp_regen = f"+{self._stats.health_regen} HP / {self._stats.hp_regen_tick}s"
@@ -133,7 +153,7 @@ class StatsDisplay(ft.Container):
         max_dmg = self._stats.attack_damage * self._stats.crit_damage
         dt_atk.cells[1].content.value = f"{self._stats.attack_damage} ATK"
         dt_atk.cells[2].content.value = f"{max_dmg} ATK"
-        dt_atk.cells[3].content.value = "-"
+        dt_atk.cells[3].content.value = f"Knockback: {self._stats.attack_knockback}px"
         dt_atk.cells[4].content.value = f"Each frame duration of the attack is: {self._stats.attack_frame_delay}s."
         
         # Crit
@@ -142,3 +162,15 @@ class StatsDisplay(ft.Container):
         dt_cs.cells[3].content.value = f"{self._stats.crit_chance}%"
         dt_cs.cells[4].content.value = "Critical strikes happen by chance, and multiplies the damage amount per strike."
         
+        # Dash
+        max_dash_dx = self._stats.dash_distance * self._stats.dash_strength
+        dt_d.cells[1].content.value = f"{self._stats.dash_distance}px"
+        dt_d.cells[2].content.value = f"{max_dash_dx}px"
+        dt_d.cells[3].content.value = f"{self._stats.dash_strength}x Multiplier"
+        dt_d.cells[4].content.value = f"You can dash every {self._stats.dash_cooldown}s for {self._stats.dash_st_cost} ST. When dashing, you are invincible for {self._stats.dash_inv_time}s."
+        
+        max_jump_dy = int(self._stats.jump_distance * self._stats.jump_strength)
+        dt_j.cells[1].content.value = f"{self._stats.jump_distance}px"
+        dt_j.cells[2].content.value = f"{max_jump_dy}px"
+        dt_j.cells[3].content.value = f"{self._stats.jump_strength}x Multiplier"
+        dt_j.cells[4].content.value = f"You can jump for {self._stats.jump_st_cost} ST, and remain in air for {self._stats.jump_air_time}s."

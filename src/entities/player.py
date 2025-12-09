@@ -18,7 +18,7 @@ class Player(Entity):
     def __init__(
         self, page: ft.Page, audio_manager: AudioManager,
         held_keys: set = set(), entity_list: list[Entity] = None,
-        *, debug: bool = False
+        *, debug: bool = False, verbose_stamina: bool = False
     ):
         sprite = Sprite(
             src="images/player/idle_0.png", width=180, height=180,
@@ -44,11 +44,8 @@ class Player(Entity):
         self._make_self_hitbox(width=95, height=110, r_left=55)
         self._has_dashed: bool = False
         
-        self._stamina_bar_stack = self._make_stamina_bar()
-        self.dash_indicator: ft.Image = self._make_dash_cooldown()
-        hud_col: ft.Column = self.hud.content
-        hud_col.controls.append(self._stamina_bar_stack)
-        self.hud.top -= 25
+        self._stamina_bar_stack = self._make_stamina_bar(attach_to_hud=True, verbose=verbose_stamina)
+        self.dash_indicator = self._make_dash_cooldown()
     
     # * === LOOPING ANIMATIONS ===
     async def _animation_loop(self):
@@ -127,16 +124,14 @@ class Player(Entity):
                         r2_left=e_hb_left, r2_bottom=e_hb_bottom, r2_w=atk_hb.width, r2_h=atk_hb.height # Enemy Weapon
                     ):
                         self._debug_msg(f"Hit by {entity.name}!", debug_handler=self._debug_logs.damage)
-                        dmg, is_crit = self._calculate_damage()
-                        await self.take_damage(dmg, is_crit)
+                        await self.take_damage(*self._calculate_damage())
                         self._knockback_self(entity)
                         return
     
     def _handle_hit_logic(self, target_enemy: Entity):
         """Applies damage to a specific enemy and updates game stats if they die."""
         # Apply Damage
-        dmg, is_crit = self._calculate_damage()
-        did_die = target_enemy.take_damage(dmg, is_crit)
+        did_die = target_enemy.take_damage(*self._calculate_damage())
         
         # Check Result
         if not did_die: return
@@ -195,7 +190,10 @@ class Player(Entity):
                 if 'a' in self.held_keys: dx -= step
                 if 'd' in self.held_keys: dx += step
                 if ('a' or 'd') and 'c' in self.held_keys: await self.dash(dx)
-                if self.stack.left <= 0 or self.stack.left + self.sprite.width >= self.page.width: dx = 0
+                if ( # ? Stops moving beyond the page's borders
+                    self.stack.left + dx < 0 or
+                    self.stack.left + self.sprite.width + dx > self.page.width
+                ): dx = 0
                 
                 # ? Movement
                 def primary_callback():
@@ -325,14 +323,15 @@ class Player(Entity):
     
     # * === DASH COOLDOWN ===
     def _make_dash_cooldown(self):
+        """Returns the icon for the dash cooldown."""
         _scale = 0.25
         dash_cooldown = ft.Image(
             src="images/icons/dash.png", filter_quality=ft.FilterQuality.NONE,
             scale=_scale, fit=ft.BoxFit.COVER, color_blend_mode=ft.BlendMode.MODULATE,
-            right=-40, top=-21, width=256 * _scale, height=256 * _scale
+            left=-40, top=-22, width=256 * _scale, height=256 * _scale
         )
         
-        self._stamina_bar_stack.controls.append(dash_cooldown)
+        self._health_bar_stack.controls.append(dash_cooldown)
         return dash_cooldown
     
     # * === CALLABLE PLAYER ACTIONS/EVENTS ===
@@ -368,8 +367,8 @@ class Player(Entity):
         self._update_stamina_bar()
         self._apply_tint(ft.Colors.PURPLE)
         
-        if dx > 0: self.stack.left += self.stats.dash_distance
-        else: self.stack.left -= self.stats.dash_distance
+        if dx > 0: self.stack.left += self._get_dash_dx()
+        else: self.stack.left -= self._get_dash_dx()
         self._play_sfx(sfx.whoosh.motion, 0.5)
         try_update(self.stack)
         
@@ -500,3 +499,8 @@ class Player(Entity):
         _str = self.stats.jump_strength
         return int(_dist * _str)
     
+    def _get_dash_dx(self) -> int:
+        """Returns the total dash distance."""
+        _dist = float(self.stats.dash_distance)
+        _str = self.stats.dash_strength
+        return int(_dist * _str)

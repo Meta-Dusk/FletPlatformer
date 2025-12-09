@@ -1,33 +1,37 @@
 import flet as ft
 import asyncio, random
-from typing import Literal
+from typing import Any
 
 from audio.audio_manager import global_audio_manager
 from audio.music_data import MusicLibrary
+
 from components.menus import MainMenu, PauseMenu, SettingsMenu
-from components.tutorials import ControlsTutorial
-from components.buttons import SimpleButton
 from components.displays import StatsDisplay
 from components.custom_switches import TextAndToggle
+from components.popups import SimpleNotification, SimpleDialog
+
 from utilities.keyboard_manager import held_keys, start as km_start
 from utilities.tasks import attempt_cancel
-from entities.player import Player
 from utilities.components import try_update
 from utilities.commands.ui import DevConsole
-from utilities.commands.parser import FloatArg, ArgType, CoordinateArg, IntArg, ChoiceArg, BoolArg
+from utilities.commands.in_game import GameCommands
 from utilities.performance_monitor import PerformanceMonitor
+from utilities.tutorial_handler import TutorialHandler
+
+from entities.player import Player
 from entities.enemy import EnemyType, Enemy
 from entities.entity import Entity
 from entities.goblin import Goblin
+
 from bg_loops import light_mv_loop, stage_panning_loop
 from backgrounds import add_infinite_layer
 
 music = MusicLibrary()
 audio_manager = global_audio_manager
 
-class GameManager:
+class GameManager(GameCommands):
     """Central hub for the game UI and states."""
-    def __init__(self, page: ft.Page):
+    def __init__(self, page: ft.Page) -> None:
         # State Variables (References)
         self.page: ft.Page = page
         self.player: Player = None
@@ -42,18 +46,22 @@ class GameManager:
         self.entity_list: list[Entity] = []
         self.console = DevConsole()
         self.stats_panel: StatsDisplay = None
+        self.tutorial_handler = TutorialHandler(self.page, self._on_finish_tutorial)
         
         # Task Management
         self.running_tasks: list[asyncio.Task] = []
         
         # World Configuration
         self.ground_level: int = 30
-        self._kill_count: int = 0
-        self._death_count: int = 0
         self.is_game_running: bool = False
-        self.show_borders: bool = False
-        self.finished_tutorial: bool = False
-        self.tutorial_state: set[str] = set()
+        
+        # Properties
+        self._show_borders: bool = False
+        self._death_count: int = 0
+        self._kill_count: int = 0
+        
+        # Other Settings
+        self.verbose_stamina: bool = False
         
         # Scenes
         self.main_menu = None
@@ -69,6 +77,14 @@ class GameManager:
         self.settings_menu = None
     
     # * === GAME PROPERTIES ===
+    @property
+    def show_borders(self) -> bool:
+        return self._show_borders
+    
+    @show_borders.setter
+    def show_borders(self, enabled: bool) -> None:
+        self._show_borders = enabled
+    
     @property
     def kill_count(self) -> int:
         """Returns the current kills of the player."""
@@ -102,7 +118,8 @@ class GameManager:
             try_update(self.death_count_text)
     
     # * === MENUS ===
-    def _make_main_menu(self):
+    def _make_main_menu(self) -> None:
+        """Assembles the Main Menu."""
         async def exit(_): await self.page.window.close()
         self.main_menu = MainMenu(
             on_start=self.start_game,
@@ -114,6 +131,7 @@ class GameManager:
         try_update(self.stage)
     
     def _remove_main_menu(self):
+        """Removes the Main Menu."""
         self.stage.controls.remove(self.main_menu)
         try_update(self.stage)
     
@@ -144,6 +162,7 @@ class GameManager:
         
         # Post Setup for UI
         self.settings_menu.console_switch.switch.on_toggle = self._console_on_toggle
+        self.settings_menu.stamina_toggles.switch.on_toggle = self._stamina_verbose_toggle
         self.perf_monitor = PerformanceMonitor()
         perf_toggles = self.settings_menu.perf_toggles
         perf_toggles.monitor_switch.switch.on_toggle = self._perf_monitor_toggle
@@ -152,10 +171,10 @@ class GameManager:
         
         self.page.add(self.stage)
         await self.page.window.center()
+        self.page.window.maximized = True
     
     # * === OTHER HELPERS ===
-    def _debug_msg(self, msg: str):
-        print(f"[GameManager] {msg}")
+    def _debug_msg(self, msg: str): print(f"[GameManager] {msg}")
     
     def _get_dur(self, control: ft.LayoutControl):
         """
@@ -171,360 +190,6 @@ class GameManager:
         """
         await asyncio.sleep(self._get_dur(control))
     
-    # * === HELPER: ENTITY RESOLUTION ===
-    def _get_targets(
-        self, identifier: str, count: int = 1, coords: tuple[int, bool] = None
-    ) -> list[Entity]:
-        """
-        Resolves a string identifier into a list of actual Entity objects.
-        
-        Args:
-            identifier (str): "player", "all", "goblin" (_type_), or "Bob" (_name_)
-            count (int): Max number of targets to return (default 1, -1 for all)
-            coords (tuple): _Optional_ `(x, is_relative)` to sort by proximity.
-        """
-        identifier = identifier.lower()
-        
-        # 1. Collect potential candidates
-        if identifier == "player":
-            return [self.player] if self.player else []
-        
-        if identifier == "all":
-            candidates = self.entity_list.copy()
-        else:
-            # Check if it matches an EnemyType enum name (e.g. "goblin")
-            is_type_search = any(t.name.lower() == identifier for t in EnemyType)
-            
-            candidates = []
-            for e in self.entity_list:
-                # Match by Type (e.g. all goblins)
-                if is_type_search and isinstance(e, Enemy) and e.type.name.lower() == identifier:
-                    candidates.append(e)
-                # Match by Exact Name (e.g. specific boss name)
-                elif e.name.lower().replace(" ", "_") == identifier:
-                    candidates.append(e)
-                    
-        # 2. Sort by Proximity (if coords provided)
-        if coords:
-            target_x, is_rel = coords
-            if is_rel: target_x += (self.page.width / 2)
-            candidates.sort(key=lambda e: abs(((e.stack.left + e.stack.width) / 2 or 0) - target_x))
-            
-        # 3. Apply Count Limit
-        if count > 0: return candidates[:count]
-        return candidates
-    
-    # * === COMMANDS REGISTRY ===
-    def register_commands(self) -> None:
-        """Registers commands specifically for the `GameManager`."""
-        # Dynamic Arguments
-        entity_arg = EntitySelectorArg(self)
-        coords_arg = CoordinateArg()
-        
-        # * --- HANDLERS ---
-        # Helper to determine count defaults
-        def resolve_count(target: str, user_count: int | None) -> int:
-            """
-            If user didn't specify a count:
-            - target="all" -> Count is Infinite (-1)
-            - target="goblin" -> Count is 1
-            """
-            if user_count is not None: 
-                return user_count
-            return -1 if target.lower() == "all" else 1
-        
-        def kill_handler(target: str, x: int = None, y: int = None, count: int = None) -> None:
-            # Resolve count logic
-            final_count = resolve_count(target, count)
-            loc = x if x else None
-            
-            entities = self._get_targets(target, final_count, loc)
-            print(f"target list size: {len(entities)}, entities: {[e.name for e in entities]}")
-            
-            if not entities:
-                self.console.log(f"No targets found for '{target}'", ft.Colors.DEEP_PURPLE)
-                return
-            
-            killed_count = 0
-            for e in entities:
-                if not e.states.dead:
-                    self.page.run_task(e.death)
-                    killed_count += 1
-            
-            if killed_count > 0:
-                msg_count = "entity" if killed_count == 1 else "entities"
-                self.console.log(f"Killed {killed_count} {msg_count}.", ft.Colors.DEEP_PURPLE)
-            else:
-                self.console.log("Targets are already dead.", ft.Colors.GREY)
-                
-        def damage_handler(target: str, amount: float, x: int = None, y: int = None, count: int = None) -> None:
-            final_count = resolve_count(target, count)
-            loc = x if x else None
-            
-            entities = self._get_targets(target, final_count, loc)
-            
-            if not entities:
-                self.console.log("No targets found.", ft.Colors.PURPLE)
-                return
-            
-            hit_count = 0
-            for e in entities:
-                if not e.states.dead:
-                    self.page.run_task(e.take_damage, amount)
-                    hit_count += 1
-            
-            if hit_count > 0:
-                msg_count = "entity" if hit_count == 1 else "entities"
-                self.console.log(f"Damaged {hit_count} {msg_count} for {amount}.", ft.Colors.PURPLE)
-                
-        def revive_handler(target: str, x: int = None, y: int = None, count: int = None) -> None:
-            final_count = resolve_count(target, count)
-            loc = x if x else None
-            
-            entities = self._get_targets(target, final_count, loc)
-            
-            revived_count = 0
-            for e in entities:
-                if e.states.dead and e.states.revivable:
-                    # Player Logic
-                    if isinstance(e, Player) or hasattr(e, "revive"):
-                        self.page.run_task(e.revive)
-                        revived_count += 1
-                    else:
-                        raise NotImplementedError("Revival only implemented for the player so far.")
-            
-            msg_count = "entity" if revived_count == 1 else "entities"
-            self.console.log(f"Revived {revived_count} {msg_count}.", ft.Colors.GREEN)
-        
-        def summon_handler(enemy_type: str, x: tuple = None, y: tuple = None, count: int = 1) -> None:
-            if not self.is_game_running:
-                raise Exception("Can only summon entities when the game is running!")
-            
-            # ? Resolve Type
-            try:
-                # Convert string (i.e.; "goblin") to Enum (EnemyType.GOBLIN)
-                e_enum = EnemyType[enemy_type.upper()]
-            except KeyError:
-                self.console.log(f"Invalid enemy type: {enemy_type}", ft.Colors.RED)
-                return
-            
-            # ? Determine Spawn Logic
-            # If X is provided, we spawn centered first, then move them manually.
-            # If X is NOT provided, we let summon_enemy handle random/center logic.
-            should_center_spawn = True if x is not None else False
-            
-            # ? Spawn
-            new_entities = self.summon_enemy(e_enum, count, center_spawn=should_center_spawn)
-            
-            # ? Handle Coordinate Positioning
-            if x is not None:
-                target_x_val, is_rel = x
-                
-                # Calculate Base X
-                final_x = target_x_val
-                if is_rel:
-                    # Relative to PLAYER if alive, otherwise relative to SCREEN CENTER
-                    if self.player:
-                        final_x += self.player.stack.left
-                    else:
-                        final_x += (self.page.width / 2)
-                
-                # Apply position to all new entities
-                for e in new_entities:
-                    # Apply a tiny random offset so they don't stack perfectly on top of each other
-                    offset = random.randint(-20, 20) if count > 1 else 0
-                    
-                    e.stack.left = final_x + offset
-                    try_update(e.stack)
-                    
-            msg_count = "entity" if len(new_entities) == 1 else "entities"
-            self.console.log(f"Summoned {len(new_entities)} {msg_count} ({e_enum.name}).", ft.Colors.CYAN)
-        
-        def toggle_hb_show_handler(enabled: Literal["true", "false"]) -> None:
-            _enabled = True if enabled == "true" else False
-            self.console.log(f"Setting 'show_borders' to: {_enabled}", ft.Colors.BLUE)
-            self.show_borders = _enabled
-            for entity in self.entity_list:
-                entity.toggle_show_border(_enabled)
-                entity._atk_hb_show = _enabled
-        
-        def force_cleanup_handler() -> None:
-            entitites_cleaned: int = 0
-            self.console.log("Attempting a forced cleanup on 'entity_list'.")
-            for entity in self.entity_list:
-                if entity._cleanup_ready and isinstance(entity, Enemy):
-                    enemy: Enemy = entity
-                    enemy.remove_selves()
-                    entitites_cleaned += 1
-            self.console.log(f"Entities cleaned up: {entitites_cleaned}.", ft.Colors.ORANGE)
-        
-        def get_data_handler(var: str, data: str, filter: str) -> None:
-            # Identify the Data Source
-            source_items = []
-            is_logic_entity = False # Flag to know if we can check .states
-            
-            if var == "entity_list":
-                source_items = self.entity_list
-                is_logic_entity = True
-            elif var == "entity_stack":
-                source_items = self.entity_stack.controls
-                is_logic_entity = False
-            
-            # Apply Filtering
-            filtered_items = []
-            
-            if filter == "all":
-                filtered_items = source_items
-            elif not is_logic_entity:
-                # We cannot filter UI controls by "alive/dead" because they don't have states
-                self.console.log(f"Warning: Cannot filter '{var}' by state. Returning all.", ft.Colors.ORANGE)
-                filtered_items = source_items
-            else:
-                # Filter Logic Entities
-                for e in source_items:
-                    is_dead = e.states.dead
-                    
-                    if filter == "is_alive" and not is_dead:
-                        filtered_items.append(e)
-                    elif filter == "is_dead" and is_dead:
-                        filtered_items.append(e)
-                        
-            # Format the Output
-            output_msg = ""
-            
-            if data == "len":
-                output_msg = f"Count: {len(filtered_items)}"
-            
-            elif data == "repr_list":
-                if is_logic_entity:
-                    # For entities, show their Names and IDs/Health as provided in the `__repr__`
-                    names = [e for e in filtered_items]
-                    output_msg = f"Items: {names}"
-                else:
-                    # For UI controls, just show their types
-                    output_msg = f"Controls: {[type(c).__name__ for c in filtered_items]}"
-                    
-            # Print to Console
-            self.console.log(f"[{var}] {filter} -> {output_msg}", ft.Colors.CYAN)
-        
-        def heal_handler(
-            target: str, amount: float, overheal: Literal["true", "false"],
-            x: int = None, y: int = None, count: int = None
-        ) -> None:
-            _overheal = True if overheal == "true" else False
-            final_count = resolve_count(target, count)
-            loc = x if x else None
-            
-            entities = self._get_targets(target, final_count, loc)
-            
-            if not entities:
-                self.console.log("No targets found.", ft.Colors.GREEN)
-                return
-            
-            heal_count = 0
-            for e in entities:
-                if not e.states.dead:
-                    self.page.run_task(e.heal, amount, _overheal)
-                    heal_count += 1
-            
-            if heal_count > 0:
-                msg_count = "entities" if heal_count > 1 else "entity"
-                self.console.log(f"Healed {heal_count} {msg_count} for {amount}.", ft.Colors.GREEN)
-        
-        # * --- REGISTRATION ---
-        # ? KILL
-        self.console.register_command(
-            "kill <entity>", kill_handler, 
-            {"entity": entity_arg},
-            help_text="Kills specific entity or type."
-        )
-        self.console.register_command(
-            "kill <entity> <x> <y> <count>", kill_handler,
-            {"entity": entity_arg, "x": coords_arg, "y": coords_arg, "count": IntArg()},
-            help_text="Kills <count> of the closest entities to <x> <y>."
-        )
-        
-        # ? DAMAGE
-        self.console.register_command(
-            "damage <entity> <amount>", damage_handler,
-            {"entity": entity_arg, "amount": FloatArg()},
-            help_text="Damages target entity."
-        )
-        self.console.register_command(
-            "damage <entity> <amount> <x> <y> <count>", damage_handler,
-            {"entity": entity_arg, "amount": FloatArg(), "x": coords_arg, "y": coords_arg, "count": IntArg()},
-            help_text="Damages <count> of the closest entities."
-        )
-        
-        # ? REVIVE
-        self.console.register_command(
-            "revive <entity>", revive_handler,
-            {"entity": entity_arg},
-            help_text="Revives target."
-        )
-        self.console.register_command(
-            "revive <entity> <x> <y> <count>", revive_handler,
-            {"entity": entity_arg, "x": coords_arg, "y": coords_arg, "count": IntArg()},
-            help_text="Revives closest targets."
-        )
-        
-        # ? SUMMON
-        self.console.register_command(
-            "summon <enemy_type>", summon_handler,
-            {"enemy_type": EnemyTypeArg()},
-            help_text="Summons 1 enemy with random positioning."
-        )
-        
-        self.console.register_command(
-            "summon <enemy_type> <x> <y> <count>", summon_handler,
-            {"enemy_type": EnemyTypeArg(), "x": coords_arg, "y": coords_arg, "count": IntArg()},
-            help_text="Summons <count> enemies at specific coordinates."
-        )
-        
-        # ? GET (Debug Data)
-        self.console.register_command(
-            "get <var> <data> <filter>", get_data_handler,
-            {
-                "var": ChoiceArg(["entity_list", "entity_stack"]),
-                "data": ChoiceArg(["len", "repr_list"]),
-                "filter": ChoiceArg(["all", "is_alive", "is_dead"]) 
-            },
-            help_text="Get debug data. Filter 'all' for total count."
-        )
-        
-        # ? HEAL
-        self.console.register_command(
-            "heal <entity> <amount> <overheal>", heal_handler,
-            {
-                "entity": entity_arg, "amount": FloatArg(),
-                "overheal": BoolArg()
-            },
-            help_text="Heals target entity."
-        )
-        self.console.register_command(
-            "damage <entity> <amount> <overheal> <x> <y> <count>", heal_handler,
-            {
-                "entity": entity_arg,
-                "amount": FloatArg(),
-                "overheal": BoolArg(),
-                "x": coords_arg, "y": coords_arg,
-                "count": IntArg()
-            },
-            help_text="Heals <count> of the closest entities."
-        )
-        
-        # ? Single Argument Commands
-        self.console.register_command(
-            "show_borders <enabled>", toggle_hb_show_handler,
-            {"enabled": BoolArg()},
-            help_text="If enabled, shows all the hitboxes that each entity use."
-        )
-        
-        # ? No Arguments Commands
-        self.console.register_command("quit", quit, help_text="Quits to the main menu.")
-        self.console.register_command(
-            "force_cleanup", force_cleanup_handler, help_text="Force cleanups entities that have despawned.")
-        
     # * === UI SETUP ===
     def _setup_game_ui(self):
         """Initializes Player, Stacks, and HUD."""
@@ -541,14 +206,15 @@ class GameManager:
         inf_layer(self.foreground_stack, 10)
         
         # Buttons / HUD
-        self.controls_tutorial = ControlsTutorial()
         stats_switch = TextAndToggle(
             label_text="Show Stats", label_size=15, right=200, top=10,
             spacer_width=0, width=50, height=25
         )
         stats_switch.switch.on_toggle = self._toggle_stats_panel
         self.stats_panel = StatsDisplay(self.player.stats)
-        self.ui_stack.controls.extend([self.controls_tutorial, stats_switch, self.stats_panel])
+        self.ui_stack.controls.extend([stats_switch, self.stats_panel])
+        if not self.tutorial_handler.finished_tutorial:
+            self.ui_stack.controls.insert(0, self.tutorial_handler())
         
         self.kill_count_text = ft.Text(
             spans=[
@@ -612,59 +278,27 @@ class GameManager:
             case " ": self.player.jump()
             case "V": self.player.attack()
         
-        # * --- Tutorial Check ---
-        if self.finished_tutorial: return
-        else:
-            if len(self.tutorial_state) >= 10:
-                self.finished_tutorial = True
-                self._debug_msg("Finished tutorial!")
-                self.ui_stack.controls.remove(self.controls_tutorial)
-                self.ui_stack.controls.append(self.stats_view)
-                self.ui_stack.update()
-                return
-        tutorial = self.controls_tutorial
-        
-        if 'a' in held_keys:
-            tutorial.set_finish(tutorial.mv_key_a)
-            self.tutorial_state.add("mv_key_a")
-            
-        if 'd' in held_keys:
-            tutorial.set_finish(tutorial.mv_key_d)
-            self.tutorial_state.add("mv_key_d")
-            
-        if self.player.states.is_sprinting:
-            if ('a' or 'A') in held_keys:
-                tutorial.set_finish(tutorial.sprint_key_a)
-                self.tutorial_state.add("sprint_key_a")
-            if ('d' or 'D') in held_keys:
-                tutorial.set_finish(tutorial.sprint_key_d)
-                self.tutorial_state.add("sprint_key_d")
-            tutorial.set_finish(tutorial.sprint_shift)
-            self.tutorial_state.add("sprint_shift")
-            
-        if 'c' in held_keys:
-            if 'a' in held_keys:
-                tutorial.set_finish(tutorial.dash_key_a)
-                self.tutorial_state.add("dash_key_a")
-            if 'd' in held_keys:
-                tutorial.set_finish(tutorial.dash_key_d)
-                self.tutorial_state.add("dash_key_d")
-            tutorial.set_finish(tutorial.dash_key_c)
-            self.tutorial_state.add("dash_key_c")
-            
-        if self.player.states.jumped:
-            tutorial.set_finish(tutorial.jump_key)
-            self.tutorial_state.add("jump_key")
-            
-        if self.player.states.is_attacking:
-            tutorial.set_finish(tutorial.attack_key)
-            self.tutorial_state.add("attack_key")
+        self.tutorial_handler._on_keyboard_event(e)
+    
+    def _on_finish_tutorial(self) -> None:
+        self._debug_msg("Finished tutorial!")
+        self._start_stage_panning()
+        self.ui_stack.controls.remove(self.tutorial_handler.tutorial)
+        self.ui_stack.controls.append(self.stats_view)
+        notif = SimpleNotification(content="Finished tutorial!")
+        self.page.overlay.append(notif)
+        self.ui_stack.update()
     
     def _win_on_event(self, e: ft.WindowEvent):
         match e.type:
             case ft.WindowEventType.MAXIMIZE | ft.WindowEventType.UNMAXIMIZE:
                 self.settings_menu.fullscreen_toggle.update()
         self.settings_menu.win_on_update(e)
+    
+    def _stamina_verbose_toggle(self, enabled: bool) -> None:
+        if self.player:
+            self.player._stamina_bar_stack.verbose = enabled
+        self.verbose_stamina = enabled
     
     def _console_on_toggle(self, enabled: bool) -> None:
         if enabled:
@@ -777,6 +411,13 @@ class GameManager:
         self.start_tasks()
         self._update_ui_focus()
         self._debug_msg("Starting Game!")
+        
+        if not self.tutorial_handler.finished_tutorial:
+            tutorial_dlg = SimpleDialog(
+                title="Key Binds Tutorial",
+                content="Finish the tutorial first before moving beyond the starting area!"
+            )
+            self.page.overlay.append(tutorial_dlg)
         self.page.update()
     
     async def open_settings(self, _):
@@ -885,9 +526,17 @@ entity_stack: {len(self.entity_stack.controls)}
         return created_entities
     
     # * === TASK MANAGEMENT ===
-    def start_tasks(self):
-        """Starts background loops."""
+    def start_tasks(self) -> None:
+        """Starts background loops and appends them to the `running_tasks` list."""
         async def run_light(): await light_mv_loop(self.background_stack)
+            
+        # Store tasks so we can cancel them later
+        self.running_tasks.append(self.page.run_task(run_light))
+        if self.tutorial_handler.finished_tutorial:
+            self._start_stage_panning()
+    
+    def _start_stage_panning(self) -> None:
+        """Starts the stage panning handler's loop."""
         async def run_pan():
             def summon_gobby(): self.summon_enemy(EnemyType.GOBLIN)
             await stage_panning_loop(
@@ -899,12 +548,9 @@ entity_stack: {len(self.entity_stack.controls)}
                 stage=self.stage,
                 post_callback=summon_gobby
             )
-            
-        # Store tasks so we can cancel them later
-        self.running_tasks.append(self.page.run_task(run_light))
         self.running_tasks.append(self.page.run_task(run_pan))
-        
-    def cleanup(self):
+    
+    def cleanup(self) -> None:
         """Call this when exiting or changing levels."""
         for task in self.running_tasks: attempt_cancel(task)
         for entity in self.entity_list:
@@ -913,64 +559,21 @@ entity_stack: {len(self.entity_stack.controls)}
                 entity._cancel_temp_tasks()
         self.player._cancel_loop_tasks()
         self.player._cancel_temp_tasks()
-
-# * === ARGUMENT TYPES ===
-class EntitySelectorArg(ArgType):
-    """
-    Dynamically allows selection of:
-    1. The player instance '**player**'
-    2. Specific Enemy Types (i.e.; '**goblin**')
-    3. Specific Entity Names (i.e.; '**Gobby**')
-    """
-    def __init__(self, game_manager: GameManager):
-        self.gm = game_manager
-
-    def get_suggestions(self, current_input: str) -> list[str]:
-        # Always available
-        options = {"player", "all"}
-        
-        # Add Enemy Types (i.e.; "goblin")
-        options.update(e.name.lower() for e in EnemyType)
-        
-        # Add Active Entity Names (i.e.; "Gobby")
-        # We filter for active entities to avoid suggesting dead/despawned ones
-        if self.gm.entity_list:
-            options.update(e.name.replace(" ", "_") for e in self.gm.entity_list)
-            
-        return [opt for opt in options if opt.lower().startswith(current_input.lower())]
-
-    def parse(self, value: str) -> str:
-        # We just pass the string through; the logic handler will resolve it to objects.
-        return value
-
-class EnemyTypeArg(ArgType):
-    """Strictly selects available EnemyTypes (i.e.; 'goblin')."""
-    def get_suggestions(self, current_input: str) -> list[str]:
-        return [
-            e.name.lower() 
-            for e in EnemyType 
-            if e.name.lower().startswith(current_input.lower())
-        ]
-        
-    def parse(self, value: str) -> str:
-        # Validate that the input is actually a valid enum
-        if not any(e.name.lower() == value.lower() for e in EnemyType):
-            raise ValueError(f"'{value}' is not a valid Entity Type.")
-        return value
     
 # * === MIXINS ===
 class GameManagerMixin:
     """Mixin to bridge GameManager data into Entities."""
-    def _configure_from_manager(self: Entity, game_manager: GameManager):
+    def _configure_from_manager(self: Entity, game_manager: GameManager) -> None:
         """Run this **BEFORE** `super().__init__()` to setup attributes."""
         self.game_manager = game_manager
         self._atk_hb_show = self.game_manager.show_borders
         self._entity_list = self.game_manager.entity_list
+        self.ground_level = self.game_manager.ground_level
     
     @property
     def ground_level(self) -> int: return self.game_manager.ground_level
     
-    def _get_base_kwargs(self, debug: bool):
+    def _get_base_kwargs(self, debug: bool) -> dict[str, Any]:
         """
         Helper for common init arguments. Currently returns the following:
         \n`page`, `audio_manager`, `entity_list`, `debug`.
@@ -982,7 +585,7 @@ class GameManagerMixin:
             "debug": debug
         }
         
-    def _spawn_into_scene(self: Entity, **call_kwargs):
+    def _spawn_into_scene(self: Entity, **call_kwargs) -> None:
         """
         Run this **AFTER** `super().__init__()` to add to the game world.
         
@@ -994,8 +597,8 @@ class GameManagerMixin:
             return
         
         # Apply visual settings that required the stack to exist
-        self.toggle_show_border(self.game_manager.show_borders)
-        self._atk_hb_show = self.game_manager.show_borders
+        _show = self.game_manager.show_borders
+        self.toggle_show_border(show_border=_show, show_atk_hb=_show)
         
         # Add to Logic List (if not already there)
         if self not in self.game_manager.entity_list: self.game_manager.entity_list.append(self)
@@ -1012,7 +615,7 @@ class NewGoblin(Goblin, GameManagerMixin):
     def __init__(
         self, game_manager: GameManager, name: str = None,
         *, center_spawn: bool = True, debug = False
-    ):
+    ) -> None:
         self._configure_from_manager(game_manager)
         super().__init__(
             target=game_manager.player,
@@ -1026,12 +629,11 @@ class NewPlayer(Player, GameManagerMixin):
     Wrapped `Player` class to be used in the `GameMaker` class.
     Automatically spawns into the scene once called.
     """
-    def __init__(
-        self, game_manager: GameManager, *, debug = False
-    ):
+    def __init__(self, game_manager: GameManager, *, debug = False) -> None:
         self._configure_from_manager(game_manager)
         super().__init__(
             held_keys=held_keys,
+            verbose_stamina=game_manager.verbose_stamina,
             **self._get_base_kwargs(debug)
         )
         self._spawn_into_scene()

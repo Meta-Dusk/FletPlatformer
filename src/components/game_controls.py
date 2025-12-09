@@ -2,15 +2,21 @@ import flet as ft
 
 from components.custom_switches import TextAndToggle
 
+class StaminaSettings(TextAndToggle):
+    def __init__(self) -> None:
+        super().__init__(
+            label_text="Verbose Stamina Bar",
+            spacer_width=50
+        )
 
 class ConsoleToggle(TextAndToggle):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             label_text="Enable Dev Console"
         )
 
 class PerfMonitorToggles(ft.Container):
-    def __init__(self):
+    def __init__(self) -> None:
         self.monitor_switch = TextAndToggle(
             label_text="Performance Monitor",
             spacer_width=50
@@ -41,7 +47,7 @@ class PerfMonitorToggles(ft.Container):
         )
         
 class BackgroundToggles(ft.Container):
-    def __init__(self):
+    def __init__(self) -> None:
         self.parallax_bg_switch = TextAndToggle(
             label_text="Allow Parallax Movement",
             spacer_width=10,
