@@ -172,6 +172,7 @@ class Player(Entity):
     # * === CUSTOM MOVEMENT LOOP ===
     async def _movement_loop(self):
         """Handles player movements."""
+        MV_DELAY: float = 0.05
         while True:
             await self._detect_attack_hits()
             await self._detect_damage()
@@ -239,7 +240,7 @@ class Player(Entity):
                 
             elif self.stack.bottom == self.ground_level: self.states.is_falling = False
             if self.states.is_moving or self.states.is_falling: try_update(self.stack)
-            await asyncio.sleep(0.05) # ? Delay for logic just in case
+            await asyncio.sleep(MV_DELAY)
     
     # * === ONE-SHOT ANIMATIONS ===
     async def _revive_anim(self) -> None:

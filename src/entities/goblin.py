@@ -139,6 +139,9 @@ class Goblin(Enemy):
     # * === CUSTOM MOVEMENT LOOP ===
     async def _movement_loop(self) -> None:
         """Handles the goblin's simple AI."""
+        MV_DELAY: float = 0.05
+        ATK_DELAY: float = 1.0
+        
         # Announce if goblin is spawned in the scene (sfx + fade in)
         await asyncio.sleep(self._LOGIC_DELAY)
         self._play_sfx(sfx.enemy.goblin_cackle)
@@ -185,7 +188,7 @@ class Goblin(Enemy):
                             self._flip_char(dx)
                     
                     self.attack()
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(ATK_DELAY)
                     continue
                 else: self.is_idling = True
             
@@ -204,7 +207,7 @@ class Goblin(Enemy):
             if self.states.is_moving:
                 self.states.dealing_damage = False
                 try_update(self.stack)
-            await asyncio.sleep(self._LOGIC_DELAY)
+            await asyncio.sleep(MV_DELAY)
     
     # * === LOOPING ANIMATIONS ===
     async def _animation_loop(self):
