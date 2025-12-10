@@ -2,7 +2,7 @@ import asyncio
 import flet as ft
 
 from setup import before_main_ui
-from game_manager import GameManager
+from managers.game import GameManager
 from utilities.events import silence_event_loop_closed
 
 # * As of version >= 0.1.2, running the project in dev mode requires the following command:

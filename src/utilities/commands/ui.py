@@ -136,7 +136,7 @@ class DevConsole(ft.Container):
             help_text="Shows detailed usage for a command."
         )
         
-    def _on_input_change(self, _) -> None:
+    def _on_input_change(self, _: ft.ControlEvent) -> None:
         full_text = self.input_field.value
         
         # Update Syntax Hint

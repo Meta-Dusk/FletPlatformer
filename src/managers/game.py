@@ -26,10 +26,13 @@ from entities.goblin import Goblin
 from bg_loops import light_mv_loop, stage_panning_loop
 from backgrounds import add_infinite_layer
 
+from managers.menu import MenuManager
+from managers.settings import SettingsManager
+
 music = MusicLibrary()
 audio_manager = global_audio_manager
 
-class GameManager(GameCommands):
+class GameManager(GameCommands, MenuManager, SettingsManager):
     """Central hub for the game UI and states."""
     def __init__(self, page: ft.Page) -> None:
         # State Variables (References)
@@ -116,24 +119,6 @@ class GameManager(GameCommands):
         if hasattr(self, "death_count_text"):
             self.death_count_text.spans[1].text = self._death_count
             try_update(self.death_count_text)
-    
-    # * === MENUS ===
-    def _make_main_menu(self) -> None:
-        """Assembles the Main Menu."""
-        async def exit(_): await self.page.window.close()
-        self.main_menu = MainMenu(
-            on_start=self.start_game,
-            on_settings=self.open_settings,
-            on_quit=exit
-        )
-        if not self.main_menu in self.stage.controls:
-            self.stage.controls.insert(1, self.main_menu)
-        try_update(self.stage)
-    
-    def _remove_main_menu(self):
-        """Removes the Main Menu."""
-        self.stage.controls.remove(self.main_menu)
-        try_update(self.stage)
     
     # * === IMPORTANT METHODS ===
     async def __call__(self) -> None:
@@ -237,15 +222,6 @@ class GameManager(GameCommands):
         return form
         
     # * === EVENT HANDLERS ===
-    def _toggle_stats_panel(self, enabled: bool):
-        """
-        Toggles the visibility of the stats panel,
-        and updates its contents.
-        """
-        self.stats_panel.visible = enabled
-        self.stats_panel._update_texts()
-        try_update(self.stats_panel)
-    
     async def _on_keyboard_event(self, e: ft.KeyboardEvent):
         """Handles various 'on-press' keyboard events."""
         # Window and Dev keybinds
@@ -288,46 +264,6 @@ class GameManager(GameCommands):
         self.page.overlay.append(tutorial_dlg)
         self.ui_stack.update()
     
-    def _win_on_event(self, e: ft.WindowEvent):
-        """Updates controls that reflect the window's properties."""
-        match e.type:
-            case ft.WindowEventType.MAXIMIZE | ft.WindowEventType.UNMAXIMIZE:
-                self.settings_menu.fullscreen_toggle.update()
-        self.settings_menu.win_on_update(e)
-    
-    def _stamina_verbose_toggle(self, enabled: bool) -> None:
-        """Toggles the player's stamina verbose toggle."""
-        if self.player:
-            st_bar = self.player._stamina_bar_stack
-            st_bar.verbose = enabled
-            st_bar.st_label.current_value = self.player.stats.stamina
-        self.verbose_stamina = enabled
-    
-    def _console_on_toggle(self, enabled: bool) -> None:
-        """Adds/removes the developer conosle in the page's overlay."""
-        if enabled:
-            self._debug_msg("Enabling dev console...")
-            notif = SimpleNotification("Enabling the Dev Console!", width=250)
-            self.page.overlay.extend([self.console, notif])
-        else:
-            self._debug_msg("Disabling dev console... 1/2")
-            if self.console in self.page.overlay:
-                self.console.visible = False
-                self.page.overlay.remove(self.console)
-                notif = SimpleNotification("Disabling the Dev Console!", width=250)
-                self.page.overlay.append(notif)
-                self._debug_msg("Disabling dev console... 2/2")
-        self.page.update()
-        self._update_ui_focus()
-    
-    def _perf_monitor_toggle(self, enabled: bool) -> None:
-        """Adds/removes the performance monitor in the page's overlay."""
-        if enabled:
-            self.page.overlay.insert(1, self.perf_monitor)
-            self.page.update()
-        else:
-            self.page.overlay.remove(self.perf_monitor)
-    
     def _on_player_death(self) -> None:
         """Incremets the death counter on player death."""
         self.death_count += 1
@@ -338,74 +274,8 @@ class GameManager(GameCommands):
         self.kill_count += 1
         self._debug_msg(f"Kill Count: {self.kill_count}")
     
-    # * === UI MANAGEMENT ===
-    def _update_ui_focus(self):
-        """
-        Centralized logic to determine which UI layer should be interactive.
-        Priority Order (Highest to Lowest):
-        1. Dev Console
-        2. Settings Menu
-        3. Pause Menu
-        4. Main Menu
-        5. Game HUD (Entity movement / On-screen buttons)
-        """
-        # 1. Check Console (Top Priority)
-        if self.console in self.page.overlay and self.console.visible:
-            self._set_interactivity()
-            return
-        
-        # 2. Check Settings (Can be opened from Main Menu OR Pause Menu)
-        if self.settings_menu.visible:
-            self._set_interactivity(settings=True)
-            return
-        
-        # 3. Check Pause Menu (In-Game Overlay)
-        if self.pause_menu.visible:
-            self._set_interactivity(pause=True)
-            return
-        
-        # 4. Check Main Menu (Start Screen)
-        if self.main_menu in self.stage.controls and self.main_menu.visible:
-            self._set_interactivity(main_menu=True)
-            return
-        
-        # 5. Game Layer (Lowest Priority - only active if nothing else is)
-        if self.is_game_running and self.game_layer.visible:
-            self._set_interactivity(game_hud=True)
-            return
-        
-    def _set_interactivity(
-        self,
-        settings: bool = False,
-        pause: bool = False,
-        main_menu: bool = False,
-        game_hud: bool = False
-    ):
-        """Helper to apply disabled states based on the active flag."""
-        
-        # ? Console (Always interactive if visible, but we don't disable it via property)
-        # ? We just act on the layers below it.
-        
-        # Settings
-        self.settings_menu.disabled = not settings
-        
-        # Pause Menu
-        self.pause_menu.disabled = not pause
-        
-        # Main Menu
-        if self.main_menu:
-            self.main_menu.disabled = not main_menu
-            
-        # Game HUD & Player Control
-        self.ui_stack.disabled = not game_hud
-        
-        # Handle Player Movement Locking
-        if self.player:
-            # Player can move ONLY if the game HUD is the active focus
-            self.player.states.disable_movement = not game_hud
-    
     # * === MENU EVENTS ===
-    async def start_game(self, _):
+    async def start_game(self, _: ft.ControlEvent) -> None:
         """Switch from Menu to Game"""
         self.main_menu.opacity = 0
         try_update(self.main_menu)
@@ -437,41 +307,8 @@ class GameManager(GameCommands):
             )
             self.page.overlay.append(tutorial_dlg)
         self.page.update()
-    
-    async def open_settings(self, _):
-        if self.pause_menu.visible:
-            self.pause_menu.visible = False
-            self.settings_menu.visible = True
-            self.settings_menu.subtitle.visible = True
         
-        elif self.main_menu.visible:
-            self.settings_menu.visible = True
-            self.settings_menu.subtitle.visible = False
-        
-        self._update_ui_focus()
-    
-    def close_settings(self, _):
-        if self.is_game_running:
-            self.pause_menu.visible = True
-            self.settings_menu.visible = False
-        
-        elif self.main_menu.visible:
-            self.main_menu.disabled = False
-            self.settings_menu.visible = False
-        
-        self._update_ui_focus()
-    
-    def toggle_pause(self, _):
-        """Toggle Pause Overlay"""
-        if not self.is_game_running or self.settings_menu.visible: return
-        
-        self.pause_menu.visible = not self.pause_menu.visible
-        self._update_ui_focus()
-        
-        msg = "Game paused!" if self.pause_menu.visible else "Unpausing game!"
-        self._debug_msg(msg)
-        
-    async def quit_to_menu(self, _):
+    async def quit_to_menu(self, _: ft.ControlEvent):
         """Cleanup game and show menu"""
         self.is_game_running = False
         self.cleanup()

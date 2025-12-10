@@ -71,7 +71,7 @@ class CustomSwitch(ft.Container):
         """Play a sound effect."""
         audio_manager.play_sfx(sfx)
     
-    def _on_click(self, _):
+    def _on_click(self, _: ft.ControlEvent):
         # print(f"Setting CustomSwitch from {self.data} -> ", end="")
         self.data = not self.data
         # print(self.data)
@@ -82,7 +82,7 @@ class CustomSwitch(ft.Container):
     def _on_hover(self, e: ft.ControlEvent):
         if e.data: self._play_sfx(sfx.ui.buttons.hover_1)
     
-    def _on_focus(self, _):
+    def _on_focus(self, _: ft.ControlEvent):
         self._play_sfx(sfx.ui.buttons.hover_1)
         
 class TextAndToggle(ft.Container):

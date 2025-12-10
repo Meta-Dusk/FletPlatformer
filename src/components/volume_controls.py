@@ -24,12 +24,8 @@ class VolumeControl(ft.Container):
         )
         self._update_text()
         
-        v_up_btn = SimpleButton(
-            self._make_text("+"), on_click=self.on_volume_up
-        )
-        v_down_btn = SimpleButton(
-            self._make_text("-"), on_click=self.on_volume_down
-        )
+        v_up_btn = SimpleButton(self._make_text("+"), on_click=self.on_volume_up)
+        v_down_btn = SimpleButton(self._make_text("-"), on_click=self.on_volume_down)
         
         btn_row = ft.Row(
             controls=[v_down_btn, v_up_btn], spacing=4,
@@ -79,11 +75,11 @@ class VolumeControl(ft.Container):
             self.audio_manager.sfx_volume += volume
         print(self._get_volume_from_type())
     
-    def on_volume_up(self, _):
+    def on_volume_up(self, _: ft.ControlEvent):
         self._modify_volume_from_type(0.1)
         self._update_text()
             
-    def on_volume_down(self, _):
+    def on_volume_down(self: ft.ControlEvent):
         self._modify_volume_from_type(-0.1)
         self._update_text()
         
