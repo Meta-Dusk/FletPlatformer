@@ -15,7 +15,7 @@ class MenuManager:
         ui_stack: ft.Stack, game_layer: ft.Container, stage: ft.Stack,
         debug_msg: Callable[[str], None] = None,
         start_game: Callable[[ft.ControlEvent], Awaitable[None]] = None
-    ):
+    ) -> None:
         """Optional init. You don't need to call this inside the `GameManager`."""
         self.console = console
         self.page = page
@@ -43,13 +43,13 @@ class MenuManager:
             self.stage.controls.insert(1, self.main_menu)
         try_update(self.stage)
     
-    def _remove_main_menu(self):
+    def _remove_main_menu(self) -> None:
         """Removes the Main Menu."""
         self.stage.controls.remove(self.main_menu)
         try_update(self.stage)
     
     # * === UI MANAGEMENT ===
-    def _update_ui_focus(self):
+    def _update_ui_focus(self) -> None:
         """
         Centralized logic to determine which UI layer should be interactive.
         Priority Order (Highest to Lowest):
@@ -90,7 +90,7 @@ class MenuManager:
         pause: bool = False,
         main_menu: bool = False,
         game_hud: bool = False
-    ):
+    ) -> None:
         """Helper to apply disabled states based on the active flag."""
         
         # ? Console (Always interactive if visible, but we don't disable it via property)
@@ -115,7 +115,7 @@ class MenuManager:
             self.player.states.disable_movement = not game_hud
     
     # * === MENU CALLBACKS ===
-    async def open_settings(self, _: ft.ControlEvent):
+    async def open_settings(self, _: ft.ControlEvent) -> None:
         if self.pause_menu.visible:
             self.pause_menu.visible = False
             self.settings_menu.visible = True
@@ -127,7 +127,7 @@ class MenuManager:
         
         self._update_ui_focus()
     
-    def close_settings(self, _: ft.ControlEvent):
+    def close_settings(self, _: ft.ControlEvent) -> None:
         if self.is_game_running:
             self.pause_menu.visible = True
             self.settings_menu.visible = False
@@ -138,7 +138,7 @@ class MenuManager:
         
         self._update_ui_focus()
     
-    def toggle_pause(self, _: ft.ControlEvent):
+    def toggle_pause(self, _: ft.ControlEvent) -> None:
         """Toggle Pause Overlay"""
         if not self.is_game_running or self.settings_menu.visible: return
         

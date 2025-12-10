@@ -16,7 +16,7 @@ class SettingsManager:
         player: Player, page: ft.Page, console: DevConsole,
         perf_monitor: PerformanceMonitor, verbose_stamina: bool,
         debug_msg: Callable[[str], None] = None,
-    ):
+    ) -> None:
         """Optional init. You don't need to call this inside the `GameManager`."""
         self.stats_panel = stats_panel
         self.settings_menu = settings_menu
@@ -27,7 +27,7 @@ class SettingsManager:
         self.verbose_stamina = verbose_stamina
         self._debug_msg = debug_msg
     
-    def _toggle_stats_panel(self, enabled: bool):
+    def _toggle_stats_panel(self, enabled: bool) -> None:
         """
         Toggles the visibility of the stats panel,
         and updates its contents.
@@ -36,7 +36,7 @@ class SettingsManager:
         self.stats_panel._update_texts()
         try_update(self.stats_panel)
     
-    def _win_on_event(self, e: ft.WindowEvent):
+    def _win_on_event(self, e: ft.WindowEvent) -> None:
         """Updates controls that reflect the window's properties."""
         match e.type:
             case ft.WindowEventType.MAXIMIZE | ft.WindowEventType.UNMAXIMIZE:

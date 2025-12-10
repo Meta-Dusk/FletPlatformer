@@ -242,7 +242,7 @@ class Player(Entity):
             await asyncio.sleep(0.05) # ? Delay for logic just in case
     
     # * === ONE-SHOT ANIMATIONS ===
-    async def _revive_anim(self):
+    async def _revive_anim(self) -> None:
         """Handles the player's revival animation."""
         frame: int = 10
         self._play_sfx(sfx.magic.strike)
@@ -253,7 +253,7 @@ class Player(Entity):
             self.sprite.change_src(self._get_spr_path("death", frame))
             frame -= 1
     
-    async def _jump_anim(self):
+    async def _jump_anim(self) -> None:
         """Handles the player's jump animation."""
         FRAMES: int = 2
         self._play_sfx(sfx.cloth.rough_rustle)
@@ -268,7 +268,7 @@ class Player(Entity):
         self.states.jumped = False
         self._jump_task = None
     
-    async def _attack_anim(self):
+    async def _attack_anim(self) -> None:
         """Handles the player's attack animations with combos."""
         prefix = f"attack-{self.states.attack_phase}"
         FRAMES: int = 6
@@ -307,7 +307,7 @@ class Player(Entity):
         self._attack_task = None
         self._toggle_atk_hb_border()
     
-    async def _death_anim(self):
+    async def _death_anim(self) -> None:
         """Handles the player's death animation."""
         death_sfx = [sfx.player.death_1, sfx.player.death_2]
         FRAMES: int = 10
@@ -326,7 +326,7 @@ class Player(Entity):
             self.sprite.change_src(self._get_spr_path("death", frame))
         self.states.revivable = True
     
-    async def _take_hit_anim(self):
+    async def _take_hit_anim(self) -> None:
         """Handles the player's taking damage animation."""
         FRAMES: int = 3
         
@@ -344,7 +344,7 @@ class Player(Entity):
         self._start_hp_loop()
     
     # * === DASH COOLDOWN ===
-    def _make_dash_cooldown(self):
+    def _make_dash_cooldown(self) -> ft.Image:
         """Returns the icon for the dash cooldown."""
         _scale = 0.25
         dash_cooldown = ft.Image(
@@ -372,11 +372,11 @@ class Player(Entity):
             result = self.on_death()
             if inspect.isawaitable(result):
                 await result
-            
+        
         await self._death_anim()
         self._toggle_atk_hb_border()
     
-    async def dash(self, dx: int):
+    async def dash(self, dx: int) -> None:
         """Player dash action."""
         if self._has_dashed: return
         elif dx == 0: return
@@ -395,7 +395,8 @@ class Player(Entity):
         self._play_sfx(sfx.whoosh.motion, 0.5)
         try_update(self.stack)
         
-        async def timer():
+        async def timer() -> None:
+            """Handles the dash cooldown."""
             cooldown = round(self.stats.dash_cooldown - self.stats.dash_inv_time, 3)
             await asyncio.sleep(self.stats.dash_inv_time)
             self._reset_tint()
@@ -409,7 +410,7 @@ class Player(Entity):
         self.dash_indicator.color = ft.Colors.with_opacity(0.75, ft.Colors.GREY)
         try_update(self.dash_indicator)
     
-    def jump(self):
+    def jump(self) -> None:
         """Player jump action."""
         if self.stack.bottom != self.ground_level or self._interrupt_action(): return
         elif self.stats.stamina <= 0: return
@@ -423,7 +424,7 @@ class Player(Entity):
         self.states.jumped = True
         self._jump_task = self.page.run_task(self._jump_anim)
     
-    def attack(self):
+    def attack(self) -> None:
         """Player attack. Combo cycles: 1 -> 2 -> 1."""
         if not super().attack(): return
         self.states.attack_phase += 1
@@ -432,7 +433,7 @@ class Player(Entity):
         self.states.is_attacking = True
         self._attack_task = self.page.run_task(self._attack_anim)
         
-    async def take_damage(self, damage_amount: float, is_crit: bool = False):
+    async def take_damage(self, damage_amount: float, is_crit: bool = False) -> None:
         """Decrease player's health with logic."""
         if not super().take_damage(damage_amount, is_crit): return
         
@@ -450,7 +451,7 @@ class Player(Entity):
             if self._take_hit_task: attempt_cancel(self._take_hit_task)
             self._take_hit_task = self.page.run_task(self._take_hit_anim)
     
-    async def heal(self, heal_amount: float, overheal: bool = False):
+    async def heal(self, heal_amount: float, overheal: bool = False) -> None:
         """Heals the player."""
         if not super().heal(heal_amount, overheal): return
         self._update_health_bar()
@@ -458,20 +459,20 @@ class Player(Entity):
         await asyncio.sleep(0.1)
         self._reset_tint()
     
-    async def revive(self):
+    async def revive(self) -> None:
         """Revives the player."""
         if not super().revive(): return
         self.states.revivable = False
         self._debug_msg(f"Reviving: {self.name}", debug_handler=self._debug_logs.revive)
         await self._revive_anim()
         self._reset_states()
-        self._reset_stats()
+        self._full_heal()
         self._reset_tint()
         attempt_cancel(self._movement_loop_task)
         self._update_health_bar()
         self._start_loops()
     
-    def __call__(self, start_loops: bool = True):
+    def __call__(self, start_loops: bool = True) -> ft.Stack:
         """
         Returns the `Stack` control, and starts the movement and
         animation loops.
@@ -532,14 +533,14 @@ class Player(Entity):
         self._health_loop_task = self.page.run_task(self._health_regen_loop)
     
     # * === OTHER HELPERS ===
-    def _start_loops(self):
+    def _start_loops(self) -> None:
         """Starts all the looping tasks."""
         self._start_animation_loop()
         self._start_movement_loop()
         self._start_st_loop()
         self._start_hp_loop()
     
-    def _interrupt_action(self, cancel_temp_tasks: bool = True):
+    def _interrupt_action(self, cancel_temp_tasks: bool = True) -> bool:
         """
         Returns `False` if there are no interrupting actions occurring.
         """
@@ -553,7 +554,7 @@ class Player(Entity):
             if cancel_temp_tasks: self._cancel_temp_tasks()
             return False
     
-    def _get_jump_dy(self):
+    def _get_jump_dy(self) -> int:
         """Returns the total jump distance."""
         _dist = float(self.stats.jump_distance)
         _str = self.stats.jump_strength

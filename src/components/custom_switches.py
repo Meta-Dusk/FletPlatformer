@@ -18,7 +18,7 @@ class CustomSwitch(ft.Container):
     def __init__(
         self, width: ft.Number = 100, height: ft.Number = 50, value: bool = False,
         on_toggle: Callable[[SwitchBoolState], None] = None
-    ):
+    ) -> None:
         self.on_toggle = on_toggle
         
         self.thumb = ft.Container(
@@ -46,7 +46,7 @@ class CustomSwitch(ft.Container):
         )
         self._toggle_state()
     
-    def _toggle_state(self):
+    def _toggle_state(self) -> None:
         """Toggles the state of the switch depending on `data`."""
         if self.data:
             self.thumb.align = ft.Alignment.CENTER_RIGHT
@@ -67,11 +67,11 @@ class CustomSwitch(ft.Container):
             if inspect.isawaitable(result):
                 self.page.run_task(result, self.data)
     
-    def _play_sfx(self, sfx: Path):
+    def _play_sfx(self, sfx: Path) -> None:
         """Play a sound effect."""
         audio_manager.play_sfx(sfx)
     
-    def _on_click(self, _: ft.ControlEvent):
+    def _on_click(self, _: ft.ControlEvent) -> None:
         # print(f"Setting CustomSwitch from {self.data} -> ", end="")
         self.data = not self.data
         # print(self.data)
@@ -79,10 +79,10 @@ class CustomSwitch(ft.Container):
         else: self._play_sfx(sfx.ui.buttons.switch_off)
         self._toggle_state()
         
-    def _on_hover(self, e: ft.ControlEvent):
+    def _on_hover(self, e: ft.ControlEvent) -> None:
         if e.data: self._play_sfx(sfx.ui.buttons.hover_1)
     
-    def _on_focus(self, _: ft.ControlEvent):
+    def _on_focus(self, _: ft.ControlEvent) -> None:
         self._play_sfx(sfx.ui.buttons.hover_1)
         
 class TextAndToggle(ft.Container):
@@ -99,7 +99,7 @@ class TextAndToggle(ft.Container):
         bottom: ft.Number = None,
         width: ft.Number = 100,
         height: ft.Number = 50
-    ):
+    ) -> None:
         self.switch = CustomSwitch(value=switch_value, width=width, height=height)
         label = ft.Container(
             content=ft.Text(

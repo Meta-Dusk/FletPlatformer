@@ -7,7 +7,7 @@ async def main(page: ft.Page):
     await test_init(page)
     
     pygame.mixer.init()
-    pygame.mixer.music.load("src/assets/audio/music/summer-samba_world-music-bossa-brasil.mp3")
+    pygame.mixer.music.load("src/assets/audio/music/Sketchbook 2024-03-20_02.ogg")
     pygame.mixer.music.play()
     pygame.mixer.music.set_volume(0.5)
     

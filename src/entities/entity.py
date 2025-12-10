@@ -45,8 +45,8 @@ class Entity(DamageHitbox):
         self._GROUNDING_VALUE: int = 10
         
         # Callbacks
-        self.on_death: Callable[[None], None] = None
-        self.on_kill: Callable[[None], None] = None
+        self.on_death: Callable[[], None] = None
+        self.on_kill: Callable[[], None] = None
         
         # Tasks
         self._movement_loop_task: asyncio.Task = None
@@ -78,7 +78,7 @@ class Entity(DamageHitbox):
         self.hud: ft.Container = None
             
         # Finalization
-        print(f"Making a {faction.value} entity, named; '{name}', with {self.stats}")
+        print(f"\nMaking a {faction.value} entity, named; '{name}', with {self.stats}\n")
         if self.show_hud:
             self._health_bar_stack = self._make_health_bar()
             self.nametag = self._make_nametag()
@@ -164,13 +164,17 @@ class Entity(DamageHitbox):
             try_update(self.stack)
             await asyncio.sleep(idle_time)
     
+    async def _animation_loop(self) -> None:
+        """Implement this method for entities with sprite animations."""
+        raise NotImplementedError("Entity subclasses must implement the _animation_loop!")
+    
     def _start_movement_loop(self) -> None:
         """Starts the movement loop and stores it in a variable."""
         self._debug_msg("Starting Movement Loop!", debug_handler=self._debug_logs.movement)
         self._movement_loop_task = self.page.run_task(self._movement_loop)
     
     # * === OTHER LOOPS ===
-    def _start_animation_loop(self):
+    def _start_animation_loop(self) -> None:
         """Starts the animation loop and stores it in a variable."""
         self._animation_loop_task = self.page.run_task(self._animation_loop)
     
@@ -210,11 +214,13 @@ class Entity(DamageHitbox):
     
     # * === COMPONENT METHODS ===
     def _reset_tint(self) -> None:
+        """Resets the tint of the sprite."""
         self.sprite.color = None
         self.sprite.color_blend_mode = ft.BlendMode.DST
         try_update(self.sprite)
     
     def _apply_tint(self, color: ft.ColorValue) -> None:
+        """Applies a tint to the sprite."""
         TINT_PERCENT: float = 0.3
         self.sprite.color = ft.Colors.with_opacity(TINT_PERCENT, color)
         self.sprite.color_blend_mode = ft.BlendMode.SRC_A_TOP
@@ -331,6 +337,11 @@ class Entity(DamageHitbox):
         return entity.stack.left + (entity.stack.width / 2)
     
     # * === OTHER HELPERS ===
+    def _full_heal(self) -> None:
+        """Sets current HP to current max HP."""
+        init_stats = self._init_stats
+        self.stats.health = init_stats.max_health
+        
     def _reset_states(self, new_states: EntityStates = None) -> None:
         """Reset entity state values back to their defaults."""
         if new_states is None: new_states = EntityStates()
@@ -409,10 +420,10 @@ class Entity(DamageHitbox):
         if self.states.is_attacking:
             self._debug_msg(f"{self.name} is already attacking", debug_handler=self._debug_logs.attack)
             return False
-        elif self.states.dead:
+        if self.states.dead:
             self._debug_msg(f"{self.name} cannot attack while dead", debug_handler=self._debug_logs.attack)
             return False
-        elif self.states.taking_damage:
+        if self.states.taking_damage:
             self._debug_msg(f"{self.name} cannot attack while being damaged", debug_handler=self._debug_logs.attack)
             return False
         return True
@@ -427,10 +438,10 @@ class Entity(DamageHitbox):
         if self.states.dead:
             self._debug_msg(f"{self.name} is already dead", debug_handler=self._debug_logs.damage)
             return False
-        elif self.states.taking_damage:
+        if self.states.taking_damage:
             self._debug_msg(f"{self.name} cannot be damaged again yet", debug_handler=self._debug_logs.damage)
             return False
-        elif self.states.invincible:
+        if self.states.invincible:
             self._debug_msg(f"{self.name} cannot be damaged during i-frames", debug_handler=self._debug_logs.damage)
             return False
         
@@ -473,7 +484,7 @@ class Entity(DamageHitbox):
         if not self.states.dead:
             self._debug_msg(f"{self.name} is not dead", debug_handler=self._debug_logs.revive)
             return False
-        elif not self.states.revivable:
+        if not self.states.revivable:
             self._debug_msg(f"{self.name} is not yet ready to be revived", debug_handler=self._debug_logs.revive)
             return False
         return True

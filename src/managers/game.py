@@ -1,16 +1,15 @@
 import flet as ft
 import asyncio, random
-from typing import Any
 
 from audio.audio_manager import global_audio_manager
 from audio.music_data import MusicLibrary
 
-from components.menus import MainMenu, PauseMenu, SettingsMenu
+from components.menus import PauseMenu, SettingsMenu
 from components.displays import StatsDisplay
 from components.custom_switches import TextAndToggle
-from components.popups import SimpleNotification, SimpleDialog
+from components.popups import SimpleDialog
 
-from utilities.keyboard_manager import held_keys, start as km_start
+from utilities.keyboard_manager import start as km_start
 from utilities.tasks import attempt_cancel
 from utilities.components import try_update, await_for_dur
 from utilities.commands.ui import DevConsole
@@ -18,16 +17,15 @@ from utilities.commands.in_game import GameCommands
 from utilities.performance_monitor import PerformanceMonitor
 from utilities.tutorial_handler import TutorialHandler
 
-from entities.player import Player
 from entities.enemy import EnemyType, Enemy
 from entities.entity import Entity
-from entities.goblin import Goblin
 
 from bg_loops import light_mv_loop, stage_panning_loop
 from backgrounds import add_infinite_layer
 
 from managers.menu import MenuManager
 from managers.settings import SettingsManager
+from managers.game_mixins import NewGoblin, NewPlayer
 
 music = MusicLibrary()
 audio_manager = global_audio_manager
@@ -37,7 +35,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
     def __init__(self, page: ft.Page) -> None:
         # State Variables (References)
         self.page: ft.Page = page
-        self.player: Player = None
+        self.player: NewPlayer = None
         
         # UI Layers
         self.background_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
@@ -164,7 +162,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         print(f"[GameManager] {msg}")
     
     # * === UI SETUP ===
-    def _setup_game_ui(self):
+    def _setup_game_ui(self) -> ft.WindowDragArea:
         """Initializes Player, Stacks, and HUD."""
         # Player
         self.player = NewPlayer(self)
@@ -222,7 +220,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         return form
         
     # * === EVENT HANDLERS ===
-    async def _on_keyboard_event(self, e: ft.KeyboardEvent):
+    async def _on_keyboard_event(self, e: ft.KeyboardEvent) -> None:
         """Handles various 'on-press' keyboard events."""
         # Window and Dev keybinds
         match e.key:
@@ -308,7 +306,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
             self.page.overlay.append(tutorial_dlg)
         self.page.update()
         
-    async def quit_to_menu(self, _: ft.ControlEvent):
+    async def quit_to_menu(self, _: ft.ControlEvent) -> None:
         """Cleanup game and show menu"""
         self.is_game_running = False
         self.cleanup()
@@ -415,80 +413,3 @@ entity_stack: {len(self.entity_stack.controls)}
         self.player._cancel_loop_tasks()
         self.player._cancel_temp_tasks()
     
-# * === MIXINS ===
-class GameManagerMixin:
-    """Mixin to bridge GameManager data into Entities."""
-    def _configure_from_manager(self: Entity, game_manager: GameManager) -> None:
-        """Run this **BEFORE** `super().__init__()` to setup attributes."""
-        self.game_manager = game_manager
-        self._atk_hb_show = self.game_manager.show_borders
-        self._entity_list = self.game_manager.entity_list
-        self.ground_level = self.game_manager.ground_level
-    
-    @property
-    def ground_level(self) -> int: return self.game_manager.ground_level
-    
-    def _get_base_kwargs(self, debug: bool) -> dict[str, Any]:
-        """
-        Helper for common init arguments. Currently returns the following:
-        \n`page`, `audio_manager`, `entity_list`, `debug`.
-        """
-        return {
-            "page": self.game_manager.page,
-            "audio_manager": audio_manager,
-            "entity_list": self.game_manager.entity_list,
-            "debug": debug
-        }
-        
-    def _spawn_into_scene(self: Entity, **call_kwargs) -> None:
-        """
-        Run this **AFTER** `super().__init__()` to add to the game world.
-        
-        Args:
-            **call_kwargs: Arguments passed to `self.__call__()` (i.e., `center_spawn=True`)
-        """
-        if not isinstance(self, Entity):
-            self._debug_msg("Class instance is not an Entity!")
-            return
-        
-        # Apply visual settings that required the stack to exist
-        _show = self.game_manager.show_borders
-        self.toggle_show_border(show_border=_show, show_atk_hb=_show)
-        
-        # Add to Logic List (if not already there)
-        if self not in self.game_manager.entity_list: self.game_manager.entity_list.append(self)
-        
-        # Add to Visual Stack
-        # ? This calls self.__call__(**kwargs), getting the control and starting loops
-        self.game_manager.entity_stack.controls.append(self.__call__(**call_kwargs))
-        
-class NewGoblin(Goblin, GameManagerMixin):
-    """
-    Wrapped `Enemy` class to be used in the `GameMaker` class.
-    Automatically spawns into the scene once called.
-    """
-    def __init__(
-        self, game_manager: GameManager, name: str = None,
-        *, center_spawn: bool = True, debug = False
-    ) -> None:
-        self._configure_from_manager(game_manager)
-        super().__init__(
-            target=game_manager.player,
-            name=name,
-            **self._get_base_kwargs(debug)
-        )
-        self._spawn_into_scene(center_spawn=center_spawn)
-
-class NewPlayer(Player, GameManagerMixin):
-    """
-    Wrapped `Player` class to be used in the `GameMaker` class.
-    Automatically spawns into the scene once called.
-    """
-    def __init__(self, game_manager: GameManager, *, debug = False) -> None:
-        self._configure_from_manager(game_manager)
-        super().__init__(
-            held_keys=held_keys,
-            verbose_stamina=game_manager.verbose_stamina,
-            **self._get_base_kwargs(debug)
-        )
-        self._spawn_into_scene()
