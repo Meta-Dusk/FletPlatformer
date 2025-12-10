@@ -1,4 +1,3 @@
-import asyncio
 import flet as ft
 from enum import Enum
 

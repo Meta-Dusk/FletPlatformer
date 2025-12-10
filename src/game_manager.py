@@ -136,11 +136,11 @@ class GameManager(GameCommands):
         try_update(self.stage)
     
     # * === IMPORTANT METHODS ===
-    async def __call__(self):
+    async def __call__(self) -> None:
         """An alternative way to get the main entry point."""
         await self.initialize()
     
-    async def initialize(self):
+    async def initialize(self) -> None:
         """The entry point called by Flet."""
         # --- Setup ---
         audio_manager.play_music(music.loops.sketchbook.abstraction_2023_11_29)
@@ -174,27 +174,25 @@ class GameManager(GameCommands):
         self.page.window.maximized = True
     
     # * === OTHER HELPERS ===
-    def _debug_msg(self, msg: str): print(f"[GameManager] {msg}")
+    def _debug_msg(self, msg: str) -> None:
+        """A very simple debug logger."""
+        print(f"[GameManager] {msg}")
     
-    def _get_dur(self, control: ft.LayoutControl):
-        """
-        Returns the opacity animation duration in seconds.
-        Assumes that the duration set is of type `int`.
-        """
-        return round(control.animate_opacity.duration / 1000, 3)
-    
-    async def _await_for_dur(self, control: ft.LayoutControl):
+    async def _await_for_dur(self, control: ft.LayoutControl) -> None:
         """
         Awaits the duration of the animation.
         Assumes that the duration set is of type `int`.
         """
-        await asyncio.sleep(self._get_dur(control))
+        seconds = round(control.animate_opacity.duration / 1000, 3)
+        await asyncio.sleep(seconds)
     
     # * === UI SETUP ===
     def _setup_game_ui(self):
         """Initializes Player, Stacks, and HUD."""
         # Player
         self.player = NewPlayer(self)
+        self.player.on_death = self._on_player_death
+        self.player.on_kill = self._on_player_kill
         
         # Stacks/Layers
         def inf_layer(stack: ft.Stack, index: int):
@@ -248,11 +246,16 @@ class GameManager(GameCommands):
         
     # * === EVENT HANDLERS ===
     def _toggle_stats_panel(self, enabled: bool):
+        """
+        Toggles the visibility of the stats panel,
+        and updates its contents.
+        """
         self.stats_panel.visible = enabled
         self.stats_panel._update_texts()
         try_update(self.stats_panel)
     
     async def _on_keyboard_event(self, e: ft.KeyboardEvent):
+        """Handles various 'on-press' keyboard events."""
         # Window and Dev keybinds
         match e.key:
             case "F11": self.page.window.maximized = not self.page.window.maximized
@@ -281,44 +284,65 @@ class GameManager(GameCommands):
         self.tutorial_handler._on_keyboard_event(e)
     
     def _on_finish_tutorial(self) -> None:
+        """Removes the tutorial controls after finishing the tutorial."""
         self._debug_msg("Finished tutorial!")
         self._start_stage_panning()
         self.ui_stack.controls.remove(self.tutorial_handler.tutorial)
         self.ui_stack.controls.append(self.stats_view)
-        notif = SimpleNotification(content="Finished tutorial!")
-        self.page.overlay.append(notif)
+        tutorial_dlg = SimpleDialog(
+            title="Key Binds Tutorial",
+            content="You've finished the tutorial! You can now go ahead an go beyond the starting area."
+        )
+        self.page.overlay.append(tutorial_dlg)
         self.ui_stack.update()
     
     def _win_on_event(self, e: ft.WindowEvent):
+        """Updates controls that reflect the window's properties."""
         match e.type:
             case ft.WindowEventType.MAXIMIZE | ft.WindowEventType.UNMAXIMIZE:
                 self.settings_menu.fullscreen_toggle.update()
         self.settings_menu.win_on_update(e)
     
     def _stamina_verbose_toggle(self, enabled: bool) -> None:
+        """Toggles the player's stamina verbose toggle."""
         if self.player:
             self.player._stamina_bar_stack.verbose = enabled
         self.verbose_stamina = enabled
     
     def _console_on_toggle(self, enabled: bool) -> None:
+        """Adds/removes the developer conosle in the page's overlay."""
         if enabled:
             self._debug_msg("Enabling dev console...")
-            self.page.overlay.append(self.console)
+            notif = SimpleNotification("Enabling the Dev Console!", width=250)
+            self.page.overlay.extend([self.console, notif])
         else:
             self._debug_msg("Disabling dev console... 1/2")
             if self.console in self.page.overlay:
                 self.console.visible = False
                 self.page.overlay.remove(self.console)
+                notif = SimpleNotification("Disabling the Dev Console!", width=250)
+                self.page.overlay.append(notif)
                 self._debug_msg("Disabling dev console... 2/2")
         self.page.update()
         self._update_ui_focus()
     
     def _perf_monitor_toggle(self, enabled: bool) -> None:
+        """Adds/removes the performance monitor in the page's overlay."""
         if enabled:
             self.page.overlay.insert(1, self.perf_monitor)
             self.page.update()
         else:
             self.page.overlay.remove(self.perf_monitor)
+    
+    def _on_player_death(self) -> None:
+        """Incremets the death counter on player death."""
+        self.death_count += 1
+        self._debug_msg(f"Death count: {self.death_count}")
+    
+    def _on_player_kill(self) -> None:
+        """Increments the kill counter on player kill."""
+        self.kill_count += 1
+        self._debug_msg(f"Kill Count: {self.kill_count}")
     
     # * === UI MANAGEMENT ===
     def _update_ui_focus(self):

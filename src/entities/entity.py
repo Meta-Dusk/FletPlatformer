@@ -39,6 +39,10 @@ class Entity(DamageHitbox):
         if not hasattr(self, "ground_level"):
             self.ground_level: int = 0
         
+        # Callbacks
+        self.on_death: Callable[[None], None] = None
+        self.on_kill: Callable[[None], None] = None
+        
         # Tasks
         self._movement_loop_task: asyncio.Task = None
         self._stamina_loop_task: asyncio.Task = None

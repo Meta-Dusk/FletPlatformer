@@ -1,4 +1,4 @@
-import asyncio, random
+import asyncio, random, inspect
 import flet as ft
 from pynput import keyboard
 
@@ -128,16 +128,16 @@ class Player(Entity):
                         self._knockback_self(entity)
                         return
     
-    def _handle_hit_logic(self, target_enemy: Entity):
+    async def _handle_hit_logic(self, target_enemy: Entity):
         """Applies damage to a specific enemy and updates game stats if they die."""
         # Apply Damage
         did_die = target_enemy.take_damage(*self._calculate_damage())
         
         # Check Result
         if not did_die: return
-        if hasattr(self, "game_manager"):
-            self.game_manager.kill_count += 1
-            print(f"[GameManager] Kill Count: {self.game_manager.kill_count}")
+        if self.on_kill:
+            result = self.on_kill()
+            if inspect.isawaitable(result): await result
     
     async def _detect_attack_hits(self):
         """Checks if the Player's active attack hitbox collides with any enemy."""
@@ -162,7 +162,7 @@ class Player(Entity):
                 r2_left=e_left, r2_bottom=e_bottom, r2_w=e_w, r2_h=e_h # Enemy Body
             ):
                 self._debug_msg(f"Hit enemy: {enemy.name}", debug_handler=self._debug_logs.attack)
-                self._handle_hit_logic(enemy)
+                await self._handle_hit_logic(enemy)
     
     # * === CUSTOM MOVEMENT LOOP ===
     async def _movement_loop(self):
@@ -346,10 +346,10 @@ class Player(Entity):
         attempt_cancel(self._health_loop_task)
         attempt_cancel(self._stamina_loop_task)
         self._cancel_temp_tasks()
-        if hasattr(self, "game_manager"):
-            count_str = "times" if self.game_manager.death_count > 0 else "time"
-            self.game_manager.death_count += 1
-            print(f"[GameManager] You have died {self.game_manager.death_count} {count_str}.")
+        if self.on_death:
+            result = self.on_death()
+            if inspect.isawaitable(result):
+                await result
             
         await self._death_anim()
         self._toggle_atk_hb_border()

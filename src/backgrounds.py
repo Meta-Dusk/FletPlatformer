@@ -1,53 +1,61 @@
 import flet as ft
 
-# --- CONSTANTS ---
+# * === CONSTANTS ===
 IMG_WIDTH: int = 928
 IMG_HEIGHT: int = 793
 SCALE: float = 2
 DEFAULT_DURATION: int = 1000
+DEFAULT_ANIM_CURVE: ft.AnimationCurve = ft.AnimationCurve.EASE_IN_OUT
+LIGHT_DURATION: ft.Duration = ft.Duration(minutes=5)
 
-# Map index to specific durations (None = No animation)
-LAYER_DURATIONS: dict[int, int] = {
-    1: 2000,
-    2: 1800,
-    3: 120000, # ? Dynamic layer (Light)
-    4: 1600,
-    5: 1400,
-    6: 120000, # ? Dynamic layer (Light)
-    7: 1200,
+# ? Map index to specific durations (None = No animation)
+LAYER_DURATIONS: dict[int, tuple[int, ft.AnimationCurve]] = {
+    1: (2000, ft.AnimationCurve.EASE_IN_OUT),
+    2: (1800, ft.AnimationCurve.EASE_IN_OUT),
+    3: (LIGHT_DURATION.in_milliseconds, ft.AnimationCurve.LINEAR),   # ? Dynamic layer (Light)
+    4: (1600, ft.AnimationCurve.EASE_IN_OUT),
+    5: (1400, ft.AnimationCurve.EASE_IN_OUT),
+    6: (LIGHT_DURATION.in_milliseconds, ft.AnimationCurve.LINEAR),   # ? Dynamic layer (Light)
+    7: (1200, ft.AnimationCurve.EASE_IN_OUT),
 }
 
-# Layers that need to be wider (3 and 6)
+# ? Layers that need to be wider (3 and 6)
 WIDE_LAYERS: set[int] = {3, 6}
 
 def bg_image_forest(index: int, page: ft.Page) -> ft.Image:
     """Returns an image configured for the background."""
-    # Get duration from dict, default to 1000 if not found
-    duration = LAYER_DURATIONS.get(index, DEFAULT_DURATION)
+    # Get duration from dict, default to the defaults if not found
+    duration, anim_curve = LAYER_DURATIONS.get(index, (DEFAULT_DURATION, DEFAULT_ANIM_CURVE))
     
     # Create Animation Object
     if duration is None: anim = None
-    else: anim = ft.Animation(duration, ft.AnimationCurve.EASE_IN_OUT)
+    else: anim = ft.Animation(duration, anim_curve)
     
     # If index is 3 or 6, use 4x width, otherwise 2x
     width_mult = 4 if index in WIDE_LAYERS else 2
     
     return ft.Image(
+        # Setup
         src=f"images/backgrounds/night_forest/{index}.png",
         data=index,
+        
         # Dimensions
         width=IMG_WIDTH * width_mult,
         height=IMG_HEIGHT * 2,
         scale=SCALE,
+        
         # Placement
         left=page.width / 2,
         bottom=0,
         offset=ft.Offset(0, 0.05),
+        
         # Rendering Quality
         filter_quality=ft.FilterQuality.NONE,
         gapless_playback=True,
+        
         # Repetition Logic
         repeat=ft.ImageRepeat.REPEAT if index == 0 else ft.ImageRepeat.REPEAT_X,
+        
         # Animation
         animate_position=anim,
         opacity=1
