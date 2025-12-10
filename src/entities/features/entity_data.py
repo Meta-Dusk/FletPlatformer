@@ -63,6 +63,8 @@ class EntityStats:
     dash_cooldown: float = 1.0
     dash_inv_time: float = 0.3
     dash_st_cost: float = 5.0
+    exhaustion_modifier: float = 0.5
+    exhaustion_st_multiplier: float = 2.0
     
     # Damage
     attack_damage: float = 5.0

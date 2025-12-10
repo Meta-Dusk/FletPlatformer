@@ -12,7 +12,7 @@ from components.popups import SimpleNotification, SimpleDialog
 
 from utilities.keyboard_manager import held_keys, start as km_start
 from utilities.tasks import attempt_cancel
-from utilities.components import try_update
+from utilities.components import try_update, await_for_dur
 from utilities.commands.ui import DevConsole
 from utilities.commands.in_game import GameCommands
 from utilities.performance_monitor import PerformanceMonitor
@@ -178,14 +178,6 @@ class GameManager(GameCommands):
         """A very simple debug logger."""
         print(f"[GameManager] {msg}")
     
-    async def _await_for_dur(self, control: ft.LayoutControl) -> None:
-        """
-        Awaits the duration of the animation.
-        Assumes that the duration set is of type `int`.
-        """
-        seconds = round(control.animate_opacity.duration / 1000, 3)
-        await asyncio.sleep(seconds)
-    
     # * === UI SETUP ===
     def _setup_game_ui(self):
         """Initializes Player, Stacks, and HUD."""
@@ -306,7 +298,9 @@ class GameManager(GameCommands):
     def _stamina_verbose_toggle(self, enabled: bool) -> None:
         """Toggles the player's stamina verbose toggle."""
         if self.player:
-            self.player._stamina_bar_stack.verbose = enabled
+            st_bar = self.player._stamina_bar_stack
+            st_bar.verbose = enabled
+            st_bar.st_label.current_value = self.player.stats.stamina
         self.verbose_stamina = enabled
     
     def _console_on_toggle(self, enabled: bool) -> None:
@@ -415,7 +409,7 @@ class GameManager(GameCommands):
         """Switch from Menu to Game"""
         self.main_menu.opacity = 0
         try_update(self.main_menu)
-        await self._await_for_dur(self.main_menu)
+        await await_for_dur(self.main_menu.animate_opacity)
         self.main_menu.visible = False
         self.main_menu.stop_loop()
         self._remove_main_menu()
@@ -428,7 +422,7 @@ class GameManager(GameCommands):
         self.game_layer.opacity = 1
         self.game_layer.content = self._setup_game_ui()
         try_update(self.game_layer)
-        await self._await_for_dur(self.game_layer)
+        await await_for_dur(self.game_layer.animate_opacity)
         
         audio_manager.play_music(music.loops.sketchbook.abstraction_2024_03_20_02)
         self.is_game_running = True
@@ -486,7 +480,7 @@ class GameManager(GameCommands):
         self.pause_menu.opacity = 0
         self.settings_menu.opacity = 0
         try_update(self.page)
-        await self._await_for_dur(self.game_layer)
+        await await_for_dur(self.game_layer.animate_opacity)
         self.game_layer.content = None
         self.game_layer.visible = False
         self.pause_menu.visible = False
@@ -512,7 +506,7 @@ entity_stack: {len(self.entity_stack.controls)}
         audio_manager.play_music(music.loops.sketchbook.abstraction_2023_11_29)
         self.main_menu.opacity = 1
         try_update(self.main_menu)
-        await self._await_for_dur(self.main_menu)
+        await await_for_dur(self.main_menu.animate_opacity)
         self.main_menu.start_loop()
     
     # * === GAME EVENTS ===

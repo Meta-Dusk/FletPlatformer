@@ -6,7 +6,7 @@ from typing import Self, Callable
 from images import Sprite
 from audio.audio_manager import AudioManager
 from utilities.values import pathify
-from utilities.components import try_update
+from utilities.components import try_update, get_dur
 from utilities.tasks import attempt_cancel
 from components.popup_text import HealthText
 from components.resource_bars import StaminaBar, HealthBar
@@ -39,6 +39,11 @@ class Entity(DamageHitbox):
         if not hasattr(self, "ground_level"):
             self.ground_level: int = 0
         
+        # Constants
+        self._LOGIC_DELAY: float = 0.1
+        self._GRAVITY_VALUE: int = 25
+        self._GROUNDING_VALUE: int = 10
+        
         # Callbacks
         self.on_death: Callable[[None], None] = None
         self.on_kill: Callable[[None], None] = None
@@ -47,6 +52,10 @@ class Entity(DamageHitbox):
         self._movement_loop_task: asyncio.Task = None
         self._stamina_loop_task: asyncio.Task = None
         self._health_loop_task: asyncio.Task = None
+        self._jump_task: asyncio.Task = None
+        self._attack_task: asyncio.Task = None
+        self._take_hit_task: asyncio.Task = None
+        self._animation_loop_task: asyncio.Task = None
         
         # References
         self._spr_path: Path = pathify(sprite.src)
@@ -77,6 +86,7 @@ class Entity(DamageHitbox):
     
     @property
     def ground_level(self) -> int:
+        """The floor where entities rest upon."""
         return self._ground_level
     
     @ground_level.setter
@@ -108,56 +118,6 @@ class Entity(DamageHitbox):
             base_volume=volume
         )
     
-    # * === RESOURCE LOOPS ===
-    async def _stamina_regen_loop(self) -> None:
-        """Handles the natural stamina regen loop."""
-        while not self.states.dead:
-            if self.stats.stamina >= self.stats.max_stamina:
-                await asyncio.sleep(self.stats.st_regen_tick)
-                continue
-            elif self.states.is_sprinting or self.states.jumped:
-                await asyncio.sleep(self.stats.st_regen_delay)
-                if self.states.is_sprinting or self.states.jumped:
-                    continue
-            
-            if self.states.exhausted and not self.states.is_moving \
-                and not self.states.is_attacking:
-                self.stats.stamina += self.stats.stamina_regen * 2
-            else:
-                self.stats.stamina += self.stats.stamina_regen
-            if self.stats.stamina >= self.stats.max_stamina:
-                self.stats.stamina = self.stats.max_stamina
-                self.states.exhausted = False
-            self._update_stamina_bar()
-            await asyncio.sleep(self.stats.st_regen_tick)
-    
-    def _start_st_loop(self) -> None:
-        """Starts the stamina regen loop and stores it in a variable."""
-        self._debug_msg("Starting Stamina Loop!", debug_handler=self._debug_logs.stamina)
-        self._stamina_loop_task = self.page.run_task(self._stamina_regen_loop)
-    
-    async def _health_regen_loop(self) -> None:
-        """Handles the natural health regen loop."""
-        try:
-            await asyncio.sleep(self.stats.hp_regen_delay)
-            while not self.states.dead:
-                if self.stats.health >= self.stats.max_health:
-                    await asyncio.sleep(self.stats.hp_regen_tick)
-                    continue
-                
-                self.stats.health += self.stats.health_regen
-                if self.stats.health > self.stats.max_health:
-                    self.stats.health = self.stats.max_health
-                self._update_health_bar()
-                await asyncio.sleep(self.stats.hp_regen_tick)
-        except asyncio.CancelledError:
-            self._update_health_bar()
-    
-    def _start_hp_loop(self) -> None:
-        """Starts the health regen loop and stores it in a variable."""
-        self._debug_msg("Starting Health Loop!", debug_handler=self._debug_logs.health)
-        self._health_loop_task = self.page.run_task(self._health_regen_loop)
-    
     # * === MOVEMENT LOOP ===
     def _check_movement(
         self, dx: int, dy: int,
@@ -184,6 +144,8 @@ class Entity(DamageHitbox):
     async def _movement_loop(self) -> None:
         """A simple implementation of what the movement loop should be."""
         base_mv_speed = self.stack.animate_position.duration
+        idle_time: float = 1.0
+        
         while not self.states.dead:
             dx, dy = 0, 0
             rand_m = random.randint(-10, 10)
@@ -196,7 +158,7 @@ class Entity(DamageHitbox):
             
             dx += self.stats.movement_speed * rand_m
             self.stack.animate_position.duration = base_mv_speed * abs(rand_m)
-            idle_time = round(self.stack.animate_position.duration / 1000, 3)
+            idle_time = get_dur(self.stack.animate_position)
             
             self._check_movement(dx, dy)
             try_update(self.stack)
@@ -207,8 +169,14 @@ class Entity(DamageHitbox):
         self._debug_msg("Starting Movement Loop!", debug_handler=self._debug_logs.movement)
         self._movement_loop_task = self.page.run_task(self._movement_loop)
     
+    # * === OTHER LOOPS ===
+    def _start_animation_loop(self):
+        """Starts the animation loop and stores it in a variable."""
+        self._animation_loop_task = self.page.run_task(self._animation_loop)
+    
     # * === COMPONENT TOGGLES ===
     def _flip_char(self, dx: int) -> bool:
+        """Flips the sprite, and returns `True` if successful."""
         if self._flip_sprite_x(dx):
             self._flip_atk_hb()
             self._flip_self_hb()
@@ -216,6 +184,7 @@ class Entity(DamageHitbox):
         return False
     
     def toggle_show_border(self, show_border: bool = None, show_atk_hb: bool = None) -> None:
+        """Toggles the bounding boxes of the entity (includes the hitbox and hurtbox)."""
         if show_border is not None: self._show_border = show_border
         else: self._show_border = not self._show_border
         if show_atk_hb is not None: self._atk_hb_show = show_atk_hb
@@ -246,7 +215,8 @@ class Entity(DamageHitbox):
         try_update(self.sprite)
     
     def _apply_tint(self, color: ft.ColorValue) -> None:
-        self.sprite.color = ft.Colors.with_opacity(0.3, color)
+        TINT_PERCENT: float = 0.3
+        self.sprite.color = ft.Colors.with_opacity(TINT_PERCENT, color)
         self.sprite.color_blend_mode = ft.BlendMode.SRC_A_TOP
         try_update(self.sprite)
     
@@ -284,6 +254,7 @@ class Entity(DamageHitbox):
                 tight=True, spacing=0
             ), top=-25, left=0, right=0, alignment=ft.Alignment.CENTER
         )
+        
         self.stack.controls.append(self.hud)
         try_update(self.stack)
     
@@ -306,20 +277,22 @@ class Entity(DamageHitbox):
         self.health_bar = health_bar.hp_bar
         return health_bar
     
-    def _get_spr_path(self, state: str, index: int, *, debug: bool = False) -> str:
+    def _get_spr_path(self, state: str, frame: int, *, debug: bool = False) -> str:
         """Returns a formatted str path for sprites."""
         _parent = self._spr_path.parent
         _suffix = self._spr_path.suffix
-        spr_path = _parent / f"{state}_{index}{_suffix}"
+        spr_path = _parent / f"{state}_{frame}{_suffix}"
         if debug: self._debug_msg(f"Generated spr_path: {spr_path}", debug_handler=self._debug_logs.setup)
         return spr_path.as_posix()
     
     def _make_stack(self) -> ft.Stack:
         """Returns a stack positioned at the bottom-center of the screen."""
         self._debug_msg(f"Created Entity of faction: {self.faction}", debug_handler=self._debug_logs.setup)
+        PAGE_CENTER_WIDTH: ft.Number = self.page.width / 2
+        SPRITE_CENTER_WIDTH: ft.Number = self.sprite.width / 2
         return ft.Stack(
             controls=[ft.Container(self.sprite, data=self.faction)],
-            left=(self.page.width / 2) - (self.sprite.width / 2), bottom=self.ground_level,
+            left=PAGE_CENTER_WIDTH - SPRITE_CENTER_WIDTH, bottom=self.ground_level,
             animate_position=ft.Animation(100, ft.AnimationCurve.EASE_IN_OUT),
             width=self.sprite.width, height=self.sprite.height,
             clip_behavior=ft.ClipBehavior.NONE
@@ -329,8 +302,8 @@ class Entity(DamageHitbox):
         """Updates the health bar if provided."""
         if self.health_bar is None: return
         self.health_bar.value = abs((self.stats.health / self.stats.max_health) - 1)
-        self._health_bar_stack.hp_label.spans[0].text = round(self.stats.health, 1)
-        try_update(self._health_bar_stack)
+        try_update(self.health_bar)
+        self._health_bar_stack.hp_label.current_value = round(self.stats.health, 1)
     
     def _update_stamina_bar(self) -> None:
         """Updates the stamina bar if provided."""
@@ -338,8 +311,7 @@ class Entity(DamageHitbox):
         self.stamina_bar.value = abs((self.stats.stamina / self.stats.max_stamina) - 1)
         try_update(self.stamina_bar)
         if self._stamina_bar_stack.verbose:
-            self._stamina_bar_stack.st_label.spans[0].text = round(self.stats.stamina, 1)
-            try_update(self._stamina_bar_stack.st_label)
+            self._stamina_bar_stack.st_label.current_value = round(self.stats.stamina, 1)
     
     def _flip_sprite_x(self, dx: int) -> bool:
         """Flips the facing direction of the sprite."""
@@ -382,6 +354,25 @@ class Entity(DamageHitbox):
             dmg = self.stats.attack_damage * self.stats.crit_damage
             is_crit = True
         return dmg, is_crit
+    
+    def _cancel_temp_tasks(self):
+        """Cancels all running temporary tasks."""
+        tasks = [
+            self._jump_task,
+            self._attack_task,
+            self._take_hit_task
+        ]
+        for task in tasks: attempt_cancel(task)
+    
+    def _cancel_loop_tasks(self):
+        """Cancels all running looping tasks."""
+        tasks = [
+            self._movement_loop_task,
+            self._animation_loop_task,
+            self._stamina_loop_task,
+            self._health_loop_task
+        ]
+        for task in tasks: attempt_cancel(task)
     
     # * === CALLABLE ACTIONS/EVENTS ===
     def __repr__(self) -> str:

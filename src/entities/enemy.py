@@ -10,7 +10,7 @@ from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
 from utilities.tasks import attempt_cancel
 from utilities.collisions import is_in_x_range
-from utilities.components import try_update
+from utilities.components import try_update, await_for_dur
 
 sfx = SFXLibrary()
 
@@ -50,6 +50,7 @@ class Enemy(Entity):
         )
         self.name = type.value.name if name is None else name
         
+        # Random stats
         rnd_health_range = (10, 20)
         mv_speed_min = 10
         rnd_health = random.randint(*rnd_health_range)
@@ -70,12 +71,8 @@ class Enemy(Entity):
         self.type = type
         self.target = target
         self._handler_str = self.name
-        self._attack_task: asyncio.Task = None
-        self._take_hit_task: asyncio.Task = None
-        self._animation_loop_task: asyncio.Task = None
         self.is_idling: bool = False
         self.melee_range: int = type.value.melee_range
-        self._cached_player_stack = None
         self._rnd_dx: int = 0
         self._make_atk_hitbox(
             p1_r_left=-15, p1_width=180, p1_height=100,
@@ -86,47 +83,48 @@ class Enemy(Entity):
     # * === LOOPING ANIMATIONS ===
     async def _animation_loop(self):
         """Handles an enemy's different animation loops."""
-        index: int = 0
+        frame: int = 0
+        RUNNING_FRAMES: int = 7
+        RUNNING_FRAME_DURATION: float = 0.075
+        IDLE_FRAMES: int = 3
+        FOOTSTEPS_VOLUME: float = 0.2
+        
         while not self.states.dead:
             # Give way to other animations
             if self.states.is_attacking or self.states.taking_damage or self.states.dead:
-                await asyncio.sleep(0.1) # ? Important logic delay
+                await asyncio.sleep(self._LOGIC_DELAY)
                 continue
             
             # Running animation
             if self.states.is_moving:
-                if index > 7: index = 0
-                await asyncio.sleep(0.075)
-                self.sprite.change_src(self._get_spr_path("run", index))
-                if index == 2: self._play_sfx(sfx.footsteps.footstep_grass_1, 0.2)
-                if index == 5: self._play_sfx(sfx.footsteps.footstep_grass_1, 0.2)
+                if frame > RUNNING_FRAMES: frame = 0
+                await asyncio.sleep(RUNNING_FRAME_DURATION)
+                self.sprite.change_src(self._get_spr_path("run", frame))
+                if frame == 2: self._play_sfx(sfx.footsteps.footstep_grass_1, FOOTSTEPS_VOLUME)
+                if frame == 5: self._play_sfx(sfx.footsteps.footstep_grass_1, FOOTSTEPS_VOLUME)
              
              # Idle animation
             else:
-                if index > 3: index = 0
-                await asyncio.sleep(0.1)
-                self.sprite.change_src(self._get_spr_path("idle", index))
+                if frame > IDLE_FRAMES: frame = 0
+                await asyncio.sleep(self._LOGIC_DELAY)
+                self.sprite.change_src(self._get_spr_path("idle", frame))
             
-            index += 1
-    
-    def _start_animation_loop(self):
-        """Starts the animation loop and stores it in a variable."""
-        self._animation_loop_task = self.page.run_task(self._animation_loop)
+            frame += 1
     
     # * === CUSTOM MOVEMENT LOOP ===
     async def _movement_loop(self):
-        """Handles the enemy's movements."""
-        await asyncio.sleep(0.1)
+        """Handles the goblin's simple AI."""
+        # Announce if goblin is spawned in the scene (sfx + fade in)
+        await asyncio.sleep(self._LOGIC_DELAY)
         self._play_sfx(sfx.enemy.goblin_cackle)
         self.stack.opacity = 1
         try_update(self.stack)
-        await asyncio.sleep(round(self.stack.animate_opacity.duration / 1000, 3))
-        logic_delay: float = 0.05
+        await await_for_dur(self.stack.animate_opacity)
         
         while not self.states.dead:
             if self.states.disable_movement:
                 self.states.is_moving = False
-                await asyncio.sleep(logic_delay)
+                await asyncio.sleep(self._LOGIC_DELAY)
                 continue
             
             dx, dy = 0, 0
@@ -155,21 +153,25 @@ class Enemy(Entity):
                         if self.target.states.is_attacking:
                             self.states.attack_phase = 0
                         else: self.states.attack_phase = 1
-                        if self._get_center_point(self.target) > self._get_center_point(self):
-                            self._flip_char(-1)
-                        elif self._get_center_point(self.target) < self._get_center_point(self):
-                            self._flip_char(1)
+                        if (
+                            self._get_center_point(self.target) > self._get_center_point(self) or
+                            self._get_center_point(self.target) < self._get_center_point(self)
+                        ):
+                            self._flip_char(dx)
                     
                     self.attack()
                     await asyncio.sleep(1)
                     continue
                 else: self.is_idling = True
             
+            # ? Simple idle mechanic
             if self.is_idling:
                 if self._rnd_dx == 0:
+                    # 10% chance of attempting random movement when idle
                     if random.randint(1, 10) > 9:
                         self._rnd_dx = random.randint(-1, 1) * self.stats.movement_speed
                 else:
+                    # 30% chance of staying still when idle
                     if random.randint(1, 10) > 7: self._rnd_dx = 0
                     else: dx += self._rnd_dx
             
@@ -177,7 +179,7 @@ class Enemy(Entity):
             if self.states.is_moving:
                 self.states.dealing_damage = False
                 try_update(self.stack)
-            await asyncio.sleep(logic_delay)
+            await asyncio.sleep(self._LOGIC_DELAY)
         
     
     # * === ONE-SHOT ANIMATIONS ===
@@ -185,31 +187,37 @@ class Enemy(Entity):
         """Handles the enemy's attack animations with combos."""
         prefix = f"attack-{self.states.attack_phase}"
         mod_atk_delay = self.stats.attack_frame_delay * 1.5
-        for i in range(8):
+        FRAMES = 7
+        
+        for frame in range(FRAMES + 1):
             await asyncio.sleep(mod_atk_delay if self.states.stun_immune else self.stats.attack_frame_delay)
             if self.states.attack_phase == 1:
-                if i == 2 and random.randint(1, 2) > 1:
+                # 50% chance of parry
+                if frame == 2 and random.randint(1, 2) > 1:
                     self._apply_tint(ft.Colors.YELLOW)
                     self.states.stun_immune = True
-                elif i == 5:
+                elif frame == 5:
                     self._reset_tint()
                     self.states.stun_immune = False
-                elif i == 6: self._modify_self_hitbox(width=80, height=80, r_left=10)
+                elif frame == 6:
+                    self._modify_self_hitbox(width=80, height=80, r_left=10)
             elif self.states.attack_phase == 2:
-                if i == 0: self._modify_self_hitbox(r_left=30)
-                elif i == 1: self._modify_self_hitbox(r_left=0)
-                elif i == 2: self._modify_self_hitbox(r_left=-5, height=60)
-                elif i in {2, 3, 4}:
+                if frame == 0: self._modify_self_hitbox(r_left=30)
+                elif frame == 1: self._modify_self_hitbox(r_left=0)
+                elif frame == 2: self._modify_self_hitbox(r_left=-5, height=60)
+                elif frame in {2, 3, 4}:
                     if self.target.states.is_attacking: await asyncio.sleep(0.05)
-                elif i == 5: self._modify_self_hitbox(r_left=50, height=60)
-            if i == 5: self._play_sfx(sfx.enemy.boggart_hya)
-            elif i == 6:
+                elif frame == 5: self._modify_self_hitbox(r_left=50, height=60)
+                
+            if frame == 5: self._play_sfx(sfx.enemy.boggart_hya)
+            elif frame == 6:
                 self.states.dealing_damage = True
                 self._toggle_atk_hb_border()
-            elif i == 7:
+            elif frame == 7:
                 self.states.dealing_damage = False
                 self._toggle_atk_hb_border()
-            self.sprite.change_src(self._get_spr_path(prefix, i))
+            self.sprite.change_src(self._get_spr_path(prefix, frame))
+            
         self._modify_self_hitbox(reset=True)
         self.states.is_attacking = False
         self._attack_task = None
@@ -217,25 +225,31 @@ class Enemy(Entity):
     
     async def _death_anim(self):
         """Handles the enemy's death animation."""
+        FRAMES = 3
         self._update_health_bar()
         self._play_sfx(sfx.enemy.goblin_scream)
         self._play_sfx(sfx.impacts.flesh_impact_2)
-        for i in range(4):
-            await asyncio.sleep(0.1)
-            self.sprite.change_src(self._get_spr_path("death", i))
+        
+        for frame in range(FRAMES + 1):
+            await asyncio.sleep(self._LOGIC_DELAY)
+            self.sprite.change_src(self._get_spr_path("death", frame))
+            
         self.states.revivable = True
     
     async def _take_hit_anim(self, play_animation: bool = True):
         """Handles the enemy's taking damage animation."""
-        for i in range(4):
-            await asyncio.sleep(0.1)
-            if play_animation: self.sprite.change_src(self._get_spr_path("take-hit", i))
-            if i == 1:
+        FRAMES: int = 3
+        
+        for frame in range(FRAMES + 1):
+            await asyncio.sleep(self._LOGIC_DELAY)
+            if play_animation: self.sprite.change_src(self._get_spr_path("take-hit", frame))
+            if frame == 1:
                 self._update_health_bar()
                 self._play_sfx(sfx.enemy.goblin_hurt)
                 if self.target.states.attack_phase == 1: self._play_sfx(sfx.impacts.flesh_impact_1)
                 elif self.target.states.attack_phase == 2: self._play_sfx(sfx.impacts.axe_hit_flesh)
-            if i == 2: self._knockback_self(self.target)
+            if frame == 2: self._knockback_self(self.target)
+            
         self.states.taking_damage = False
         self._take_hit_task = None
         self._reset_tint()
@@ -245,14 +259,14 @@ class Enemy(Entity):
         """Removes `self` from `stage` and `_entity_list`."""
         entity_stack = self._get_parent()
         
-        msg_1 = "Attempting to remove self from entity_stack:"
+        msg_1 = "Attempting to remove 'self' from 'entity_stack':"
         self._debug_msg(f"{msg_1} {len(entity_stack.controls)} -> ", end="", debug_handler=self._debug_logs.cleanup)
         if self.stack in entity_stack.controls:
             entity_stack.controls.remove(self.stack)
             try_update(entity_stack)
         self._debug_msg(len(entity_stack.controls), include_handler=False, debug_handler=self._debug_logs.cleanup)
         
-        msg_2 = "Attempting to remove self from _entity_list:"
+        msg_2 = "Attempting to remove 'self' from '_entity_list':"
         self._debug_msg(f"{msg_2} {len(self._entity_list)} -> ", end="", debug_handler=self._debug_logs.cleanup)
         if self._entity_list is not None and self in self._entity_list: self._entity_list.remove(self)
         self._debug_msg(len(self._entity_list), include_handler=False, debug_handler=self._debug_logs.cleanup)
@@ -339,22 +353,6 @@ class Enemy(Entity):
             return False
     
     # * === OTHER HELPERS ===
-    def _cancel_temp_tasks(self):
-        """Cancels all running temporary tasks."""
-        tasks = [
-            self._attack_task,
-            self._take_hit_task
-        ]
-        for task in tasks: attempt_cancel(task)
-    
-    def _cancel_loop_tasks(self):
-        """Cancels all running looping tasks."""
-        tasks = [
-            self._movement_loop_task,
-            self._animation_loop_task
-        ]
-        for task in tasks: attempt_cancel(task)
-    
     def _is_target_in_range(self, threshold: float = None):
         """Checks if the specifically targeted `Entity` is in range."""
         if self.target is None: return False

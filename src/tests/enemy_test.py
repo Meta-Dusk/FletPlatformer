@@ -5,6 +5,7 @@ from entities.features.entity_data import Factions
 from entities.entity import Entity
 from audio.audio_manager import global_audio_manager
 from utilities.tasks import attempt_cancel
+from utilities.components import try_update
 from images import Sprite
 from tests.test_templates import test_init
 
@@ -20,11 +21,11 @@ async def test(page: ft.Page):
     def on_change_mv(e: ft.ControlEvent):
         if e.data:
             dummy_player._start_movement_loop()
-            dummy_player._safe_update(dummy_player.stack)
+            try_update(dummy_player.stack)
         else:
             attempt_cancel(dummy_player._movement_loop_task)
             dummy_player.stack.animate_position.duration = 100
-            dummy_player._safe_update(dummy_player.stack)
+            try_update(dummy_player.stack)
             
     def on_change_death(e: ft.ControlEvent):
         dummy_player.states.dead = e.data
@@ -33,7 +34,7 @@ async def test(page: ft.Page):
             toggle_player_mv_loop.disabled = True
             toggle_player_mv_loop.update()
             dummy_player.stack.animate_position.duration = 100
-            dummy_player._safe_update(dummy_player.stack)
+            try_update(dummy_player.stack)
         else:
             toggle_player_mv_loop.disabled = False
             toggle_player_mv_loop.update()
