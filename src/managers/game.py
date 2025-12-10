@@ -1,40 +1,41 @@
 import flet as ft
 import asyncio, random
-from typing import Any
 
 from audio.audio_manager import global_audio_manager
 from audio.music_data import MusicLibrary
 
-from components.menus import MainMenu, PauseMenu, SettingsMenu
+from components.menus import PauseMenu, SettingsMenu
 from components.displays import StatsDisplay
 from components.custom_switches import TextAndToggle
-from components.popups import SimpleNotification, SimpleDialog
+from components.popups import SimpleDialog
 
-from utilities.keyboard_manager import held_keys, start as km_start
+from utilities.keyboard_manager import start as km_start
 from utilities.tasks import attempt_cancel
-from utilities.components import try_update
+from utilities.components import try_update, await_for_dur
 from utilities.commands.ui import DevConsole
 from utilities.commands.in_game import GameCommands
 from utilities.performance_monitor import PerformanceMonitor
 from utilities.tutorial_handler import TutorialHandler
 
-from entities.player import Player
 from entities.enemy import EnemyType, Enemy
 from entities.entity import Entity
-from entities.goblin import Goblin
 
 from bg_loops import light_mv_loop, stage_panning_loop
 from backgrounds import add_infinite_layer
 
+from managers.menu import MenuManager
+from managers.settings import SettingsManager
+from managers.game_mixins import NewGoblin, NewPlayer
+
 music = MusicLibrary()
 audio_manager = global_audio_manager
 
-class GameManager(GameCommands):
+class GameManager(GameCommands, MenuManager, SettingsManager):
     """Central hub for the game UI and states."""
     def __init__(self, page: ft.Page) -> None:
         # State Variables (References)
         self.page: ft.Page = page
-        self.player: Player = None
+        self.player: NewPlayer = None
         
         # UI Layers
         self.background_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
@@ -117,30 +118,12 @@ class GameManager(GameCommands):
             self.death_count_text.spans[1].text = self._death_count
             try_update(self.death_count_text)
     
-    # * === MENUS ===
-    def _make_main_menu(self) -> None:
-        """Assembles the Main Menu."""
-        async def exit(_): await self.page.window.close()
-        self.main_menu = MainMenu(
-            on_start=self.start_game,
-            on_settings=self.open_settings,
-            on_quit=exit
-        )
-        if not self.main_menu in self.stage.controls:
-            self.stage.controls.insert(1, self.main_menu)
-        try_update(self.stage)
-    
-    def _remove_main_menu(self):
-        """Removes the Main Menu."""
-        self.stage.controls.remove(self.main_menu)
-        try_update(self.stage)
-    
     # * === IMPORTANT METHODS ===
-    async def __call__(self):
+    async def __call__(self) -> None:
         """An alternative way to get the main entry point."""
         await self.initialize()
     
-    async def initialize(self):
+    async def initialize(self) -> None:
         """The entry point called by Flet."""
         # --- Setup ---
         audio_manager.play_music(music.loops.sketchbook.abstraction_2023_11_29)
@@ -174,27 +157,17 @@ class GameManager(GameCommands):
         self.page.window.maximized = True
     
     # * === OTHER HELPERS ===
-    def _debug_msg(self, msg: str): print(f"[GameManager] {msg}")
-    
-    def _get_dur(self, control: ft.LayoutControl):
-        """
-        Returns the opacity animation duration in seconds.
-        Assumes that the duration set is of type `int`.
-        """
-        return round(control.animate_opacity.duration / 1000, 3)
-    
-    async def _await_for_dur(self, control: ft.LayoutControl):
-        """
-        Awaits the duration of the animation.
-        Assumes that the duration set is of type `int`.
-        """
-        await asyncio.sleep(self._get_dur(control))
+    def _debug_msg(self, msg: str) -> None:
+        """A very simple debug logger."""
+        print(f"[GameManager] {msg}")
     
     # * === UI SETUP ===
-    def _setup_game_ui(self):
+    def _setup_game_ui(self) -> ft.WindowDragArea:
         """Initializes Player, Stacks, and HUD."""
         # Player
         self.player = NewPlayer(self)
+        self.player.on_death = self._on_player_death
+        self.player.on_kill = self._on_player_kill
         
         # Stacks/Layers
         def inf_layer(stack: ft.Stack, index: int):
@@ -247,12 +220,8 @@ class GameManager(GameCommands):
         return form
         
     # * === EVENT HANDLERS ===
-    def _toggle_stats_panel(self, enabled: bool):
-        self.stats_panel.visible = enabled
-        self.stats_panel._update_texts()
-        try_update(self.stats_panel)
-    
-    async def _on_keyboard_event(self, e: ft.KeyboardEvent):
+    async def _on_keyboard_event(self, e: ft.KeyboardEvent) -> None:
+        """Handles various 'on-press' keyboard events."""
         # Window and Dev keybinds
         match e.key:
             case "F11": self.page.window.maximized = not self.page.window.maximized
@@ -281,117 +250,34 @@ class GameManager(GameCommands):
         self.tutorial_handler._on_keyboard_event(e)
     
     def _on_finish_tutorial(self) -> None:
+        """Removes the tutorial controls after finishing the tutorial."""
         self._debug_msg("Finished tutorial!")
         self._start_stage_panning()
         self.ui_stack.controls.remove(self.tutorial_handler.tutorial)
         self.ui_stack.controls.append(self.stats_view)
-        notif = SimpleNotification(content="Finished tutorial!")
-        self.page.overlay.append(notif)
+        tutorial_dlg = SimpleDialog(
+            title="Key Binds Tutorial",
+            content="You've finished the tutorial! You can now go ahead an go beyond the starting area."
+        )
+        self.page.overlay.append(tutorial_dlg)
         self.ui_stack.update()
     
-    def _win_on_event(self, e: ft.WindowEvent):
-        match e.type:
-            case ft.WindowEventType.MAXIMIZE | ft.WindowEventType.UNMAXIMIZE:
-                self.settings_menu.fullscreen_toggle.update()
-        self.settings_menu.win_on_update(e)
+    def _on_player_death(self) -> None:
+        """Incremets the death counter on player death."""
+        self.death_count += 1
+        self._debug_msg(f"Death count: {self.death_count}")
     
-    def _stamina_verbose_toggle(self, enabled: bool) -> None:
-        if self.player:
-            self.player._stamina_bar_stack.verbose = enabled
-        self.verbose_stamina = enabled
-    
-    def _console_on_toggle(self, enabled: bool) -> None:
-        if enabled:
-            self._debug_msg("Enabling dev console...")
-            self.page.overlay.append(self.console)
-        else:
-            self._debug_msg("Disabling dev console... 1/2")
-            if self.console in self.page.overlay:
-                self.console.visible = False
-                self.page.overlay.remove(self.console)
-                self._debug_msg("Disabling dev console... 2/2")
-        self.page.update()
-        self._update_ui_focus()
-    
-    def _perf_monitor_toggle(self, enabled: bool) -> None:
-        if enabled:
-            self.page.overlay.insert(1, self.perf_monitor)
-            self.page.update()
-        else:
-            self.page.overlay.remove(self.perf_monitor)
-    
-    # * === UI MANAGEMENT ===
-    def _update_ui_focus(self):
-        """
-        Centralized logic to determine which UI layer should be interactive.
-        Priority Order (Highest to Lowest):
-        1. Dev Console
-        2. Settings Menu
-        3. Pause Menu
-        4. Main Menu
-        5. Game HUD (Entity movement / On-screen buttons)
-        """
-        # 1. Check Console (Top Priority)
-        if self.console in self.page.overlay and self.console.visible:
-            self._set_interactivity()
-            return
-        
-        # 2. Check Settings (Can be opened from Main Menu OR Pause Menu)
-        if self.settings_menu.visible:
-            self._set_interactivity(settings=True)
-            return
-        
-        # 3. Check Pause Menu (In-Game Overlay)
-        if self.pause_menu.visible:
-            self._set_interactivity(pause=True)
-            return
-        
-        # 4. Check Main Menu (Start Screen)
-        if self.main_menu in self.stage.controls and self.main_menu.visible:
-            self._set_interactivity(main_menu=True)
-            return
-        
-        # 5. Game Layer (Lowest Priority - only active if nothing else is)
-        if self.is_game_running and self.game_layer.visible:
-            self._set_interactivity(game_hud=True)
-            return
-        
-    def _set_interactivity(
-        self,
-        settings: bool = False,
-        pause: bool = False,
-        main_menu: bool = False,
-        game_hud: bool = False
-    ):
-        """Helper to apply disabled states based on the active flag."""
-        
-        # ? Console (Always interactive if visible, but we don't disable it via property)
-        # ? We just act on the layers below it.
-        
-        # Settings
-        self.settings_menu.disabled = not settings
-        
-        # Pause Menu
-        self.pause_menu.disabled = not pause
-        
-        # Main Menu
-        if self.main_menu:
-            self.main_menu.disabled = not main_menu
-            
-        # Game HUD & Player Control
-        self.ui_stack.disabled = not game_hud
-        
-        # Handle Player Movement Locking
-        if self.player:
-            # Player can move ONLY if the game HUD is the active focus
-            self.player.states.disable_movement = not game_hud
+    def _on_player_kill(self) -> None:
+        """Increments the kill counter on player kill."""
+        self.kill_count += 1
+        self._debug_msg(f"Kill Count: {self.kill_count}")
     
     # * === MENU EVENTS ===
-    async def start_game(self, _):
+    async def start_game(self, _: ft.ControlEvent) -> None:
         """Switch from Menu to Game"""
         self.main_menu.opacity = 0
         try_update(self.main_menu)
-        await self._await_for_dur(self.main_menu)
+        await await_for_dur(self.main_menu.animate_opacity)
         self.main_menu.visible = False
         self.main_menu.stop_loop()
         self._remove_main_menu()
@@ -404,7 +290,7 @@ class GameManager(GameCommands):
         self.game_layer.opacity = 1
         self.game_layer.content = self._setup_game_ui()
         try_update(self.game_layer)
-        await self._await_for_dur(self.game_layer)
+        await await_for_dur(self.game_layer.animate_opacity)
         
         audio_manager.play_music(music.loops.sketchbook.abstraction_2024_03_20_02)
         self.is_game_running = True
@@ -419,41 +305,8 @@ class GameManager(GameCommands):
             )
             self.page.overlay.append(tutorial_dlg)
         self.page.update()
-    
-    async def open_settings(self, _):
-        if self.pause_menu.visible:
-            self.pause_menu.visible = False
-            self.settings_menu.visible = True
-            self.settings_menu.subtitle.visible = True
         
-        elif self.main_menu.visible:
-            self.settings_menu.visible = True
-            self.settings_menu.subtitle.visible = False
-        
-        self._update_ui_focus()
-    
-    def close_settings(self, _):
-        if self.is_game_running:
-            self.pause_menu.visible = True
-            self.settings_menu.visible = False
-        
-        elif self.main_menu.visible:
-            self.main_menu.disabled = False
-            self.settings_menu.visible = False
-        
-        self._update_ui_focus()
-    
-    def toggle_pause(self, _):
-        """Toggle Pause Overlay"""
-        if not self.is_game_running or self.settings_menu.visible: return
-        
-        self.pause_menu.visible = not self.pause_menu.visible
-        self._update_ui_focus()
-        
-        msg = "Game paused!" if self.pause_menu.visible else "Unpausing game!"
-        self._debug_msg(msg)
-        
-    async def quit_to_menu(self, _):
+    async def quit_to_menu(self, _: ft.ControlEvent) -> None:
         """Cleanup game and show menu"""
         self.is_game_running = False
         self.cleanup()
@@ -462,7 +315,7 @@ class GameManager(GameCommands):
         self.pause_menu.opacity = 0
         self.settings_menu.opacity = 0
         try_update(self.page)
-        await self._await_for_dur(self.game_layer)
+        await await_for_dur(self.game_layer.animate_opacity)
         self.game_layer.content = None
         self.game_layer.visible = False
         self.pause_menu.visible = False
@@ -488,7 +341,7 @@ entity_stack: {len(self.entity_stack.controls)}
         audio_manager.play_music(music.loops.sketchbook.abstraction_2023_11_29)
         self.main_menu.opacity = 1
         try_update(self.main_menu)
-        await self._await_for_dur(self.main_menu)
+        await await_for_dur(self.main_menu.animate_opacity)
         self.main_menu.start_loop()
     
     # * === GAME EVENTS ===
@@ -560,80 +413,3 @@ entity_stack: {len(self.entity_stack.controls)}
         self.player._cancel_loop_tasks()
         self.player._cancel_temp_tasks()
     
-# * === MIXINS ===
-class GameManagerMixin:
-    """Mixin to bridge GameManager data into Entities."""
-    def _configure_from_manager(self: Entity, game_manager: GameManager) -> None:
-        """Run this **BEFORE** `super().__init__()` to setup attributes."""
-        self.game_manager = game_manager
-        self._atk_hb_show = self.game_manager.show_borders
-        self._entity_list = self.game_manager.entity_list
-        self.ground_level = self.game_manager.ground_level
-    
-    @property
-    def ground_level(self) -> int: return self.game_manager.ground_level
-    
-    def _get_base_kwargs(self, debug: bool) -> dict[str, Any]:
-        """
-        Helper for common init arguments. Currently returns the following:
-        \n`page`, `audio_manager`, `entity_list`, `debug`.
-        """
-        return {
-            "page": self.game_manager.page,
-            "audio_manager": audio_manager,
-            "entity_list": self.game_manager.entity_list,
-            "debug": debug
-        }
-        
-    def _spawn_into_scene(self: Entity, **call_kwargs) -> None:
-        """
-        Run this **AFTER** `super().__init__()` to add to the game world.
-        
-        Args:
-            **call_kwargs: Arguments passed to `self.__call__()` (i.e., `center_spawn=True`)
-        """
-        if not isinstance(self, Entity):
-            self._debug_msg("Class instance is not an Entity!")
-            return
-        
-        # Apply visual settings that required the stack to exist
-        _show = self.game_manager.show_borders
-        self.toggle_show_border(show_border=_show, show_atk_hb=_show)
-        
-        # Add to Logic List (if not already there)
-        if self not in self.game_manager.entity_list: self.game_manager.entity_list.append(self)
-        
-        # Add to Visual Stack
-        # ? This calls self.__call__(**kwargs), getting the control and starting loops
-        self.game_manager.entity_stack.controls.append(self.__call__(**call_kwargs))
-        
-class NewGoblin(Goblin, GameManagerMixin):
-    """
-    Wrapped `Enemy` class to be used in the `GameMaker` class.
-    Automatically spawns into the scene once called.
-    """
-    def __init__(
-        self, game_manager: GameManager, name: str = None,
-        *, center_spawn: bool = True, debug = False
-    ) -> None:
-        self._configure_from_manager(game_manager)
-        super().__init__(
-            target=game_manager.player,
-            name=name,
-            **self._get_base_kwargs(debug)
-        )
-        self._spawn_into_scene(center_spawn=center_spawn)
-
-class NewPlayer(Player, GameManagerMixin):
-    """
-    Wrapped `Player` class to be used in the `GameMaker` class.
-    Automatically spawns into the scene once called.
-    """
-    def __init__(self, game_manager: GameManager, *, debug = False) -> None:
-        self._configure_from_manager(game_manager)
-        super().__init__(
-            held_keys=held_keys,
-            verbose_stamina=game_manager.verbose_stamina,
-            **self._get_base_kwargs(debug)
-        )
-        self._spawn_into_scene()

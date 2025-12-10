@@ -1,6 +1,6 @@
 [project]
 name = "fushi-the-beckoning"
-version = "0.5.10"
+version = "0.5.14"
 description = "A Platformer Game Made with Flet"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -23,7 +23,7 @@ copyright = "Copyright (C) 2025 MetaDusk"
 compile_app = true
 compile_packages = true
 cleanup_on_compile = true
-build_number = 1
+build_number = 3
 
 [tool.flet.assets]
 include = ["assets/**"]

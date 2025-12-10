@@ -114,7 +114,7 @@ class DialogBox(ft.Container):
         """Returns the full string of the current line."""
         return self.dialog_lines[self._current_idx]
 
-    def _on_click(self, _) -> None:
+    def _on_click(self, _: ft.ControlEvent) -> None:
         """State machine for handling clicks."""
         audio_manager.play_sfx(sfx.ui.buttons.click_1)
         

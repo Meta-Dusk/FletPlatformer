@@ -26,7 +26,7 @@ class SimpleButton(ft.Button):
         right: ft.Number = None,
         top: ft.Number = None,
         bottom: ft.Number = None,
-    ):
+    ) -> None:
         self.user_on_click = on_click
         self.user_on_hover = on_hover
         self.user_on_focus = on_focus
@@ -52,11 +52,11 @@ class SimpleButton(ft.Button):
             if self.content.size is None and height and height != 0:
                 self.content.size = height / 2
         
-    def _play_sfx(self, sfx: Path):
+    def _play_sfx(self, sfx: Path) -> None:
         """Play a sound effect."""
         audio_manager.play_sfx(sfx)
         
-    async def _on_click(self, e: ft.ControlEvent):
+    async def _on_click(self, e: ft.ControlEvent) -> None:
         """Plays a sound before the `on_click` callback."""
         self._play_sfx(self.on_click_sfx)
         
@@ -68,12 +68,12 @@ class SimpleButton(ft.Button):
             if isinstance(self.content, ft.Text):
                 print(f"{self.content.value} has been clicked!")
     
-    def _on_hover(self, e: ft.ControlEvent):
+    def _on_hover(self, e: ft.ControlEvent) -> None:
         """Plays a sound before the `on_hover` callback."""
         if e.data: self._play_sfx(self.on_hover_sfx)
         if self.user_on_hover: self.user_on_hover(e)
         
-    def _on_focus(self, e: ft.ControlEvent):
+    def _on_focus(self, e: ft.ControlEvent) -> None:
         """Plays a sound before the `on_focus` callback."""
         self._play_sfx(self.on_focus_sfx)
         if self.user_on_focus: self.user_on_focus(e)

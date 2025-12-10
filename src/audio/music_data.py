@@ -14,11 +14,6 @@ class Ambience:
     forest = music_path("forest_ambience")
 
 @dataclass
-class Other:
-    bossa_brasil = music_path("summer-samba_world-music-bossa-brasil")
-    dreams = music_path("lost-sky_dreams-ncs")
-
-@dataclass
 class SketchbookAlbum:
     abstraction_2023_11_29 = music_path("Sketchbook 2023-11-29", ".ogg")
     abstraction_2024_01_24_02 = music_path("Sketchbook 2024-01-24_02", ".ogg")

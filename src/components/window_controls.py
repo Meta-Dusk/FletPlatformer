@@ -41,7 +41,7 @@ class FullscreenToggle(ft.Container):
         self.page.window.maximized = data
     
     def _update_data(self):
-        print(f"Setting data: {self.switch.data} -> {self.page.window.maximized}")
+        print(f"[FullscreenToggle] Setting data of 'switch': {self.switch.data} with 'page.window.maximized': {self.page.window.maximized}")
         self.switch.data = self.page.window.maximized
     
     def update(self):
