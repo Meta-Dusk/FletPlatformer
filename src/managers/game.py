@@ -19,13 +19,14 @@ from utilities.tutorial_handler import TutorialHandler
 
 from entities.enemy import EnemyType, Enemy
 from entities.entity import Entity
+from entities.player import Player, PlayerType
 
 from bg_loops import light_mv_loop, stage_panning_loop
 from backgrounds import add_infinite_layer
 
 from managers.menu import MenuManager
 from managers.settings import SettingsManager
-from managers.game_mixins import NewGoblin, NewPlayer
+from managers.game_mixins import NewPlayer, NewEnemy
 
 music = MusicLibrary()
 audio_manager = global_audio_manager
@@ -35,7 +36,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
     def __init__(self, page: ft.Page) -> None:
         # State Variables (References)
         self.page: ft.Page = page
-        self.player: NewPlayer = None
+        self.player: Player = None
         
         # UI Layers
         self.background_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
@@ -165,7 +166,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
     def _setup_game_ui(self) -> ft.WindowDragArea:
         """Initializes Player, Stacks, and HUD."""
         # Player
-        self.player = NewPlayer(self)
+        self.player = NewPlayer(self, PlayerType.HERO_KNIGHT)
         self.player.on_death = self._on_player_death
         self.player.on_kill = self._on_player_kill
         
@@ -257,7 +258,9 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         self.ui_stack.controls.append(self.stats_view)
         tutorial_dlg = SimpleDialog(
             title="Key Binds Tutorial",
-            content="You've finished the tutorial! You can now go ahead an go beyond the starting area."
+            content="""You've finished the tutorial!
+You can now go ahead an go beyond the starting area.
+Click outside this message to close it."""
         )
         self.page.overlay.append(tutorial_dlg)
         self.ui_stack.update()
@@ -301,7 +304,8 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         if not self.tutorial_handler.finished_tutorial:
             tutorial_dlg = SimpleDialog(
                 title="Key Binds Tutorial",
-                content="Finish the tutorial first before moving beyond the starting area!"
+                content="""Finish the tutorial first before moving beyond the starting area!
+Click outside this message to close it."""
             )
             self.page.overlay.append(tutorial_dlg)
         self.page.update()
@@ -367,13 +371,12 @@ entity_stack: {len(self.entity_stack.controls)}
             new_entity = None
             match enemy_type:
                 # We assign to a variable to append it to our list
-                case EnemyType.GOBLIN: 
-                    new_entity = NewGoblin(game_manager=self, center_spawn=center_spawn)
+                case EnemyType.GOBLIN:
+                    new_entity = NewEnemy(game_manager=self, type=enemy_type, center_spawn=center_spawn)
                 case _: 
                     raise NotImplementedError("Other enemy types are not yet implemented!")
             
-            if new_entity:
-                created_entities.append(new_entity)
+            if new_entity: created_entities.append(new_entity)
                 
         self._debug_msg(f"New entity_stack size: {len(self.entity_stack.controls)}")
         return created_entities

@@ -25,10 +25,10 @@ class EnemyData:
 # TODO: Implement more enemy types
 class EnemyType(Enum):
     """Available enemy types."""
-    # FLYING_EYE = EnemyData("Flying Eye")
+    FLYING_EYE = EnemyData("Flying Eye") # ! Not yet implemented
     GOBLIN = EnemyData("Gobby", melee_range=120)
-    # MUSHROOM = EnemyData("Mushy")
-    # SKELETON = EnemyData("Skelly")
+    MUSHROOM = EnemyData("Mushy")        # ! Not yet implemented
+    SKELETON = EnemyData("Skelly")       # ! Not yet implemented
 
 def get_inversely_scaling_stats(
     rnd_hp_range: tuple[int, int], min_mv_speed: int
@@ -55,10 +55,7 @@ class Enemy(Entity):
         name: str = None, entity_list: list[Entity] = None,
         *, debug: bool = False, stats: EntityStats = None
     ) -> None:
-        """
-        Important setup for the class. Starts setup with the
-        parent class first before its internal setup.
-        """
+        """The main setup for all enemy-type entities."""
         # ? Entity inherited class setup
         self._enemy_name = type.name.lower()
         _sprite = Sprite(
@@ -81,25 +78,8 @@ class Enemy(Entity):
         self.is_idling: bool = False
         self.melee_range: int = type.value.melee_range
     
-    # * === ABSTRACT METHODS ===
-    async def _take_hit_anim(play_animation: bool) -> None:
-        """This will be called for when taking damage."""
-        raise NotImplementedError("Implement _take_hit_anim() first!")
-    
-    async def _attack_anim() -> None:
-        """This will be called for when attacking."""
-        raise NotImplementedError("Implement _attack_anim() first!")
-    
-    async def _death_anim() -> None:
-        """This will be called for when dying."""
-        raise NotImplementedError("Implement _dying_anim() first!")
-    
-    async def _revive_anim() -> None:
-        """This will be called for when reviving."""
-        raise NotImplementedError("Implement _revive_anim() first!")
-    
     async def _animation_loop(
-        self, starting_frame: int = 0,
+        self, *, starting_frame: int = 0,
         running_frames: int = None,
         running_frames_duration: float = None,
         idle_frames: int = None,

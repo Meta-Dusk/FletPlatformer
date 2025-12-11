@@ -1,4 +1,4 @@
-import asyncio, random
+import asyncio, random, inspect
 import flet as ft
 from pathlib import Path
 from typing import Self, Callable
@@ -23,8 +23,11 @@ class Entity(DamageHitbox):
         entity_list: list[Self] = None, *, show_hud: bool = True,
         debug: bool = False, stats: EntityStats = None
     ) -> None:
-        # Setup
+        """The main setup for all entities."""
+        # Setup the DamageHitbox class
         super().__init__()
+        
+        # Internal setup
         self.sprite = sprite
         self.name = name
         self.page = page
@@ -93,6 +96,31 @@ class Entity(DamageHitbox):
     def ground_level(self, value: int) -> None:
         self._ground_level = value
     
+    # * === ABSTRACT METHODS ===
+    async def _take_hit_anim(play_animation: bool) -> None:
+        """This will be called for when taking damage."""
+        raise NotImplementedError("Implement _take_hit_anim() first!")
+    
+    async def _attack_anim() -> None:
+        """This will be called for when attacking."""
+        raise NotImplementedError("Implement _attack_anim() first!")
+    
+    async def _death_anim() -> None:
+        """This will be called for when dying."""
+        raise NotImplementedError("Implement _dying_anim() first!")
+    
+    async def _revive_anim() -> None:
+        """This will be called for when reviving."""
+        raise NotImplementedError("Implement _revive_anim() first!")
+    
+    async def _jump_anim() -> None:
+        """This will be called for when jumping."""
+        raise NotImplementedError("Implement _jump_anim() first!")
+    
+    async def _animation_loop(self) -> None:
+        """Implement this method for entities with sprite animations."""
+        raise NotImplementedError("Entity subclasses must implement the _animation_loop!")
+    
     # * === FUNCTIONAL WRAPPERS ===
     def _debug_msg(
         self, msg: str, *, end: str = None, include_handler: bool = True,
@@ -118,11 +146,17 @@ class Entity(DamageHitbox):
             base_volume=volume
         )
     
+    def _play_sfx_list(self, sfx: list[Path], volume: float = None) -> None:
+        """Play a list of SFX with support for directional playback."""
+        if sfx is None: return
+        for sound in sfx:
+            self._play_sfx(sound, volume)
+    
     # * === MOVEMENT LOOP ===
     def _check_movement(
         self, dx: int, dy: int,
-        primary_callback: Callable[[None], None] = None,
-        secondary_callback: Callable[[None], None] = None
+        primary_callback: Callable[[], None] = None,
+        secondary_callback: Callable[[], None] = None
     ) -> None:
         """
         Checks for movement and applies them to the `self.stack`.
@@ -136,9 +170,17 @@ class Entity(DamageHitbox):
             self.states.is_moving = True
             self.stack.left += dx
             self.stack.bottom += dy
-            if primary_callback: primary_callback()
-            if self._flip_char(dx):
-                if secondary_callback: secondary_callback()
+            
+            if primary_callback:
+                p_result = primary_callback()
+                if inspect.isawaitable(p_result):
+                    self.page.run_task(primary_callback)
+                
+            if self._flip_char(dx) and secondary_callback:
+                s_result = secondary_callback()
+                if inspect.isawaitable(s_result):
+                    self.page.run_task(secondary_callback)
+                
         else: self.states.is_moving = False
     
     async def _movement_loop(self) -> None:
@@ -162,11 +204,7 @@ class Entity(DamageHitbox):
             
             self._check_movement(dx, dy)
             try_update(self.stack)
-            await asyncio.sleep(idle_time)
-    
-    async def _animation_loop(self) -> None:
-        """Implement this method for entities with sprite animations."""
-        raise NotImplementedError("Entity subclasses must implement the _animation_loop!")
+            await asyncio.sleep(idle_time)    
     
     def _start_movement_loop(self) -> None:
         """Starts the movement loop and stores it in a variable."""

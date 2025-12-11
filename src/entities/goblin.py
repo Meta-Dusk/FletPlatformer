@@ -16,6 +16,7 @@ class Goblin(Enemy):
         target: Enemy = None, name: str = None, entity_list: list[Entity] = None,
         *, debug: bool = False
     ) -> None:
+        """Makes a custom `Enemy` class specifically for making a goblin enemy."""
         if name is None: name = self.generate_rnd_name()
         
         # Random stats

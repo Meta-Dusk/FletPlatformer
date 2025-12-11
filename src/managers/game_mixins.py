@@ -1,11 +1,16 @@
 from typing import Any
 
 from entities.entity import Entity
+from entities.enemy import EnemyType, Enemy
 from entities.goblin import Goblin
-from entities.player import Player
+from entities.player import PlayerType, Player
+from entities.hero_knight import HeroKnight
+
 from audio.audio_manager import global_audio_manager
+
 from utilities.keyboard_manager import held_keys
 
+# * === TEMP CLASSES (MIMICS) ===
 class GameManagerMimic:
     """Temporary class for mimicking the `GameManager`."""
     def __init__(
@@ -13,14 +18,14 @@ class GameManagerMimic:
         entity_list: list[Entity],
         ground_level: int
     ) -> None:
-        """Optional init. You don't need to call this inside the `GameManager`."""
+        """**OPTIONAL** init. You don't need to call this inside the `GameManager`."""
         self.show_borders = show_borders
         self.entity_list = entity_list
         self.ground_level = ground_level
 
 # * === MIXINS ===
 class GameManagerMixin:
-    """Mixin to bridge GameManager data into Entities."""
+    """Mixin to bridge `GameManager` data into entities."""
     def _configure_from_manager(self: Entity, game_manager: GameManagerMimic) -> None:
         """Run this **BEFORE** `super().__init__()` to setup attributes."""
         self.game_manager = game_manager
@@ -84,7 +89,7 @@ class NewGoblin(Goblin, GameManagerMixin):
         )
         self._spawn_into_scene(center_spawn=center_spawn)
 
-class NewPlayer(Player, GameManagerMixin):
+class NewHeroKnight(HeroKnight, GameManagerMixin):
     """
     Wrapped `Player` class to be used in the `GameMaker` class.
     Automatically spawns into the scene once called.
@@ -98,3 +103,40 @@ class NewPlayer(Player, GameManagerMixin):
             **self._get_base_kwargs(debug)
         )
         self._spawn_into_scene()
+
+# * --- FACTORY FUNCTIONS ---
+def NewPlayer(
+    game_manager: GameManagerMimic, type: PlayerType,
+    *, debug: bool = False
+) -> Player:
+    """
+    **Factory Function**: Returns a fully initialized `Player` entity
+    wrapped with the `GameManagerMixin`.
+    
+    Args:
+        game_manager (GameManager): Use with the `GameManager` class, and not the mimic.
+    """
+    match type:
+        case PlayerType.HERO_KNIGHT:
+            return NewHeroKnight(game_manager, debug=debug)
+            
+        case _:
+            raise NotImplementedError(f"Player type {type.name} is not implemented!")
+
+def NewEnemy(
+    game_manager: GameManagerMimic, type: EnemyType,
+    *, debug: bool = False, center_spawn: bool = True
+) -> Enemy:
+    """
+    **Factory Function**: Returns a fully initialized `Enemy` entity
+    wrapped with the `GameManagerMixin`.
+    
+    Args:
+        game_manager (GameManager): Use with the `GameManager` class, and not the mimic.
+    """
+    match type:
+        case EnemyType.GOBLIN:
+            return NewGoblin(game_manager, debug=debug, center_spawn=center_spawn)
+            
+        case _:
+            raise NotImplementedError(f"Enemy type {type.name} is not implemented!")

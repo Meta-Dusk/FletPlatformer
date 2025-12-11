@@ -14,8 +14,9 @@ class GameCommands:
     def __init__(
         self, player: Player, entity_list: list[Entity], page: ft.Page,
         console: DevConsole, show_borders: bool,
-        summon_enemy: Callable[[str, tuple, tuple, int], None] = None
-    ):
+        summon_enemy: Callable[[str, tuple, tuple, int], list[Entity]] = None
+    ) -> None:
+        """**OPTIONAL** init. You don't need to call this inside the `GameManager`."""
         self.player = player
         self.entity_list = entity_list
         self.page = page
