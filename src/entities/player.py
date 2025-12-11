@@ -57,14 +57,14 @@ class Player(Entity):
     """Handles the player's actions and states."""
     def __init__(
         self, page: ft.Page, audio_manager: AudioManager, sprite: Sprite,
-        held_keys: held_keys_set, entity_list: list[Entity] = None,
+        held_keys: held_keys_set, entity_list: list[Entity] = None, name: str = None,
         *, debug: bool = False, verbose_stamina: bool = False, type: PlayerType,
         stats: EntityStats
     ):
         """The main setup for all player entities."""
         # ? Entity inherited class setup
-        self.type = type
-        self.name = type.value.name
+        self._player_name = type.name.lower()
+        self.name = type.value.name if name is None else name
         self._init_stats = stats
         
         super().__init__(
@@ -74,6 +74,7 @@ class Player(Entity):
         )
         
         # ? Player setup
+        self.type = type
         self.held_keys = held_keys
         self._handler_str = self.name
         

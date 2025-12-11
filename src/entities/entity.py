@@ -4,16 +4,19 @@ from pathlib import Path
 from typing import Self, Callable
 
 from images import Sprite
+
 from audio.audio_manager import AudioManager
+
 from utilities.values import pathify
 from utilities.components import try_update, get_dur
 from utilities.tasks import attempt_cancel
+
 from components.popup_text import HealthText
 from components.resource_bars import StaminaBar, HealthBar
 from components.hud_elements import NameTag
+
 from entities.features.hitboxes import DamageHitbox
 from entities.features.entity_data import Factions, EntityStats, EntityStates, ARMOR_SCALING_CONSTANT, DebugLogs
-
 
 class Entity(DamageHitbox):
     """Entity base class. Handles the sprite and some states."""
@@ -40,7 +43,7 @@ class Entity(DamageHitbox):
         self._handler_str: str = "Entity"
         self.states: EntityStates = EntityStates()
         if not hasattr(self, "ground_level"):
-            self.ground_level: int = 0
+            self._ground_level: int = 0
         
         # Constants
         self._LOGIC_DELAY: float = 0.1
@@ -87,6 +90,7 @@ class Entity(DamageHitbox):
             self.nametag = self._make_nametag()
             self._make_hud()
     
+    # * === PROPERTIES ===
     @property
     def ground_level(self) -> int:
         """The floor where entities rest upon."""

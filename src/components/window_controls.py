@@ -4,9 +4,8 @@ from typing import Callable, Self
 from components.custom_switches import CustomSwitch
 from setup import FontStyles
 
-
 class FullscreenToggle(ft.Container):
-    def __init__(self):
+    def __init__(self) -> None:
         self.switch = CustomSwitch(value=False)
         label = ft.Container(
             content=ft.Text(
@@ -32,19 +31,19 @@ class FullscreenToggle(ft.Container):
         )
         self._update_callback: Callable[[Self], None] = None
     
-    def did_mount(self):
+    def did_mount(self) -> None:
         self.update()
         self.switch.on_toggle = self._on_toggle
         self._update_callback = self._update_data
     
-    def _on_toggle(self, data: bool):
+    def _on_toggle(self, data: bool) -> None:
         self.page.window.maximized = data
     
-    def _update_data(self):
+    def _update_data(self) -> None:
         print(f"[FullscreenToggle] Setting data of 'switch': {self.switch.data} with 'page.window.maximized': {self.page.window.maximized}")
         self.switch.data = self.page.window.maximized
     
-    def update(self):
+    def update(self) -> None:
         if self._update_callback: self._update_callback()
         self.switch._toggle_state()
         super().update()

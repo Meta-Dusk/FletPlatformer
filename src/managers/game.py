@@ -54,7 +54,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         self.running_tasks: list[asyncio.Task] = []
         
         # World Configuration
-        self.ground_level: int = 30
+        self._ground_level: int = 30
         self.is_game_running: bool = False
         
         # Properties
@@ -79,6 +79,14 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         self.settings_menu = None
     
     # * === GAME PROPERTIES ===
+    @property
+    def ground_level(self) -> int:
+        return self._ground_level
+    
+    @ground_level.setter
+    def ground_level(self, level: int) -> None:
+        self._ground_level = level
+    
     @property
     def show_borders(self) -> bool:
         return self._show_borders

@@ -2,13 +2,15 @@ import asyncio, random
 import flet as ft
 from dataclasses import dataclass
 from enum import Enum
-from typing import Coroutine, Any, Callable
 
 from entities.entity import Entity
 from entities.features.entity_data import EntityStates, EntityStats, Factions
+
 from images import Sprite
+
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
+
 from utilities.tasks import attempt_cancel
 from utilities.collisions import is_in_x_range
 from utilities.components import try_update, await_for_dur

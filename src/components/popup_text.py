@@ -3,7 +3,6 @@ import asyncio
 
 from utilities.components import try_update
 
-
 class HealthText(ft.Text):
     """A simple text display for the damage numbers."""
     def __init__(

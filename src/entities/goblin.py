@@ -3,8 +3,10 @@ import random, asyncio
 
 from entities.enemy import Enemy, EnemyType, get_inversely_scaling_stats
 from entities.entity import Entity, EntityStats
+
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
+
 from utilities.components import try_update, await_for_dur
 
 sfx = SFXLibrary()

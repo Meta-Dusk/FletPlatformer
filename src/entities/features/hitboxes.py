@@ -5,7 +5,6 @@ from utilities.components import try_update
 from entities.features.entity_data import Factions
 from images import Sprite
 
-
 @dataclass
 class HitboxPos:
     """

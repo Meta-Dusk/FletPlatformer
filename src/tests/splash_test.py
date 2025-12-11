@@ -3,10 +3,9 @@ import asyncio
 
 from tests.test_templates import test_init
 from utilities.splash_handler import SplashHandler
-# from setup import FontStyles
-
 
 async def test_splash(page: ft.Page) -> None:
+    """An example of a skippable splash animation."""
     def on_cleanup() -> None:
         page.controls.clear()
         page.update()
@@ -52,6 +51,5 @@ async def test(page: ft.Page) -> None:
     await test_init(page)
     
     page.add(ft.Text("That was a splash animation :)", size=40))
-    
     
 ft.run(test, assets_dir="../assets")

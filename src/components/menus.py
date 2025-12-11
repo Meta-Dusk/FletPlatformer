@@ -3,14 +3,18 @@ import flet as ft
 from typing import Optional, Literal
 
 from setup import FontStyles
+
 from components.buttons import SimpleButton
 from components.volume_controls import VolumeControl, DirectionalVolumeToggle
 from components.window_controls import FullscreenToggle
 from components.game_controls import ConsoleToggle, PerfMonitorToggles, StaminaSettings
+
 from backgrounds import add_infinite_layer
 from bg_loops import light_mv_loop
+
 from utilities.components import try_update
 from utilities.values import get_app_version
+
 from audio.audio_manager import AudioManager
 
 def new_button(

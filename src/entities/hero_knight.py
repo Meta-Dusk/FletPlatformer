@@ -3,9 +3,12 @@ import asyncio, random
 
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
+
 from entities.player import Player, PlayerType, SFXRegistry
 from entities.entity import Entity, EntityStats
+
 from utilities.keyboard_manager import held_keys_set
+
 from images import Sprite
 
 sfx = SFXLibrary()

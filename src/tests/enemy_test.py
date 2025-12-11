@@ -50,7 +50,7 @@ async def test(page: ft.Page) -> None:
         left=60, top=30
     )
     
-    player_spr = Sprite("images/player/idle_0.png", width=180, height=180, offset=ft.Offset(0, 0.225))
+    player_spr = Sprite("images/players/hero_knight/idle_0.png", width=180, height=180, offset=ft.Offset(0, 0.225))
     dummy_player = Entity(player_spr, "Dummy Hero", page, global_audio_manager, Factions.HUMAN)
     dummy_player.toggle_show_border(True)
     goblin = Goblin(page, global_audio_manager, dummy_player)

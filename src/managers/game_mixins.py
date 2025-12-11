@@ -28,10 +28,10 @@ class GameManagerMixin:
     """Mixin to bridge `GameManager` data into entities."""
     def _configure_from_manager(self: Entity, game_manager: GameManagerMimic) -> None:
         """Run this **BEFORE** `super().__init__()` to setup attributes."""
+        self._atk_hb_show = game_manager.show_borders
+        self._entity_list = game_manager.entity_list
+        self.ground_level = game_manager.ground_level
         self.game_manager = game_manager
-        self._atk_hb_show = self.game_manager.show_borders
-        self._entity_list = self.game_manager.entity_list
-        self.ground_level = self.game_manager.ground_level
     
     @property
     def ground_level(self) -> int: return self.game_manager.ground_level
@@ -73,7 +73,7 @@ class GameManagerMixin:
 # * --- WRAPPED ENTITIES ---
 class NewGoblin(Goblin, GameManagerMixin):
     """
-    Wrapped `Enemy` class to be used in the `GameMaker` class.
+    Wrapped `Goblin` class to be used in the `GameMaker` class.
     Automatically spawns into the scene once called.
     """
     def __init__(
@@ -91,7 +91,7 @@ class NewGoblin(Goblin, GameManagerMixin):
 
 class NewHeroKnight(HeroKnight, GameManagerMixin):
     """
-    Wrapped `Player` class to be used in the `GameMaker` class.
+    Wrapped `HeroKnight` class to be used in the `GameMaker` class.
     Automatically spawns into the scene once called.
     """
     def __init__(self, game_manager: GameManagerMimic, *, debug = False) -> None:
