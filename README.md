@@ -1,4 +1,4 @@
-# FletPlatformer Game
+# Fushi: The Beckoning
 
 An attempt at making a real-time (such as combat) game in Flet.
 As of now, I've included various buttons for testing some functionality that I have already implemented in the game.
@@ -9,6 +9,7 @@ All assets used are all free! I'll include all the licenses soon.
 
 So, what is the game even about?
 It's a somewhat difficult side-scroller genre of a game (which is basically just a 2D action platformer).
+There will be lore for the game as well, hence the official name; "**Fushi: The Beckoning**".
 
 ## Feature List
 
