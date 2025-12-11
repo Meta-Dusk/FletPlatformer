@@ -1,6 +1,5 @@
 import flet as ft
 
-
 class NameTag(ft.Stack):
     def __init__(
         self, text: str

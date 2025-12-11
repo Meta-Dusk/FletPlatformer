@@ -1,7 +1,6 @@
 import flet as ft
 from enum import Enum
 
-
 class FontStyles(Enum):
     """Available font styles."""
     INTER = "Inter"

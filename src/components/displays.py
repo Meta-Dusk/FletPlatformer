@@ -2,12 +2,86 @@ import flet as ft
 
 from entities.features.entity_data import EntityStats, ARMOR_SCALING_CONSTANT
 from setup import FontStyles
+from utilities.components import try_update
 
 class StatsDisplay(ft.Container):
     def __init__(
         self, stats: EntityStats
     ) -> None:
         self._stats = stats
+        
+        self.health_row = ft.DataRow(
+            cells=[
+                ft.DataCell(self._make_text("Health")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+            ]
+        )
+        self.armor_row = ft.DataRow(
+            cells=[
+                ft.DataCell(self._make_text("Armor")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+            ]
+        )
+        self.stamina_row = ft.DataRow(
+            cells=[
+                ft.DataCell(self._make_text("Stamina")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+            ]
+        )
+        self.movement_row = ft.DataRow(
+            cells=[
+                ft.DataCell(self._make_text("Movement Speed")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+            ]
+        )
+        self.damage_row = ft.DataRow(
+            cells=[
+                ft.DataCell(self._make_text("Attack Damage")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+            ]
+        )
+        self.crit_row = ft.DataRow(
+            cells=[
+                ft.DataCell(self._make_text("Critical Strikes")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+            ]
+        )
+        self.dash_row = ft.DataRow(
+            cells=[
+                ft.DataCell(self._make_text("Dash")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+            ]
+        )
+        self.jump_row = ft.DataRow(
+            cells=[
+                ft.DataCell(self._make_text("Jump")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+                ft.DataCell(self._make_text("")),
+            ]
+        )
         
         self.data_table = ft.DataTable(
             columns=[
@@ -18,78 +92,14 @@ class StatsDisplay(ft.Container):
                 ft.DataColumn(label=self._make_text("Description", size=30)),
             ],
             rows=[
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(self._make_text("Health")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                    ]
-                ),
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(self._make_text("Armor")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                    ]
-                ),
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(self._make_text("Stamina")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                    ]
-                ),
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(self._make_text("Movement Speed")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                    ]
-                ),
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(self._make_text("Attack Damage")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                    ]
-                ),
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(self._make_text("Critical Strikes")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                    ]
-                ),
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(self._make_text("Dash")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                    ]
-                ),
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(self._make_text("Jump")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                        ft.DataCell(self._make_text("")),
-                    ]
-                ),
+                self.health_row,
+                self.armor_row,
+                self.stamina_row,
+                self.movement_row,
+                self.damage_row,
+                self.crit_row,
+                self.dash_row,
+                self.jump_row,
             ],
             border_radius=8,
             bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
@@ -112,65 +122,88 @@ class StatsDisplay(ft.Container):
     
     def _update_texts(self) -> None:
         """Updates the display texts."""
-        dt_hp = self.data_table.rows[0]
-        dt_ar = self.data_table.rows[1]
-        dt_st = self.data_table.rows[2]
-        dt_mv = self.data_table.rows[3]
-        dt_atk = self.data_table.rows[4]
-        dt_cs = self.data_table.rows[5]
-        dt_d = self.data_table.rows[6]
-        dt_j = self.data_table.rows[7]
+        def set_text(row: ft.DataRow, values: list[str], skip_idx: int = 0) -> None:
+            """
+            Sets text with each value in `values` (if there is `Text`)
+            in each column of `row`.
+            """
+            # zip(row.cells[1:], ...) tells Python to start looking at the 2nd cell
+            # It effectively skips index 0 (the label) entirely
+            for cell, new_val in zip(row.cells[1:], values):
+                content = cell.content
+                if isinstance(content, ft.Text):
+                    content.value = new_val
         
         # Health
         hp_regen = f"+{self._stats.health_regen} HP / {self._stats.hp_regen_tick}s"
-        dt_hp.cells[1].content.value = f"{round(self._stats.health, 1)} HP"
-        dt_hp.cells[2].content.value = f"{self._stats.max_health} Max HP"
-        dt_hp.cells[3].content.value = f"{hp_regen}"
-        dt_hp.cells[4].content.value = f"Regen HP after not getting damaged for {self._stats.hp_regen_delay}s."
+        set_text(row=self.health_row, values=[
+            f"{round(self._stats.health, 1)} HP",
+            f"{self._stats.max_health} Max HP",
+            f"{hp_regen}",
+            f"Regen HP after not getting damaged for {self._stats.hp_regen_delay}s.",
+        ])
         
         # Stamina
         st_regen = f"+{self._stats.stamina_regen} ST / {self._stats.st_regen_tick}s"
-        dt_st.cells[1].content.value = f"{round(self._stats.stamina, 1)} ST"
-        dt_st.cells[2].content.value = f"{self._stats.max_stamina} Max ST"
-        dt_st.cells[3].content.value = f"{st_regen}"
-        dt_st.cells[4].content.value = f"Regen ST after not sprinting for {self._stats.hp_regen_delay}s."
+        set_text(row=self.stamina_row, values=[
+            f"{round(self._stats.stamina, 1)} ST",
+            f"{self._stats.max_stamina} Max ST",
+            f"{st_regen}",
+            f"Regen ST after not sprinting for {self._stats.hp_regen_delay}s.",
+        ])
         
         # Armor
-        dmg_reduction: float = round(ARMOR_SCALING_CONSTANT / (ARMOR_SCALING_CONSTANT + self._stats.armor), 1)
-        dt_ar.cells[1].content.value = f"{self._stats.armor} DEF"
-        dt_ar.cells[2].content.value = "-"
-        dt_ar.cells[3].content.value = "-"
-        dt_ar.cells[4].content.value = f"{dmg_reduction * 100}% of Damage received."
+        dmg_received: float = round(ARMOR_SCALING_CONSTANT / (ARMOR_SCALING_CONSTANT + self._stats.armor), 1)
+        dmg_reduction = abs(dmg_received - 1)
+        set_text(row=self.armor_row, values=[
+            f"{self._stats.armor} DEF",
+            "-",
+            f"{dmg_reduction * 100}% Damage reduction.",
+            f"{dmg_received * 100}% of Damage received.",
+        ])
         
         # Movement
         sprint_speed: int = int(self._stats.movement_speed * self._stats.sprint_mult)
-        dt_mv.cells[1].content.value = f"{self._stats.movement_speed}px (~{self._stats.movement_speed * 20}px/s)"
-        dt_mv.cells[2].content.value = f"{sprint_speed}px (~{sprint_speed * 20}px/s)"
-        dt_mv.cells[3].content.value = f"{self._stats.sprint_mult}x when sprinting"
-        dt_mv.cells[4].content.value = f"Movement speed is multiplied by '{self._stats.sprint_mult}' when sprinting."
+        set_text(row=self.movement_row, values=[
+            f"{self._stats.movement_speed}px (~{self._stats.movement_speed * 20}px/s)",
+            f"{sprint_speed}px (~{sprint_speed * 20}px/s)",
+            f"{self._stats.sprint_mult}x when sprinting",
+            f"Movement speed is multiplied by '{self._stats.sprint_mult}' when sprinting.",
+        ])
         
         # Attack
         max_dmg = self._stats.attack_damage * self._stats.crit_damage
-        dt_atk.cells[1].content.value = f"{self._stats.attack_damage} ATK"
-        dt_atk.cells[2].content.value = f"{max_dmg} ATK"
-        dt_atk.cells[3].content.value = f"Knockback: {self._stats.attack_knockback}px"
-        dt_atk.cells[4].content.value = f"Each frame duration of the attack is: {self._stats.attack_frame_delay}s."
+        set_text(row=self.damage_row, values=[
+            f"{self._stats.attack_damage} ATK",
+            f"{max_dmg} ATK",
+            f"Knockback: {self._stats.attack_knockback}px",
+            f"Each frame duration of the attack is: {self._stats.attack_frame_delay}s.",
+        ])
         
         # Crit
-        dt_cs.cells[1].content.value = f"{self._stats.crit_damage}x ATK"
-        dt_cs.cells[2].content.value = "-"
-        dt_cs.cells[3].content.value = f"{self._stats.crit_chance}%"
-        dt_cs.cells[4].content.value = "Critical strikes happen by chance, and multiplies the damage amount per strike."
+        set_text(row=self.crit_row, values=[
+            f"{self._stats.crit_damage}x ATK",
+            "-",
+            f"{self._stats.crit_chance}% Crit Chance",
+            "Critical strikes happen by chance, and multiplies the damage amount per strike.",
+        ])
         
         # Dash
         max_dash_dx = self._stats.dash_distance * self._stats.dash_strength
-        dt_d.cells[1].content.value = f"{self._stats.dash_distance}px"
-        dt_d.cells[2].content.value = f"{max_dash_dx}px"
-        dt_d.cells[3].content.value = f"{self._stats.dash_strength}x Multiplier"
-        dt_d.cells[4].content.value = f"You can dash every {self._stats.dash_cooldown}s for {self._stats.dash_st_cost} ST. When dashing, you are invincible for {self._stats.dash_inv_time}s."
+        set_text(row=self.dash_row, values=[
+            f"{self._stats.dash_distance}px",
+            f"{max_dash_dx}px",
+            f"{self._stats.dash_strength}x Multiplier",
+            f"You can dash every {self._stats.dash_cooldown}s for {self._stats.dash_st_cost} ST. When dashing, you are invincible for {self._stats.dash_inv_time}s.",
+        ])
         
+        # Jump
         max_jump_dy = int(self._stats.jump_distance * self._stats.jump_strength)
-        dt_j.cells[1].content.value = f"{self._stats.jump_distance}px"
-        dt_j.cells[2].content.value = f"{max_jump_dy}px"
-        dt_j.cells[3].content.value = f"{self._stats.jump_strength}x Multiplier"
-        dt_j.cells[4].content.value = f"You can jump for {self._stats.jump_st_cost} ST, and remain in air for {self._stats.jump_air_time}s."
+        set_text(row=self.jump_row, values=[
+            f"{self._stats.jump_distance}px",
+            f"{max_jump_dy}px",
+            f"{self._stats.jump_strength}x Multiplier",
+            f"You can jump for {self._stats.jump_st_cost} ST, and remain in air for {self._stats.jump_air_time}s.",
+        ])
+    
+        try_update(self.data_table)

@@ -3,7 +3,6 @@ import flet as ft
 
 from setup import FontStyles
 
-
 class PerformanceMonitor(ft.Text):
     """
     Tracks 'System Load' (UPS) and 'Logic Lag' (Latency).

@@ -2,7 +2,7 @@ import flet as ft
 
 from utilities.keyboard_manager import start as km_start, held_keys
 from audio.audio_manager import global_audio_manager
-from entities.player import Player
+from entities.hero_knight import HeroKnight
 from tests.test_templates import test_init
 
 
@@ -16,7 +16,7 @@ async def test(page: ft.Page):
         if player._stamina_bar_stack is not None:
             player._stamina_bar_stack.verbose = not player._stamina_bar_stack.verbose
     
-    player = Player(page, global_audio_manager, held_keys, debug=True)
+    player = HeroKnight(page, global_audio_manager, held_keys, debug=True)
     
     take_dmg_btn = ft.Button(content="Take Damage", on_click=player_dmg)
     toggle_borders_btn = ft.Button(content="Toggle Borders", on_click=lambda _: player.toggle_show_border())

@@ -5,8 +5,8 @@ from typing import Callable
 from entities.player import Player
 from entities.entity import Entity
 from entities.enemy import Enemy
-from utilities.components import try_update
 
+from utilities.components import try_update
 
 async def light_mv_loop(background_stack: ft.Stack):
     """

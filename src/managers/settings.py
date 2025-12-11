@@ -4,9 +4,11 @@ from typing import Callable
 from components.displays import StatsDisplay
 from components.popups import SimpleNotification
 from components.menus import SettingsMenu
+
 from utilities.components import try_update
 from utilities.commands.ui import DevConsole
 from utilities.performance_monitor import PerformanceMonitor
+
 from entities.player import Player
 
 class SettingsManager:

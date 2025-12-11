@@ -3,12 +3,15 @@ import random, asyncio
 
 from entities.enemy import Enemy, EnemyType, get_inversely_scaling_stats
 from entities.entity import Entity, EntityStats
+
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
+
 from utilities.components import try_update, await_for_dur
 
 sfx = SFXLibrary()
 
+# TODO: Attempt to implement a ranged attack
 class Goblin(Enemy):
     """A preset `Enemy` class specifically for the Goblin enemy type."""
     def __init__(
@@ -16,6 +19,7 @@ class Goblin(Enemy):
         target: Enemy = None, name: str = None, entity_list: list[Entity] = None,
         *, debug: bool = False
     ) -> None:
+        """Makes a custom `Enemy` class specifically for making a goblin enemy."""
         if name is None: name = self.generate_rnd_name()
         
         # Random stats

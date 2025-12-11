@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 _SFX_DIR = Path("assets") / "audio" / "sfx"
 
-def sound_path(name: str, extension: str = ".wav"):
+def sound_path(name: str, extension: str = ".wav") -> Path:
     return _SFX_DIR / f"{name}{extension}"
 
 # * Sub Sound Libraries

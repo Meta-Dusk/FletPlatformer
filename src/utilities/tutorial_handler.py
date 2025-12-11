@@ -7,7 +7,6 @@ from utilities.keyboard_manager import held_keys
 from utilities.tasks import attempt_cancel
 from components.tutorials import ControlsTutorial
 
-
 class TutorialHandler:
     """The handler for a simple tutorial system."""
     def __init__(

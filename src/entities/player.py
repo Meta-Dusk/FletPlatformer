@@ -1,101 +1,156 @@
-import asyncio, random, inspect
+import asyncio, inspect
 import flet as ft
 from pynput import keyboard
+from dataclasses import dataclass
+from enum import Enum
+from typing import Literal
 
 from entities.entity import Entity
 from entities.features.entity_data import EntityStates, EntityStats, Factions
+
 from images import Sprite
+
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
+
 from utilities.tasks import attempt_cancel
 from utilities.collisions import check_collision
 from utilities.components import try_update
+from utilities.keyboard_manager import held_keys_set
+
+@dataclass
+class PlayerData:
+    name: str = "Unknown Player"
+    width: ft.Number = 180
+    height: ft.Number = 180
+
+# TODO: Implement more player types
+class PlayerType(Enum):
+    """Available player types."""
+    HERO_KNIGHT = PlayerData(name="Hero Knight")
+    KING = PlayerData(name="King") # ! Not yet implemented
+
+AnimationState = Literal["moving", "falling", "idle"]
+
+@dataclass
+class SFXEvent:
+    """SFX `Path` and volume."""
+    sfx: SFXLibrary
+    volume: float
+
+class SFXRegistry:
+    """Play SFX at specific frames during specific states."""
+    def __init__(self) -> None:
+        """Internal storage: (`state`, `frame`) -> `SFXEvent`"""
+        self._data: dict[tuple[AnimationState, int], SFXEvent] = {}
+        
+    def add(self, state: AnimationState, sfx: 'SFXLibrary', volume: float = 1.0, *, frame: int):
+        """Registers an SFX event. Refer to the type hints for `state`."""
+        self._data[(state, frame)] = SFXEvent(sfx, volume)
+        
+    def get(self, state: AnimationState, frame: int) -> SFXEvent | None:
+        """Returns the associated `SFXEvent`."""
+        return self._data.get((state, frame))
 
 sfx = SFXLibrary()
 
 class Player(Entity):
     """Handles the player's actions and states."""
     def __init__(
-        self, page: ft.Page, audio_manager: AudioManager,
-        held_keys: set = set(), entity_list: list[Entity] = None,
-        *, debug: bool = False, verbose_stamina: bool = False
+        self, page: ft.Page, audio_manager: AudioManager, sprite: Sprite,
+        held_keys: held_keys_set, entity_list: list[Entity] = None, name: str = None,
+        *, debug: bool = False, verbose_stamina: bool = False, type: PlayerType,
+        stats: EntityStats
     ):
+        """The main setup for all player entities."""
         # ? Entity inherited class setup
-        sprite = Sprite(
-            src="images/player/idle_0.png", width=180, height=180,
-            offset=ft.Offset(0, 0.225)
-        )
-        self.name = "Hero Knight"
+        self._player_name = type.name.lower()
+        self.name = type.value.name if name is None else name
+        self._init_stats = stats
         
         super().__init__(
             sprite=sprite, name=self.name, page=page,
             audio_manager=audio_manager, faction=Factions.HUMAN,
-            entity_list=entity_list, debug=debug,
-            stats=EntityStats(armor=100, crit_chance=10)
+            entity_list=entity_list, debug=debug, stats=self._init_stats
         )
         
         # ? Player setup
+        self.type = type
         self.held_keys = held_keys
-        self._handler_str = "Player"
-        
-        self._make_atk_hitbox(
-            p1_r_left=60, p1_width=110, p1_height=130,
-            p2_r_left=120, p2_width=140, p2_height=162
-        )
-        self._make_self_hitbox(width=95, height=110, r_left=55)
+        self._handler_str = self.name
         
         self._has_dashed: bool = False
         self._stamina_bar_stack = self._make_stamina_bar(attach_to_hud=True, verbose=verbose_stamina)
         self.dash_indicator = self._make_dash_cooldown()
+        
+        # Sound effects
+        self.landing_sfx_list: list[SFXLibrary] = []
+        self.looking_away_sfx_list: list[SFXLibrary] = []
     
     # * === LOOPING ANIMATIONS ===
-    async def _animation_loop(self):
+    async def _animation_loop(
+        self, *, running_frame_duration: float = 0.05,
+        walking_frame_duration: float = 0.075,
+        idle_frame_duration: float = 0.075,
+        falling_frames: int = None,
+        movement_frames: int = None,
+        idle_frames: int = None,
+        starting_frame: int = 0,
+        sfx_map: SFXRegistry  = None
+    ):
         """Handles the player's different animation loops."""
-        frame: int = 0
-        RUNNING_FRAME_DURATION: float = 0.05
-        EXHAUSTED_FRAME_DRUATION: float = 0.15
-        WALKING_FRAME_DURATION: float = 0.075
-        IDLE_FRAME_DURATION: float = 0.075
-        MOVEMENT_VOLUME: float = 0.2
+        frame: int = starting_frame
+        if (
+            falling_frames is None or
+            movement_frames is None or
+            idle_frames is None
+        ):
+            raise ValueError("Missing arguments for '_animation_loop'!")
         
-        while not self.states.dead:
+        while not self.states.dead:            
             # Give way to other animations
             if self._interrupt_action():
                 await asyncio.sleep(self._LOGIC_DELAY)
                 continue
             
+            exhausted_frame_duration: float = walking_frame_duration * self.stats.exhaustion_modifier
+            
+            def play_sfx(state: AnimationState) -> None:
+                """Play SFX specific to state and frame."""
+                if sfx_map is None: return
+                nonlocal frame
+                sfx_event = sfx_map.get(state, frame)
+                if sfx_event: self._play_sfx(sfx_event.sfx, sfx_event.volume)
+            
             # Falling animation
             if self.states.is_falling:
-                if frame > 2: frame = 0
+                if frame > falling_frames: frame = 0
                 await asyncio.sleep(self._LOGIC_DELAY)
                 self.sprite.change_src(self._get_spr_path("fall", frame))
+                play_sfx("falling")
             
             # Running animation
             if self.states.is_moving and not self.states.is_falling:
-                if frame > 7: frame = 0
+                if frame > movement_frames: frame = 0
                 if self.states.is_sprinting and not self.states.exhausted:
-                    wait_time = RUNNING_FRAME_DURATION
+                    wait_time = running_frame_duration
                 else:
                     if self.states.exhausted:
-                        wait_time = EXHAUSTED_FRAME_DRUATION
+                        wait_time = exhausted_frame_duration
                     else:
-                        wait_time = WALKING_FRAME_DURATION
+                        wait_time = walking_frame_duration
                         
                 await asyncio.sleep(wait_time)
                 self.sprite.change_src(self._get_spr_path("run", frame))
                 
-                if frame == 2:
-                    self._play_sfx(sfx.armor.rustle_2, MOVEMENT_VOLUME)
-                    self._play_sfx(sfx.footsteps.footstep_grass_1, MOVEMENT_VOLUME)
-                if frame == 5:
-                    self._play_sfx(sfx.armor.rustle_3, MOVEMENT_VOLUME)
-                    self._play_sfx(sfx.footsteps.footstep_grass_2, MOVEMENT_VOLUME)
+                play_sfx("moving")
                 
             # Idle animation
             elif not self.states.is_moving and not self.states.is_falling:
-                if frame > 10: frame = 0
-                await asyncio.sleep(IDLE_FRAME_DURATION)
+                if frame > idle_frames: frame = 0
+                await asyncio.sleep(idle_frame_duration)
                 self.sprite.change_src(self._get_spr_path("idle", frame))
+                play_sfx("idle")
             
             frame += 1
     
@@ -213,7 +268,7 @@ class Player(Entity):
                 
                 self._check_movement(
                     dx, dy, primary_callback=primary_callback,
-                    secondary_callback=lambda: self._play_sfx(sfx.armor.rustle_1)
+                    secondary_callback=lambda: self._play_sfx_list(self.looking_away_sfx_list)
                 )
                 
             else:
@@ -234,115 +289,11 @@ class Player(Entity):
                 # ? Landing Logic
                 if self.stack.bottom <= self.ground_level:
                     self.stack.bottom = self.ground_level
-                    self._play_sfx(sfx.player.jump_landing)
-                    self._play_sfx(sfx.player.exhale)
-                    self._play_sfx(sfx.impacts.landing_on_grass)
+                    self._play_sfx_list(self.landing_sfx_list)
                 
             elif self.stack.bottom == self.ground_level: self.states.is_falling = False
             if self.states.is_moving or self.states.is_falling: try_update(self.stack)
             await asyncio.sleep(MV_DELAY)
-    
-    # * === ONE-SHOT ANIMATIONS ===
-    async def _revive_anim(self) -> None:
-        """Handles the player's revival animation."""
-        frame: int = 10
-        self._play_sfx(sfx.magic.strike)
-        
-        while frame >= 0:
-            await asyncio.sleep(0.1)
-            if frame == 5: self._play_sfx(sfx.armor.rustle_3)
-            self.sprite.change_src(self._get_spr_path("death", frame))
-            frame -= 1
-    
-    async def _jump_anim(self) -> None:
-        """Handles the player's jump animation."""
-        FRAMES: int = 2
-        self._play_sfx(sfx.cloth.rough_rustle)
-        self._play_sfx(sfx.player.inhale_exhale_short)
-        
-        for frame in range(FRAMES + 1):
-            await asyncio.sleep(self._LOGIC_DELAY)
-            if self.states.is_attacking: continue # ? Skips animation if attacking mid-air
-            self.sprite.change_src(self._get_spr_path("jump", frame))
-            
-        await asyncio.sleep(self.stats.jump_air_time)
-        self.states.jumped = False
-        self._jump_task = None
-    
-    async def _attack_anim(self) -> None:
-        """Handles the player's attack animations with combos."""
-        prefix = f"attack-{self.states.attack_phase}"
-        FRAMES: int = 6
-        
-        for frame in range(FRAMES + 1):
-            await asyncio.sleep(self.stats.attack_frame_delay)
-            
-            # ? Upward slash
-            if self.states.attack_phase == 1:
-                if frame == 0: self._modify_self_hitbox(r_left=45, width=85)
-                if frame == 2: # TODO: Optimize audio by combining into one SFX
-                    self._play_sfx(sfx.sword.fast_woosh)
-                    self._play_sfx(sfx.player.small_grunt)
-            
-            # ? Downward slash
-            elif self.states.attack_phase == 2:
-                if frame == 0: self._modify_self_hitbox(width=75, r_left=75)
-                if frame == 1:
-                    self._play_sfx(sfx.sword.ting)
-                    self._play_sfx(sfx.player.grunt)
-                elif frame == 3:
-                    self._modify_self_hitbox(r_left=100)
-                    self._play_sfx(sfx.impacts.landing_on_grass)
-                    
-            # ? Either attack
-            if frame == 3:
-                self.states.dealing_damage = True
-                self._toggle_atk_hb_border()
-            elif frame == 5:
-                self.states.dealing_damage = False
-                self._toggle_atk_hb_border()
-            self.sprite.change_src(self._get_spr_path(prefix, frame))
-            
-        self._modify_self_hitbox(reset=True)
-        self.states.is_attacking = False
-        self._attack_task = None
-        self._toggle_atk_hb_border()
-    
-    async def _death_anim(self) -> None:
-        """Handles the player's death animation."""
-        death_sfx = [sfx.player.death_1, sfx.player.death_2]
-        FRAMES: int = 10
-        
-        for frame in range(FRAMES + 1):
-            if frame == 1: continue
-            await asyncio.sleep(self._LOGIC_DELAY)
-            if frame == 3:
-                self._play_sfx(random.choice(death_sfx))
-                self._update_health_bar()
-            if frame == 4: self._play_sfx(sfx.cloth.clothes_drop)
-            if frame == 5: self._play_sfx(sfx.armor.hit_soft)
-            if frame == 6:
-                self._play_sfx(sfx.item.keys_drop)
-                self._play_sfx(sfx.sword.blade_drop)
-            self.sprite.change_src(self._get_spr_path("death", frame))
-        self.states.revivable = True
-    
-    async def _take_hit_anim(self) -> None:
-        """Handles the player's taking damage animation."""
-        FRAMES: int = 3
-        
-        for frame in range(FRAMES + 1):
-            if frame == 0: continue
-            await asyncio.sleep(0.1)
-            if frame == 1:
-                self._play_sfx(sfx.player.grunt_hurt)
-                self._update_health_bar()
-            self.sprite.change_src(self._get_spr_path("take-hit", frame))
-        self.states.taking_damage = False
-        self.states.stunned = False
-        self._take_hit_task = None
-        self._reset_tint()
-        self._start_hp_loop()
     
     # * === DASH COOLDOWN ===
     def _make_dash_cooldown(self) -> ft.Image:

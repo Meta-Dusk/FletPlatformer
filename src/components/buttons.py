@@ -8,7 +8,6 @@ from audio.sfx_data import SFXLibrary
 from setup import FontStyles
 
 sfx = SFXLibrary()
-audio_manager = global_audio_manager
 
 class SimpleButton(ft.Button):
     def __init__(
@@ -54,7 +53,7 @@ class SimpleButton(ft.Button):
         
     def _play_sfx(self, sfx: Path) -> None:
         """Play a sound effect."""
-        audio_manager.play_sfx(sfx)
+        global_audio_manager.play_sfx(sfx)
         
     async def _on_click(self, e: ft.ControlEvent) -> None:
         """Plays a sound before the `on_click` callback."""

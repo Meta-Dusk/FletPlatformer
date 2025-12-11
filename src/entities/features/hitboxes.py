@@ -5,9 +5,13 @@ from utilities.components import try_update
 from entities.features.entity_data import Factions
 from images import Sprite
 
-
 @dataclass
 class HitboxPos:
+    """
+    Each hitbox has coordinates, originating from the left and bottom.
+    The prefixes `l_*` and `r_*` refer to them.\n
+    These mean **orientation** when the entity faces either the right or the left.
+    """
     l_left: int = 0
     l_bottom: int = 0
     r_left: int = 0
@@ -15,6 +19,7 @@ class HitboxPos:
 
 @dataclass
 class Hitbox:
+    """Attack hitboxes only support two as of now."""
     faction: Factions
     attack_phases: dict[int, HitboxPos] = field(default_factory=lambda: {
         1: HitboxPos(),
@@ -24,18 +29,25 @@ class Hitbox:
 
 @dataclass
 class SimpleHitbox:
+    """Used with non-attack hitboxes."""
     positions: HitboxPos = field(default_factory=lambda: HitboxPos())
 
 class DamageHitbox:
-    def __init__(self):
-        """Instantiates essential properties."""
+    def __init__(self) -> None:
+        """
+        Instantiates essential properties used by hitboxes:\n
+        - `sprite`
+        - `stack`
+        - `_atk_hitboxes`
+        - `_hitbox`
+        """
         # Entity components references
         self.sprite: Sprite
         self.stack: ft.Stack
         self._atk_hitboxes: list[ft.Container]
         self._hitbox: ft.Container
     
-    def _flip_atk_hb(self):
+    def _flip_atk_hb(self) -> None:
         """Updates attack hitbox positions based on facing direction."""
         if not self._atk_hitboxes: return
 
@@ -57,7 +69,7 @@ class DamageHitbox:
         # Force visual update
         try_update(*self._atk_hitboxes)
     
-    def _flip_self_hb(self):
+    def _flip_self_hb(self) -> None:
         """Updates self hitbox positions based on facing direction."""
         if self._hitbox is None or self._hitbox.data is None: return
 
@@ -83,7 +95,7 @@ class DamageHitbox:
     def _make_self_hitbox(
         self, width: int = None, height: int = None,
         r_left: int = 0, bottom: int = 0
-    ):
+    ) -> None:
         """Makes the target-able hitbox and saves defaults."""
         if width is None: width = self.sprite.width
         if height is None: height = self.sprite.height
@@ -118,7 +130,7 @@ class DamageHitbox:
         self, p1_r_left: int, p1_width: int, p1_height: int,
         p2_r_left: int, p2_width: int, p2_height: int,
         bottom: int = 0
-    ):
+    ) -> None:
         """
         Makes the attack hitboxes for the various attack phases. Only supports two attack phases.\n
         There will be two hitboxes generated (p1, p2). Provide their local offsets with `*_r_left`.\n
@@ -160,7 +172,7 @@ class DamageHitbox:
         self.stack.controls.extend(self._atk_hitboxes)
         try_update(self.stack)
     
-    def _toggle_atk_hb_border(self):
+    def _toggle_atk_hb_border(self) -> None:
         """
         Toggles the border and attack frames of the attack hitboxes.
         Also shows the next attack hitbox in the attack sequence.
@@ -197,7 +209,7 @@ class DamageHitbox:
         self, width: int = None, height: int = None, 
         r_left: int = None, bottom: int = None,
         *, reset: bool = False
-    ):
+    ) -> None:
         """
         Temporarily resizes/moves the hurtbox.
         Pass `reset=True` to restore original defaults.
