@@ -11,6 +11,7 @@ from utilities.components import try_update, await_for_dur
 
 sfx = SFXLibrary()
 
+# TODO: Attempt to implement a ranged attack
 class Goblin(Enemy):
     """A preset `Enemy` class specifically for the Goblin enemy type."""
     def __init__(

@@ -24,31 +24,32 @@ class PlayerData:
     width: ft.Number = 180
     height: ft.Number = 180
 
+# TODO: Implement more player types
 class PlayerType(Enum):
     """Available player types."""
     HERO_KNIGHT = PlayerData(name="Hero Knight")
     KING = PlayerData(name="King") # ! Not yet implemented
 
-AnimState = Literal["moving", "falling", "idle"]
+AnimationState = Literal["moving", "falling", "idle"]
 
 @dataclass
 class SFXEvent:
+    """SFX `Path` and volume."""
     sfx: SFXLibrary
     volume: float
 
 class SFXRegistry:
-    def __init__(self):
-        # Internal storage: (state, frame) -> SFXEvent
-        self._data: dict[tuple[AnimState, int], SFXEvent] = {}
+    """Play SFX at specific frames during specific states."""
+    def __init__(self) -> None:
+        """Internal storage: (`state`, `frame`) -> `SFXEvent`"""
+        self._data: dict[tuple[AnimationState, int], SFXEvent] = {}
         
-    def add(self, state: AnimState, sfx: 'SFXLibrary', volume: float = 1.0, *, frame: int):
-        """
-        Registers an SFX event.
-        Type hints will work perfectly for 'state' here.
-        """
+    def add(self, state: AnimationState, sfx: 'SFXLibrary', volume: float = 1.0, *, frame: int):
+        """Registers an SFX event. Refer to the type hints for `state`."""
         self._data[(state, frame)] = SFXEvent(sfx, volume)
         
-    def get(self, state: AnimState, frame: int) -> SFXEvent | None:
+    def get(self, state: AnimationState, frame: int) -> SFXEvent | None:
+        """Returns the associated `SFXEvent`."""
         return self._data.get((state, frame))
 
 sfx = SFXLibrary()
@@ -114,7 +115,7 @@ class Player(Entity):
             
             exhausted_frame_duration: float = walking_frame_duration * self.stats.exhaustion_modifier
             
-            def play_sfx(state: AnimState) -> None:
+            def play_sfx(state: AnimationState) -> None:
                 """Play SFX specific to state and frame."""
                 if sfx_map is None: return
                 nonlocal frame
