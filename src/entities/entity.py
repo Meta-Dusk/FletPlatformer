@@ -1,14 +1,15 @@
 import asyncio, random, inspect
 import flet as ft
 from pathlib import Path
-from typing import Self, Callable
+from typing import Self, Callable, Literal
 
 from images import Sprite
 
 from audio.audio_manager import AudioManager
+from audio.sfx_data import SFXLibrary
 
 from utilities.values import pathify
-from utilities.components import try_update, get_dur
+from utilities.components import try_update
 from utilities.tasks import attempt_cancel
 
 from components.popup_text import HealthText
@@ -16,15 +17,26 @@ from components.resource_bars import StaminaBar, HealthBar
 from components.hud_elements import NameTag
 
 from entities.features.hitboxes import DamageHitbox
-from entities.features.entity_data import Factions, EntityStats, EntityStates, ARMOR_SCALING_CONSTANT, DebugLogs
+from entities.features.entity_data import Factions, EntityStats, EntityStates, ARMOR_SCALING_CONSTANT, DebugLogs, AnimConfig, SFXRegistry
+
+from utilities.physics import Velocity
 
 class Entity(DamageHitbox):
     """Entity base class. Handles the sprite and some states."""
     def __init__(
-        self, sprite: Sprite, name: str, page: ft.Page,
-        audio_manager: AudioManager = None, faction: Factions = None,
-        entity_list: list[Self] = None, *, show_hud: bool = True,
-        debug: bool = False, stats: EntityStats = None
+        self,
+        sprite: Sprite,
+        name: str,
+        page: ft.Page,
+        audio_manager: AudioManager = None,
+        faction: Factions = None,
+        entity_list: list[Self] = None,
+        *,
+        show_hud: bool = True,
+        debug: bool = False,
+        stats: EntityStats = None,
+        simple_revive: bool = True,
+        restrict_movement: bool = False,
     ) -> None:
         """The main setup for all entities."""
         # Setup the DamageHitbox class
@@ -40,15 +52,17 @@ class Entity(DamageHitbox):
         self._entity_list = entity_list if entity_list is not None else []
         self.stats: EntityStats = stats if stats else EntityStats()
         self.show_hud = show_hud
+        self.simple_revive = simple_revive
         self._handler_str: str = "Entity"
-        self.states: EntityStates = EntityStates()
+        self.states: EntityStates = EntityStates(restrict_movement=restrict_movement)
         if not hasattr(self, "ground_level"):
             self._ground_level: int = 0
+        self.velocity: Velocity = Velocity()
+        self.on_ground: bool = True
         
         # Constants
-        self._LOGIC_DELAY: float = 0.1
-        self._GRAVITY_VALUE: int = 25
-        self._GROUNDING_VALUE: int = 10
+        self._LOGIC_DELAY: float = 0.016
+        self._ANIMATION_DELAY: float = 0.1
         
         # Callbacks
         self.on_death: Callable[[], None] = None
@@ -58,10 +72,6 @@ class Entity(DamageHitbox):
         self._movement_loop_task: asyncio.Task = None
         self._stamina_loop_task: asyncio.Task = None
         self._health_loop_task: asyncio.Task = None
-        self._jump_task: asyncio.Task = None
-        self._attack_task: asyncio.Task = None
-        self._take_hit_task: asyncio.Task = None
-        self._animation_loop_task: asyncio.Task = None
         
         # References
         self._spr_path: Path = pathify(sprite.src)
@@ -82,13 +92,130 @@ class Entity(DamageHitbox):
         self._hitbox: ft.Container = None
         self.stack: ft.Stack = self._make_stack()
         self.hud: ft.Container = None
-            
+        
+        # Animation State
+        self.anim_timer: float = 0.0
+        self.current_frame: int = 0
+        self.current_anim_state: str = "idle" # "idle", "run", "fall", etc.
+        
+        self.sfx_registry = SFXRegistry()
+        
+        # Define your animations here (Default config)
+        self.animations: dict[str, AnimConfig] = {
+            "idle": AnimConfig(4, 0.1),
+            "run": AnimConfig(6, 0.075),
+            "fall": AnimConfig(1, 0.1),
+            "attack": AnimConfig(3, 0.05, loop=False),
+        }
+        
         # Finalization
         print(f"\nMaking a {faction.value} entity, named; '{name}', with {self.stats}\n")
         if self.show_hud:
             self._health_bar_stack = self._make_health_bar()
             self.nametag = self._make_nametag()
             self._make_hud()
+    
+    # * === ANIMATION TICKS ===
+    def tick_animation(self, dt: float) -> bool:
+        """
+        Advances the animation timer. 
+        Returns True if the sprite source changed.
+        """
+        # 1. Determine State (Simple State Machine)
+        # You can override this method in Player/Enemy for complex logic
+        new_state = "idle"
+        
+        if self.states.is_attacking:
+            new_state = "attack"
+        elif self.states.is_falling:
+            new_state = "fall"
+        elif self.states.is_moving:
+            new_state = "run"
+            
+        # 2. State Change Logic
+        if new_state != self.current_anim_state:
+            self.current_anim_state = new_state
+            self.current_frame = 0
+            self.anim_timer = 0.0
+            # Force update immediately on state switch
+            self._update_sprite_src() 
+            return True
+
+        # 3. Timer Logic
+        config = self.animations.get(self.current_anim_state)
+        if not config: return False # Unknown state
+        
+        self.anim_timer += dt
+        
+        if self.anim_timer >= config.frame_duration:
+            self.anim_timer = 0
+            self.current_frame += 1
+            
+            # Loop or Clamp
+            if self.current_frame >= config.frame_count:
+                if config.loop:
+                    self.current_frame = 0
+                else:
+                    self.current_frame = config.frame_count - 1
+            
+            # 4. Update Source
+            self._update_sprite_src()
+            return True
+            
+        return False
+    
+    def _tick_simple_revive(self, dt: float) -> bool:
+        """
+        Helper: Handles the 'Simple Revive' (Reverse Death) logic.
+        """
+        if not self.states.is_reviving or not self.simple_revive:
+            return False
+            
+        # 1. Force State Name
+        new_state = "revive"
+        did_frame_change = False # Track updates
+        
+        # 2. Handle State Switch (Init to End of Death)
+        if self.current_anim_state != new_state:
+            self.current_anim_state = new_state
+            self.anim_timer = 0.0
+            
+            death_config = self.animations.get("death")
+            self.current_frame = (death_config.frame_count - 1) if death_config else 0
+            
+            self.sprite.src = self._get_spr_path("death", self.current_frame)
+            did_frame_change = True # <--- Mark as changed
+
+        # 3. Handle Timer
+        else:
+            death_config = self.animations.get("death")
+            if not death_config: return False
+            
+            self.anim_timer += dt
+            if self.anim_timer >= death_config.frame_duration:
+                self.anim_timer = 0
+                self.current_frame -= 1 # Go Backwards
+                
+                # Check Finish
+                if self.current_frame < 0:
+                    self.current_frame = 0
+                    self._on_animation_finish()
+                    return True # Stop here
+                
+                # Update Visuals
+                self.sprite.src = self._get_spr_path("death", self.current_frame)
+                did_frame_change = True # <--- Mark as changed
+        
+        # 4. Trigger SFX (NEW BLOCK)
+        if did_frame_change:
+            # We check for the "revive" state in the registry
+            if hasattr(self, "sfx_registry"):
+                events = self.sfx_registry.get("revive", self.current_frame)
+                for event in events:
+                    self._play_sfx(event.sfx, event.volume)
+            return True
+            
+        return False
     
     # * === PROPERTIES ===
     @property
@@ -99,31 +226,6 @@ class Entity(DamageHitbox):
     @ground_level.setter
     def ground_level(self, value: int) -> None:
         self._ground_level = value
-    
-    # * === ABSTRACT METHODS ===
-    async def _take_hit_anim(play_animation: bool) -> None:
-        """This will be called for when taking damage."""
-        raise NotImplementedError("Implement _take_hit_anim() first!")
-    
-    async def _attack_anim() -> None:
-        """This will be called for when attacking."""
-        raise NotImplementedError("Implement _attack_anim() first!")
-    
-    async def _death_anim() -> None:
-        """This will be called for when dying."""
-        raise NotImplementedError("Implement _dying_anim() first!")
-    
-    async def _revive_anim() -> None:
-        """This will be called for when reviving."""
-        raise NotImplementedError("Implement _revive_anim() first!")
-    
-    async def _jump_anim() -> None:
-        """This will be called for when jumping."""
-        raise NotImplementedError("Implement _jump_anim() first!")
-    
-    async def _animation_loop(self) -> None:
-        """Implement this method for entities with sprite animations."""
-        raise NotImplementedError("Entity subclasses must implement the _animation_loop!")
     
     # * === FUNCTIONAL WRAPPERS ===
     def _debug_msg(
@@ -139,7 +241,7 @@ class Entity(DamageHitbox):
             if debug_handler:
                 print(msg, end=end)
     
-    def _play_sfx(self, sfx: Path, volume: float = None) -> None:
+    def _play_sfx(self, sfx: SFXLibrary, volume: float = None) -> None:
         """Play an SFX with support for directional playback."""
         right_vol = (self.stack.left + (self.sprite.width / 2)) / self.page.width
         left_vol = 1.0 - right_vol
@@ -150,7 +252,7 @@ class Entity(DamageHitbox):
             base_volume=volume
         )
     
-    def _play_sfx_list(self, sfx: list[Path], volume: float = None) -> None:
+    def _play_sfx_list(self, sfx: list[SFXLibrary], volume: float = None) -> None:
         """Play a list of SFX with support for directional playback."""
         if sfx is None: return
         for sound in sfx:
@@ -158,77 +260,55 @@ class Entity(DamageHitbox):
     
     # * === MOVEMENT LOOP ===
     def _check_movement(
-        self, dx: int, dy: int,
-        primary_callback: Callable[[], None] = None,
-        secondary_callback: Callable[[], None] = None
+        self, dx: int = None, dy: int = None,
+        on_movement: Callable[[], None] = None,
+        on_direction_changed: Callable[[], None] = None
     ) -> None:
         """
         Checks for movement and applies them to the `self.stack`.
         
         Args:
-            primary_callback(Callable): This function is called if movement is detected.
-            secondary_callback(Callable): This function is called if the facing direction has changed.
+            on_movement(Callable): This function is called if movement is detected.
+            on_direction_changed(Callable): This function is called if the facing direction has changed.
         """
-        if dx != 0 or dy != 0:
-            self._debug_msg(f"Moving with: ({dx}, {dy})", debug_handler=self._debug_logs.movement)
-            self.states.is_moving = True
-            self.stack.left += dx
-            self.stack.bottom += dy
+        self._debug_msg(f"Moving with: ({dx}, {dy})", debug_handler=self._debug_logs.movement)
+        self.states.is_moving = True
+        if dx is not None: self.velocity.dx = dx
+        if dy is not None: self.velocity.dy = dy
+        
+        if on_movement:
+            p_result = on_movement()
+            if inspect.isawaitable(p_result):
+                self.page.run_task(on_movement)
             
-            if primary_callback:
-                p_result = primary_callback()
-                if inspect.isawaitable(p_result):
-                    self.page.run_task(primary_callback)
+        if self._flip_sprite_x(dx) and on_direction_changed:
+            s_result = on_direction_changed()
+            if inspect.isawaitable(s_result):
+                self.page.run_task(on_direction_changed)
                 
-            if self._flip_char(dx) and secondary_callback:
-                s_result = secondary_callback()
-                if inspect.isawaitable(s_result):
-                    self.page.run_task(secondary_callback)
-                
-        else: self.states.is_moving = False
+        if dx == 0: self.states.is_moving = False
     
     async def _movement_loop(self) -> None:
         """A simple implementation of what the movement loop should be."""
-        base_mv_speed = self.stack.animate_position.duration
-        idle_time: float = 1.0
-        
         while not self.states.dead:
-            dx, dy = 0, 0
-            rand_m = random.randint(-10, 10)
+            # Randomly decide to move left, right, or stop
+            decision = random.choice([-1, 0, 1]) 
             
-            if rand_m == 0 or random.randint(1, 10) > 8:
-                idle_time = round(random.uniform(1.0, 2.0), 3)
-                self._debug_msg(f"Idling for: {idle_time}s", debug_handler=self._debug_logs.movement)
-                await asyncio.sleep(idle_time)
-                continue
+            # Set Velocity based on stats
+            # We don't change self.stack.left here! We just set velocity.
+            dx = decision * self.stats.movement_speed
             
-            dx += self.stats.movement_speed * rand_m
-            self.stack.animate_position.duration = base_mv_speed * abs(rand_m)
-            idle_time = get_dur(self.stack.animate_position)
+            self._check_movement(dx)
             
-            self._check_movement(dx, dy)
-            try_update(self.stack)
-            await asyncio.sleep(idle_time)    
+            # Wait a bit before changing mind
+            await asyncio.sleep(round(random.uniform(0.5, 2.0), 3))
     
     def _start_movement_loop(self) -> None:
         """Starts the movement loop and stores it in a variable."""
         self._debug_msg("Starting Movement Loop!", debug_handler=self._debug_logs.movement)
         self._movement_loop_task = self.page.run_task(self._movement_loop)
-    
-    # * === OTHER LOOPS ===
-    def _start_animation_loop(self) -> None:
-        """Starts the animation loop and stores it in a variable."""
-        self._animation_loop_task = self.page.run_task(self._animation_loop)
-    
+        
     # * === COMPONENT TOGGLES ===
-    def _flip_char(self, dx: int) -> bool:
-        """Flips the sprite, and returns `True` if successful."""
-        if self._flip_sprite_x(dx):
-            self._flip_atk_hb()
-            self._flip_self_hb()
-            return True
-        return False
-    
     def toggle_show_border(self, show_border: bool = None, show_atk_hb: bool = None) -> None:
         """Toggles the bounding boxes of the entity (includes the hitbox and hurtbox)."""
         if show_border is not None: self._show_border = show_border
@@ -255,6 +335,11 @@ class Entity(DamageHitbox):
         try_update(container, self._hitbox)
     
     # * === COMPONENT METHODS ===
+    def _update_sprite_src(self):
+        """Helper to generate the path string."""
+        # Uses your existing _get_spr_path helper
+        self.sprite.src = self._get_spr_path(self.current_anim_state, self.current_frame)
+    
     def _reset_tint(self) -> None:
         """Resets the tint of the sprite."""
         self.sprite.color = None
@@ -341,7 +426,7 @@ class Entity(DamageHitbox):
         return ft.Stack(
             controls=[ft.Container(self.sprite, data=self.faction)],
             left=PAGE_CENTER_WIDTH - SPRITE_CENTER_WIDTH, bottom=self.ground_level,
-            animate_position=ft.Animation(100, ft.AnimationCurve.EASE_IN_OUT),
+            # animate_position=ft.Animation(100, ft.AnimationCurve.EASE_IN_OUT),
             width=self.sprite.width, height=self.sprite.height,
             clip_behavior=ft.ClipBehavior.NONE
         )
@@ -361,18 +446,25 @@ class Entity(DamageHitbox):
         if self._stamina_bar_stack.verbose:
             self._stamina_bar_stack.st_label.current_value = round(self.stats.stamina, 1)
     
-    def _flip_sprite_x(self, dx: int) -> bool:
-        """Flips the facing direction of the sprite."""
+    def _get_facing_direction(self) -> Literal[-1, 1]:
         current_scale_x = self.sprite.scale.scale_x if hasattr(self.sprite.scale, "scale_x") else self.sprite.scale
-        start_facing_sign = 1 if current_scale_x > 0 else -1
-        desired_sign = start_facing_sign
-        if dx > 0: desired_sign = 1
-        elif dx < 0: desired_sign = -1
-        has_flipped = False
+        return 1 if current_scale_x > 0 else -1
+    
+    def _flip_sprite_x(self, dx: int) -> bool:
+        """Flips the facing direction of the sprite (Data only)."""
+        start_facing_sign = self._get_facing_direction()
+        desired_sign = 1 if dx > 0 else -1 if dx < 0 else start_facing_sign
+        
         if desired_sign != start_facing_sign:
-            self.sprite.flip_x(desired_sign)
-            has_flipped = True
-        return has_flipped
+            # Just change the property. The AnimationManager/PhysicsManager will 
+            # batch update this sprite in the next frame cycle.
+            self.sprite.flip_x(desired_sign, update_ctrl=False)
+            
+            # Flip Hitboxes (Internal logic only)
+            self._flip_atk_hb()
+            self._flip_self_hb()
+            return True
+        return False
     
     def _get_center_point(self, entity: Self) -> int:
         """Returns the center point aligned at the bottom of the entity."""
@@ -408,20 +500,10 @@ class Entity(DamageHitbox):
             is_crit = True
         return dmg, is_crit
     
-    def _cancel_temp_tasks(self):
-        """Cancels all running temporary tasks."""
-        tasks = [
-            self._jump_task,
-            self._attack_task,
-            self._take_hit_task
-        ]
-        for task in tasks: attempt_cancel(task)
-    
     def _cancel_loop_tasks(self):
         """Cancels all running looping tasks."""
         tasks = [
             self._movement_loop_task,
-            self._animation_loop_task,
             self._stamina_loop_task,
             self._health_loop_task
         ]
@@ -446,13 +528,14 @@ class Entity(DamageHitbox):
     def _knockback_self(self, entity: Self) -> None:
         """Applies a knockback to self away from the provided `entity`."""
         if self.states.dead: return
+        self.velocity.dx = 0
         knockback: int = 0
-        if entity.stack.left > self.stack.left:
+        if entity._get_center_point(entity) > self._get_center_point(self):
             knockback = -entity.stats.attack_knockback * self.stats.knockback_resistance
-        elif entity.stack.left < self.stack.left:
+        elif entity._get_center_point(entity) < self._get_center_point(self):
             knockback = entity.stats.attack_knockback * self.stats.knockback_resistance
-        self.stack.left += knockback
-        try_update(self.stack)
+        self.velocity.dx += knockback
+        self.velocity.dy += abs(knockback) * 1.5
     
     def attack(self) -> bool:
         """
@@ -460,13 +543,13 @@ class Entity(DamageHitbox):
         Returns `False` if action is interrupted.
         """
         if self.states.is_attacking:
-            self._debug_msg(f"{self.name} is already attacking", debug_handler=self._debug_logs.attack)
+            # self._debug_msg(f"{self.name} is already attacking", debug_handler=self._debug_logs.attack)
             return False
         if self.states.dead:
-            self._debug_msg(f"{self.name} cannot attack while dead", debug_handler=self._debug_logs.attack)
+            # self._debug_msg(f"{self.name} cannot attack while dead", debug_handler=self._debug_logs.attack)
             return False
         if self.states.taking_damage:
-            self._debug_msg(f"{self.name} cannot attack while being damaged", debug_handler=self._debug_logs.attack)
+            # self._debug_msg(f"{self.name} cannot attack while being damaged", debug_handler=self._debug_logs.attack)
             return False
         return True
         # ? Implement the rest of the logic after calling this method
@@ -477,15 +560,9 @@ class Entity(DamageHitbox):
         Handles: Checks, Health Subtraction, and Safety Reset.
         Returns `True` if damage was successfully applied.
         """
-        if self.states.dead:
-            self._debug_msg(f"{self.name} is already dead", debug_handler=self._debug_logs.damage)
-            return False
-        if self.states.taking_damage:
-            self._debug_msg(f"{self.name} cannot be damaged again yet", debug_handler=self._debug_logs.damage)
-            return False
-        if self.states.invincible:
-            self._debug_msg(f"{self.name} cannot be damaged during i-frames", debug_handler=self._debug_logs.damage)
-            return False
+        if self.states.dead: return False
+        elif self.states.taking_damage: return False
+        elif self.states.invincible: return False
         
         damage_reduction: float = round(ARMOR_SCALING_CONSTANT / (ARMOR_SCALING_CONSTANT + self.stats.armor), 1)
         _damage_amount = damage_amount * damage_reduction
@@ -495,10 +572,8 @@ class Entity(DamageHitbox):
         attempt_cancel(self._health_loop_task)
         
         self.stats.health -= _damage_amount
-        damage_log = f"(-{_damage_amount} [{damage_reduction*100}% of {damage_amount}])"
-        self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health} {damage_log}", debug_handler=self._debug_logs.damage)
         
-        dmg_text = HealthText(value=f"-{_damage_amount}", right=-105, top=4, color=ft.Colors.RED, anim_right=-80)
+        dmg_text = HealthText(value=f"-{_damage_amount}", right=-105, top=4, color=ft.Colors.RED_ACCENT, anim_right=-80)
         self.stack.controls.append(dmg_text)
         if is_crit:
             crit_text = HealthText(value="CRIT!", right=-190, top=4, color=ft.Colors.ORANGE)
@@ -523,14 +598,13 @@ class Entity(DamageHitbox):
         Simple spam-proof implementation for `revive()`.
         Returns `False` if action is interrupted.
         """
-        if not self.states.dead:
-            self._debug_msg(f"{self.name} is not dead", debug_handler=self._debug_logs.revive)
-            return False
-        if not self.states.revivable:
-            self._debug_msg(f"{self.name} is not yet ready to be revived", debug_handler=self._debug_logs.revive)
-            return False
+        if not self.states.dead: return False
+        if not self.states.revivable: return False
+        
+        self.states.is_reviving = True
+        self.states.revivable = False
+        
         return True
-        # ? Implement the rest of the logic after calling this method
         
     def heal(self, heal_amount: float, overheal: bool = False) -> bool:
         """
@@ -539,23 +613,23 @@ class Entity(DamageHitbox):
         Returns `True` if heal was successfully applied.
         """
         if self.states.dead:
-            self._debug_msg(f"{self.name} is already dead", debug_handler=self._debug_logs.health)
+            # self._debug_msg(f"{self.name} is already dead", debug_handler=self._debug_logs.health)
             return False
         
         if self.stats.health >= self.stats.max_health and not overheal:
-            self._debug_msg(f"{self.name} health is already at or above max", debug_handler=self._debug_logs.health)
+            # self._debug_msg(f"{self.name} health is already at or above max", debug_handler=self._debug_logs.health)
             return False
+        
+        if self.states.is_healing: return False
         
         if not overheal and (self.stats.health + heal_amount) > self.stats.max_health:
             self.stats.health = self.stats.max_health
+        else:
+            self.stats.health += heal_amount
             
-        self.stats.health += heal_amount
-        self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(+{heal_amount})", debug_handler=self._debug_logs.health)
+        # self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(+{heal_amount})", debug_handler=self._debug_logs.health)
         
-        heal_text = HealthText(
-            left=(self.stack.width / 2) + 35, top=18,
-            value=f"+{heal_amount}", color=ft.Colors.GREEN
-        )
+        heal_text = HealthText(value=f"+{heal_amount}", right=-105, top=4, color=ft.Colors.GREEN_ACCENT, anim_right=-80)
         
         self.stack.controls.append(heal_text)
         try_update(self.stack)

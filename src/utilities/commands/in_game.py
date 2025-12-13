@@ -1,4 +1,4 @@
-import random
+import random, inspect
 import flet as ft
 from typing import Literal, Callable
 
@@ -101,7 +101,10 @@ class GameCommands:
             killed_count = 0
             for e in entities:
                 if not e.states.dead:
-                    self.page.run_task(e.death)
+                    if isinstance(e, Player):
+                        e.death()
+                    else:
+                        self.page.run_task(e.death)
                     killed_count += 1
             
             if killed_count > 0:
@@ -123,7 +126,7 @@ class GameCommands:
             hit_count = 0
             for e in entities:
                 if not e.states.dead:
-                    self.page.run_task(e.take_damage, amount)
+                    e.take_damage(amount)
                     hit_count += 1
             
             if hit_count > 0:
@@ -139,12 +142,11 @@ class GameCommands:
             revived_count = 0
             for e in entities:
                 if e.states.dead and e.states.revivable:
-                    # Player Logic
-                    if isinstance(e, Player) or hasattr(e, "revive"):
-                        self.page.run_task(e.revive)
-                        revived_count += 1
+                    if isinstance(e, Player):
+                        e.revive()
                     else:
-                        raise NotImplementedError("Revival only implemented for the player so far.")
+                        self.page.run_task(e.revive)
+                    revived_count += 1
             
             msg_count = "entity" if revived_count == 1 else "entities"
             self.console.log(f"Revived {revived_count} {msg_count}.", ft.Colors.GREEN)

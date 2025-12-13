@@ -43,16 +43,6 @@ class TutorialHandler:
         """Starts the loop for the keyboard input checking."""
         self._keyboard_check_task = self.page.run_task(self._keyboard_check_loop)
     
-    def _on_keyboard_event(self, e: ft.KeyboardEvent) -> None:
-        """Call this alongside the other `on_keyboard_event` handlers."""
-        match e.key:
-            case " ":
-                self.tutorial.set_finish(self.tutorial.jump_key)
-                self.tutorial_state.add("jump_key")
-            case "V":
-                self.tutorial.set_finish(self.tutorial.attack_key)
-                self.tutorial_state.add("attack_key")
-    
     def _debug_msg(self, msg: str) -> None:
         if self.debug:
             print(f"[TutorialHandler] {msg}")
@@ -62,6 +52,16 @@ class TutorialHandler:
         while not self.finished_tutorial:
             await asyncio.sleep(0.1)
             is_shift_held = keyboard.Key.shift in held_keys
+            
+            # Jumping
+            if keyboard.Key.space in held_keys:
+                self.tutorial.set_finish(self.tutorial.jump_key)
+                self.tutorial_state.add("jump_key")
+            
+            # Attacking
+            if 'v' in held_keys:
+                self.tutorial.set_finish(self.tutorial.attack_key)
+                self.tutorial_state.add("attack_key")
             
             # Walking
             if 'a' in held_keys:

@@ -1,5 +1,6 @@
 import flet as ft
 import asyncio, random
+from pynput import keyboard
 
 from audio.audio_manager import global_audio_manager
 from audio.music_data import MusicLibrary
@@ -9,7 +10,7 @@ from components.displays import StatsDisplay
 from components.custom_switches import TextAndToggle
 from components.popups import SimpleDialog
 
-from utilities.keyboard_manager import start as km_start
+import utilities.keyboard_manager as kb_manager
 from utilities.tasks import attempt_cancel
 from utilities.components import try_update, await_for_dur
 from utilities.commands.ui import DevConsole
@@ -27,6 +28,7 @@ from backgrounds import add_infinite_layer
 from managers.menu import MenuManager
 from managers.settings import SettingsManager
 from managers.game_mixins import NewPlayer, NewEnemy
+from managers.game_loop import GameLoop
 
 music = MusicLibrary()
 audio_manager = global_audio_manager
@@ -42,6 +44,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         self.background_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
         self.foreground_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
         self.entity_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
+        self.projectile_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
         self.ui_stack = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
         self.stage = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
         self.game_stage = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
@@ -52,6 +55,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         
         # Task Management
         self.running_tasks: list[asyncio.Task] = []
+        self.last_input_time: float = 0.0
         
         # World Configuration
         self._ground_level: int = 30
@@ -136,11 +140,17 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         """The entry point called by Flet."""
         # --- Setup ---
         audio_manager.play_music(music.loops.sketchbook.abstraction_2023_11_29)
-        km_start()
         self.register_commands()
         
+        kb_manager.start()
+        kb_manager.on_press_callback = self._handle_input_press
+        
+        self.game_loop = GameLoop(self.page, self.entity_list, ground_level=self.ground_level)
+        self.projectile_stack = self.game_loop.projectile_manager.projectile_layer
+        self.game_loop.start()
+        
         # --- Event Handlers ---
-        self.page.on_keyboard_event = self._on_keyboard_event
+        # self.page.on_keyboard_event = self._on_keyboard_event
         self.page.window.on_event = self._win_on_event
         
         # Setup UI: Stack all layers
@@ -177,6 +187,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         self.player = NewPlayer(self, PlayerType.HERO_KNIGHT)
         self.player.on_death = self._on_player_death
         self.player.on_kill = self._on_player_kill
+        self.player.projectile_manager = self.game_loop.projectile_manager
         
         # Stacks/Layers
         def inf_layer(stack: ft.Stack, index: int):
@@ -221,6 +232,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         self.game_stage.controls.extend([
             self.background_stack,
             self.entity_stack,
+            self.projectile_stack,
             self.foreground_stack,
             self.ui_stack,
         ])
@@ -229,34 +241,59 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         return form
         
     # * === EVENT HANDLERS ===
-    async def _on_keyboard_event(self, e: ft.KeyboardEvent) -> None:
-        """Handles various 'on-press' keyboard events."""
-        # Window and Dev keybinds
-        match e.key:
-            case "F11": self.page.window.maximized = not self.page.window.maximized
-            case "/":
-                if not self.console in self.page.overlay: return
-                await self.console.toggle()
-                self._update_ui_focus()
-            case "Escape":
+    def _handle_input_press(self, key_id: kb_manager.KeyType):
+        """
+        Runs on the Pynput Thread!
+        Fast, direct, and immune to UI lag.
+        """
+        # ? Game Inputs (Movement/Combat)
+        if self.is_game_running and self.player and not self.player.states.disable_movement:
+            match key_id:
+                # ATTACK (V)
+                case 'v':
+                    self.player.attack()
+                    return
+                
+                # JUMP (Space)
+                case keyboard.Key.space:
+                    self.player.jump()
+                    return
+                
+                case 'b':
+                    self.player.attack_ranged()
+                    return
+            
+        # ? UI / System Inputs
+        match key_id:
+            # PAUSE/CLOSE (Escape)
+            case keyboard.Key.esc:
                 if self.console.visible:
-                    await self.console.toggle()
-                    self._update_ui_focus()
+                    self.page.run_task(self._toggle_console)
                 elif self.settings_menu.visible:
-                    self.close_settings(e)
+                    self.close_settings(None)
                 else:
-                    self.toggle_pause(e)
-        await self.console.handle_keyboard(e)
+                    # Toggle the pause menu only if there's no alert dialog
+                    for ctrl in self.page.overlay:
+                        if isinstance(ctrl, ft.AlertDialog):
+                            return
+                    self.toggle_pause(None)
+            
+            # CONSOLE (Forward Slash)
+            case "/":
+                if self.console in self.page.overlay:
+                    self.page.run_task(self._toggle_console)
+                
+            # FULLSCREEN (F11)
+            case keyboard.Key.f11:
+                self.page.window.maximized = not self.page.window.maximized
         
-        # Player Keybinds
-        if not self.is_game_running or (self.player and self.player.states.disable_movement):
-            return
+        self.page.run_task(self.console.handle_keyboard, key_id)
         
-        match e.key:
-            case " ": self.player.jump()
-            case "V": self.player.attack()
-        
-        self.tutorial_handler._on_keyboard_event(e)
+        self.page.update()
+                
+    async def _toggle_console(self):
+        await self.console.toggle()
+        self._update_ui_focus()
     
     def _on_finish_tutorial(self) -> None:
         """Removes the tutorial controls after finishing the tutorial."""
@@ -271,7 +308,7 @@ You can now go ahead an go beyond the starting area.
 Click outside this message to close it."""
         )
         self.page.overlay.append(tutorial_dlg)
-        self.ui_stack.update()
+        self.page.update()
     
     def _on_player_death(self) -> None:
         """Incremets the death counter on player death."""
@@ -420,7 +457,5 @@ entity_stack: {len(self.entity_stack.controls)}
         for entity in self.entity_list:
             if isinstance(entity, Enemy):
                 entity._cancel_loop_tasks()
-                entity._cancel_temp_tasks()
         self.player._cancel_loop_tasks()
-        self.player._cancel_temp_tasks()
     
