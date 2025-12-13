@@ -4,11 +4,40 @@ from entities.features.entity_data import Factions, AnimConfig
 from entities.entity import Entity
 from entities.goblin import Goblin
 from audio.audio_manager import global_audio_manager
-from utilities.tasks import attempt_cancel
 from utilities.components import try_update
 from images import Sprite
 from tests.test_templates import test_init
 from managers.game_loop import GameLoop
+
+class DummyHero(Entity):
+    """A minimal Entity subclass for testing that supports tick_logic."""
+    def __init__(self, sprite, name, page, audio, faction, entity_list):
+        super().__init__(sprite, name, page, audio, faction, entity_list)
+        self.should_move = False
+        self.move_speed = 3.0 # Meters per second
+
+    def tick_logic(self, dt: float) -> None:
+        """Handle movement if enabled."""
+        if self.states.dead:
+            self.velocity.dx = 0
+            return
+            
+        if self.should_move:
+            # Simple patrol: bounce left/right or just move right
+            # For this test, let's just stand still or move based on external toggle?
+            # The test toggle just says "Toggle Player Movement".
+            # Let's make him walk back and forth.
+            if self.velocity.dx == 0: self.velocity.dx = self.move_speed
+            
+            # Bounce bounds (approximate for test stage)
+            if self.stack.left > 800: self.velocity.dx = -self.move_speed
+            elif self.stack.left < 100: self.velocity.dx = self.move_speed
+            
+            self.states.is_moving = True
+            self._flip_sprite_x(self.velocity.dx)
+        else:
+            self.velocity.dx = 0
+            self.states.is_moving = False
 
 async def test(page: ft.Page) -> None:
     """Test for the `Enemy` class; a simple implementation"""
@@ -17,11 +46,9 @@ async def test(page: ft.Page) -> None:
     async def on_death(_) -> None: await goblin.death()
     
     def on_change_mv(e: ft.ControlEvent) -> None:
-        if e.data:
-            dummy_player._start_movement_loop()
-            try_update(dummy_player.stack)
-        else:
-            attempt_cancel(dummy_player._movement_loop_task)
+        # Update the flag in our new DummyHero class
+        dummy_player.should_move = e.data
+        if not e.data:
             dummy_player.velocity.dx = 0
             dummy_player.states.is_moving = False
             
@@ -31,6 +58,7 @@ async def test(page: ft.Page) -> None:
             toggle_player_mv_loop.value = False
             toggle_player_mv_loop.disabled = True
             toggle_player_mv_loop.update()
+            dummy_player.should_move = False
             dummy_player.velocity.dx = 0
             dummy_player.states.is_moving = False
         else:
@@ -53,7 +81,11 @@ async def test(page: ft.Page) -> None:
     entity_list: list[Entity] = []
     
     player_spr = Sprite("images/players/hero_knight/idle_0.png", width=180, height=180, offset=ft.Offset(0, 0.225))
-    dummy_player = Entity(player_spr, "Dummy Hero", page, global_audio_manager, Factions.HUMAN, entity_list)
+    
+    # Use the new DummyHero class
+    dummy_player = DummyHero(player_spr, "Dummy Hero", page, global_audio_manager, Factions.HUMAN, entity_list)
+    dummy_player.should_move = True # Start moving by default to match switch
+    
     dummy_player.toggle_show_border(True)
     dummy_player.states.restrict_movement = True
     dummy_player.animations = {
@@ -72,6 +104,5 @@ async def test(page: ft.Page) -> None:
     stage = ft.Stack(controls=[dummy_player(), goblin(), buttons_row], expand=True)
     
     page.add(stage)
-    dummy_player._start_movement_loop()
     
 ft.run(test, assets_dir="../assets")

@@ -4,7 +4,6 @@ import flet as ft
 from entities.entity import Entity
 from managers.physics import PhysicsManager
 from managers.projectiles import ProjectileManager
-from managers.animations import AnimationManager
 
 class GameLoop:
     def __init__(
@@ -22,7 +21,6 @@ class GameLoop:
         # They must all implement a update(dt) method
         self.physics_manager = PhysicsManager(page, entity_list)
         self.projectile_manager = ProjectileManager(page, entity_list, ground_level)
-        self.animation_manager = AnimationManager(entity_list)
         
     def start(self):
         if not self.is_running:
@@ -52,6 +50,9 @@ class GameLoop:
             
             # 3. TICK EVERYTHING (The "Update" Phase)
             
+            for entity in self.entity_list[:]:
+                entity.update(dt)
+            
             # A. Physics (Move Entities & Player)
             if self.physics_manager:
                 self.physics_manager.update(dt)
@@ -59,9 +60,5 @@ class GameLoop:
             # B. Projectiles (Move Bullets & Check Hits)
             if self.projectile_manager:
                 self.projectile_manager.update(dt)
-                
-            # C. Animation (Update Sprites based on state)
-            # You can call entity.update_animation(dt) here or via a manager
-            self.animation_manager.update(dt)
             
             await asyncio.sleep(self._tick_rate)

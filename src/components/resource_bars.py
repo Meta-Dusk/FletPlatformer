@@ -58,7 +58,7 @@ class StaminaBar(ft.Stack):
             value=0.0, scale=ft.Scale(scale_x=-1, scale_y=1),
             color=ft.Colors.GREY_800, bgcolor=ft.Colors.TRANSPARENT, height=5
         )
-        st_container = ft.Container(
+        self.st_container = ft.Container(
             content=self.st_bar, width=width,
             border=ft.Border.all(2, ft.Colors.BLACK), border_radius=5,
             bgcolor=ft.Colors.YELLOW, alignment=ft.Alignment.CENTER
@@ -66,7 +66,7 @@ class StaminaBar(ft.Stack):
         self.st_label = ResourceLabel(stats.stamina, stats.max_stamina)
         
         super().__init__(
-            controls=[st_container],
+            controls=[self.st_container],
             clip_behavior=ft.ClipBehavior.NONE,
             alignment=ft.Alignment.CENTER
         )

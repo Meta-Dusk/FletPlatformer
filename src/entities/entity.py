@@ -10,7 +10,6 @@ from audio.sfx_data import SFXLibrary
 
 from utilities.values import pathify
 from utilities.components import try_update
-from utilities.tasks import attempt_cancel
 
 from components.popup_text import HealthText
 from components.resource_bars import StaminaBar, HealthBar
@@ -67,11 +66,6 @@ class Entity(DamageHitbox):
         # Callbacks
         self.on_death: Callable[[], None] = None
         self.on_kill: Callable[[], None] = None
-        
-        # Tasks
-        self._movement_loop_task: asyncio.Task = None
-        self._stamina_loop_task: asyncio.Task = None
-        self._health_loop_task: asyncio.Task = None
         
         # References
         self._spr_path: Path = pathify(sprite.src)
@@ -217,6 +211,37 @@ class Entity(DamageHitbox):
             
         return False
     
+    # * === UPDATE LOOP ===
+    def update(self, dt: float) -> None:
+        """
+        The Master Update Loop. Called every frame by the Game Loop.
+        """
+        # 1. Update Visuals (Animation)
+        # We assume tick_animation handles its own logic/returns
+        self.tick_animation(dt)
+        
+        # 2. Update Logic (Input / AI)
+        # Only run logic if we are alive and not stunned/disabled
+        if not self.states.dead and not self.states.stunned and not self.states.is_reviving:
+            self.tick_logic(dt)
+            
+        # 3. Handle Generic Timers (Cooldowns, etc.)
+        self._tick_timers(dt)
+
+    def tick_logic(self, dt: float) -> None:
+        """
+        Override this! 
+        - Players put Input handling here.
+        - Enemies put AI decision making here.
+        """
+        pass
+        
+    def _tick_timers(self, dt: float) -> None:
+        """Handles internal cooldowns without asyncio.sleep."""
+        # Example: Dash Cooldown
+        if hasattr(self, "dash_cooldown_timer") and self.dash_cooldown_timer > 0:
+            self.dash_cooldown_timer -= dt
+    
     # * === PROPERTIES ===
     @property
     def ground_level(self) -> int:
@@ -257,56 +282,6 @@ class Entity(DamageHitbox):
         if sfx is None: return
         for sound in sfx:
             self._play_sfx(sound, volume)
-    
-    # * === MOVEMENT LOOP ===
-    def _check_movement(
-        self, dx: int = None, dy: int = None,
-        on_movement: Callable[[], None] = None,
-        on_direction_changed: Callable[[], None] = None
-    ) -> None:
-        """
-        Checks for movement and applies them to the `self.stack`.
-        
-        Args:
-            on_movement(Callable): This function is called if movement is detected.
-            on_direction_changed(Callable): This function is called if the facing direction has changed.
-        """
-        self._debug_msg(f"Moving with: ({dx}, {dy})", debug_handler=self._debug_logs.movement)
-        self.states.is_moving = True
-        if dx is not None: self.velocity.dx = dx
-        if dy is not None: self.velocity.dy = dy
-        
-        if on_movement:
-            p_result = on_movement()
-            if inspect.isawaitable(p_result):
-                self.page.run_task(on_movement)
-            
-        if self._flip_sprite_x(dx) and on_direction_changed:
-            s_result = on_direction_changed()
-            if inspect.isawaitable(s_result):
-                self.page.run_task(on_direction_changed)
-                
-        if dx == 0: self.states.is_moving = False
-    
-    async def _movement_loop(self) -> None:
-        """A simple implementation of what the movement loop should be."""
-        while not self.states.dead:
-            # Randomly decide to move left, right, or stop
-            decision = random.choice([-1, 0, 1]) 
-            
-            # Set Velocity based on stats
-            # We don't change self.stack.left here! We just set velocity.
-            dx = decision * self.stats.movement_speed
-            
-            self._check_movement(dx)
-            
-            # Wait a bit before changing mind
-            await asyncio.sleep(round(random.uniform(0.5, 2.0), 3))
-    
-    def _start_movement_loop(self) -> None:
-        """Starts the movement loop and stores it in a variable."""
-        self._debug_msg("Starting Movement Loop!", debug_handler=self._debug_logs.movement)
-        self._movement_loop_task = self.page.run_task(self._movement_loop)
         
     # * === COMPONENT TOGGLES ===
     def toggle_show_border(self, show_border: bool = None, show_atk_hb: bool = None) -> None:
@@ -341,9 +316,11 @@ class Entity(DamageHitbox):
         self.sprite.src = self._get_spr_path(self.current_anim_state, self.current_frame)
     
     def _reset_tint(self) -> None:
-        """Resets the tint of the sprite."""
-        self.sprite.color = None
-        self.sprite.color_blend_mode = ft.BlendMode.DST
+        """Resets the sprite color, but respects the Exhausted state."""
+        if self.states.dead: return
+        
+        self.sprite.color = ft.Colors.WHITE
+        self.sprite.color_blend_mode = ft.BlendMode.MODULATE
         try_update(self.sprite)
     
     def _apply_tint(self, color: ft.ColorValue) -> None:
@@ -500,15 +477,6 @@ class Entity(DamageHitbox):
             is_crit = True
         return dmg, is_crit
     
-    def _cancel_loop_tasks(self):
-        """Cancels all running looping tasks."""
-        tasks = [
-            self._movement_loop_task,
-            self._stamina_loop_task,
-            self._health_loop_task
-        ]
-        for task in tasks: attempt_cancel(task)
-    
     # * === CALLABLE ACTIONS/EVENTS ===
     def __repr__(self) -> str:
         """
@@ -560,16 +528,13 @@ class Entity(DamageHitbox):
         Handles: Checks, Health Subtraction, and Safety Reset.
         Returns `True` if damage was successfully applied.
         """
-        if self.states.dead: return False
-        elif self.states.taking_damage: return False
-        elif self.states.invincible: return False
+        if self.states.dead or self.states.taking_damage or self.states.invincible: return False
         
         damage_reduction: float = round(ARMOR_SCALING_CONSTANT / (ARMOR_SCALING_CONSTANT + self.stats.armor), 1)
         _damage_amount = damage_amount * damage_reduction
         
         self.states.taking_damage = True
         self.states.stunned = True
-        attempt_cancel(self._health_loop_task)
         
         self.stats.health -= _damage_amount
         
@@ -588,7 +553,6 @@ class Entity(DamageHitbox):
         Returns `False` if action is interrupted.
         """
         if self.states.dead:
-            self._debug_msg(f"{self.name} is already dead", debug_handler=self._debug_logs.death)
             return False
         return True
         # ? Implement the rest of the logic after calling this method
@@ -598,8 +562,7 @@ class Entity(DamageHitbox):
         Simple spam-proof implementation for `revive()`.
         Returns `False` if action is interrupted.
         """
-        if not self.states.dead: return False
-        if not self.states.revivable: return False
+        if not self.states.dead or not self.states.revivable: return False
         
         self.states.is_reviving = True
         self.states.revivable = False
@@ -612,23 +575,18 @@ class Entity(DamageHitbox):
         Handles: Checks, Health Addition, and Safety Reset.
         Returns `True` if heal was successfully applied.
         """
-        if self.states.dead:
-            # self._debug_msg(f"{self.name} is already dead", debug_handler=self._debug_logs.health)
+        if (
+            self.states.dead or
+            self.stats.health >= self.stats.max_health and
+            not overheal or self.states.is_healing
+        ):
             return False
-        
-        if self.stats.health >= self.stats.max_health and not overheal:
-            # self._debug_msg(f"{self.name} health is already at or above max", debug_handler=self._debug_logs.health)
-            return False
-        
-        if self.states.is_healing: return False
         
         if not overheal and (self.stats.health + heal_amount) > self.stats.max_health:
             self.stats.health = self.stats.max_health
         else:
             self.stats.health += heal_amount
             
-        # self._debug_msg(f"HP: {self.stats.health}/{self.stats.max_health}(+{heal_amount})", debug_handler=self._debug_logs.health)
-        
         heal_text = HealthText(value=f"+{heal_amount}", right=-105, top=4, color=ft.Colors.GREEN_ACCENT, anim_right=-80)
         
         self.stack.controls.append(heal_text)

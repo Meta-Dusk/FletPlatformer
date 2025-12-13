@@ -49,7 +49,6 @@ class HeroKnight(Player):
         }
         
         # --- 2. REGISTER SFX ---
-        # Replace the sfx_map from _animation_loop
         MV_VOLUME = 0.2
         self.sfx_registry.add("run", sfx.armor.rustle_2, MV_VOLUME, frame=2)
         self.sfx_registry.add("run", sfx.footsteps.footstep_grass_1, MV_VOLUME, frame=2)
@@ -135,7 +134,9 @@ class HeroKnight(Player):
             
             case "take-hit":
                 match frame:
-                    case 1: self._update_health_bar()
+                    case 1:
+                        self._update_health_bar()
+                        self.velocity.dx = 0
             
             case "death":
                 match frame:
@@ -159,9 +160,6 @@ class HeroKnight(Player):
             self._update_health_bar()
             self._reset_tint()
             
-            # Restart Inputs
-            self._start_loops()
-            
             # Switch to Idle
             self.current_anim_state = "idle"
             self.current_frame = 0
@@ -171,7 +169,6 @@ class HeroKnight(Player):
             self.states.taking_damage = False
             self.states.stunned = False
             self._reset_tint()
-            self._start_hp_loop()
         
         elif "attack" in state:
             # 1. Unlock State

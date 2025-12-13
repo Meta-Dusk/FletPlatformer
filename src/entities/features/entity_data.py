@@ -59,18 +59,18 @@ class EntityStats:
     stamina_regen: Number = 0.25
     st_regen_tick: Number = 0.1
     st_regen_delay: Number = 3
-    st_usage_tick: Number = 0.1
+    st_usage_tick: Number = 0.05
     
     # Movement
-    movement_speed: Number = 3.5
-    sprint_mult: Number = 2
+    movement_speed: Number = 3.8
+    sprint_mult: Number = 1.5
     jump_distance: Number = 8
     jump_strength: Number = 1.5
     jump_air_time: Number = 0.1
     jump_st_cost: Number = 2
-    dash_distance: Number = 5
+    dash_distance: Number = 3
     dash_strength: Number = 1
-    dash_cooldown: Number = 1
+    dash_cooldown: Number = 2
     dash_inv_time: Number = 0.2
     dash_st_cost: Number = 5
     dash_duration: Number = 0.2

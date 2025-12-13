@@ -15,7 +15,6 @@ async def test(page: ft.Page):
     def toggle_st_verbose(_):
         if player._stamina_bar_stack is not None:
             player._stamina_bar_stack.verbose = not player._stamina_bar_stack.verbose
-    async def player_death(_): await player.death()
     async def player_heal(_): await player.heal(5, overheal=False)
     
     player = HeroKnight(page, global_audio_manager, kb_manager.held_keys, debug=True)    
@@ -30,7 +29,7 @@ async def test(page: ft.Page):
     toggle_borders_btn = ft.Button("Toggle Borders", on_click=lambda _: player.toggle_show_border())
     st_verbose_btn = ft.Button("Toggle Stamina Verbosity", on_click=toggle_st_verbose)
     revive_btn = ft.Button("Revive", on_click=lambda _: player.revive())
-    death_btn = ft.Button("KYS", on_click=player_death)
+    death_btn = ft.Button("KYS", on_click=lambda _: player.death())
     heal_btn = ft.Button("Heal", on_click=player_heal)
     
     ui_col = ft.Column(

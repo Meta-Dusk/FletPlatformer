@@ -10,7 +10,7 @@ class PhysicsManager:
         self.entity_list = entity_list
         
         # Scaling Constants
-        self.ppm = 50.0  # 1 physics unit = 60 pixels
+        self.ppm = 50.0  # 1 physics unit = n pixels
         
         # Physics Constants
         self.gravity = 9.8 * 3
@@ -21,7 +21,7 @@ class PhysicsManager:
         entities_to_update = []
         
         for entity in self.entity_list:
-            if not entity or entity.states.dead or entity.states.disable_movement: continue
+            if not entity or entity.states.disable_movement: continue
             
             # --- A. APPLY GRAVITY ---
             # If above ground, pull down

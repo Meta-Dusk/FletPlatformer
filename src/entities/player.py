@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from entities.entity import Entity
-from entities.features.entity_data import EntityStates, EntityStats, Factions, AnimConfig, SFXRegistry, AnimationState
+from entities.features.entity_data import EntityStates, EntityStats, Factions, AnimConfig, AnimationState
 from entities.projectile import ProjectileStats
 
 from images import Sprite
@@ -95,6 +95,21 @@ class Player(Entity):
         
         # ? Temp
         self.projectile_manager: ProjectileManager
+        
+        # Regen timers
+        self.st_regen_timer: float = 0.0
+        self.st_delay_timer: float = 0.0
+        
+        self.hp_regen_timer: float = 0.0
+        self.hp_delay_timer: float = 0.0
+        
+        # TRACKING STATE
+        self._was_on_ground: bool = True 
+
+        # DASH STATE (New Tick Variables)
+        self.dash_timer: float = 0.0
+        self.dash_cooldown_timer: float = 0.0
+        self.dash_direction: int = 0
     
     # * === ANIMATION TICKER ===
     def tick_animation(self, dt: float) -> bool:
@@ -141,11 +156,13 @@ class Player(Entity):
             config = self.animations.get(self.current_anim_state)
 
             if config:
-                # Exhaustion Logic
                 duration = config.frame_duration
-                if self.current_anim_state == "run" and self.states.exhausted:
-                    duration = config.frame_duration / self.stats.exhaustion_modifier
-                    
+                if self.current_anim_state == "run": # Running animation modifiers
+                    if self.states.exhausted: # When exhausted
+                        duration = config.frame_duration / self.stats.exhaustion_modifier
+                    elif self.states.is_sprinting: # When sprinting
+                        duration = config.frame_duration / self.stats.sprint_mult
+                
                 self.anim_timer += dt
                 
                 if self.anim_timer >= duration:
@@ -174,10 +191,18 @@ class Player(Entity):
             return True
         return False
     
+    # * === PROPERTIES ===
     @property
     def dash_velocity(self) -> ft.Number:
-        """Returns the total dash velocity."""
-        return self.stats.dash_distance * self.stats.dash_strength
+        """
+        Calculates required velocity to cover 'dash_distance' in 'dash_duration'.
+        Formula: Velocity = Distance / Time
+        """
+        # Safety to prevent division by zero
+        if self.stats.dash_duration <= 0: return 0
+        
+        # This guarantees you travel the exact distance you set in stats
+        return (self.stats.dash_distance * self.stats.dash_strength) / self.stats.dash_duration
     
     @property
     def jump_velocity(self) -> ft.Number:
@@ -185,7 +210,7 @@ class Player(Entity):
         return self.stats.jump_distance * self.stats.jump_strength
     
     # * === DAMAGE DETECTION ===
-    def _detect_damage(self):
+    def _detect_damage(self) -> None:
         """Checks if any hostile entity is attacking and colliding with the player."""
         if self._entity_list is None or self.states.dead or self.states.taking_damage: return
         
@@ -218,18 +243,16 @@ class Player(Entity):
                         self._knockback_self(entity)
                         return
     
-    async def _handle_hit_logic(self, target_enemy: Entity):
+    def _handle_hit_logic(self, target_enemy: Entity) -> None:
         """Applies damage to a specific enemy and updates game stats if they die."""
         # Apply Damage
         did_die = target_enemy.take_damage(*self._calculate_damage())
         
         # Check Result
         if not did_die: return
-        if self.on_kill:
-            result = self.on_kill()
-            if inspect.isawaitable(result): await result
+        if self.on_kill: self.on_kill()
     
-    async def _detect_attack_hits(self):
+    def _detect_attack_hits(self):
         """Checks if the Player's active attack hitbox collides with any enemy."""
         if not self.states.dealing_damage or not self._entity_list: return
         
@@ -246,85 +269,185 @@ class Player(Entity):
             
             # Get Enemy's Body Rect
             e_left, e_bottom, e_w, e_h = enemy._get_self_global_rect()
-
+            
             if check_collision(
                 r1_left=w_left, r1_bottom=w_bottom, r1_w=active_hb.width, r1_h=active_hb.height, # Player Weapon
                 r2_left=e_left, r2_bottom=e_bottom, r2_w=e_w, r2_h=e_h # Enemy Body
             ):
                 self._debug_msg(f"Hit enemy: {enemy.name}", debug_handler=self._debug_logs.attack)
-                await self._handle_hit_logic(enemy)
+                self._handle_hit_logic(enemy)
     
-    async def _living_loop(self) -> None:
-        """The main loop that only ticks if entity is alive."""
-        while not self.states.dead:
-            pass
+    # * === TICK UPDATES ===
+    def tick_logic(self, dt: float) -> None:
+        """
+        Replaces _movement_loop. Runs every frame to check inputs.
+        """
+        # On landing check
+        if not self._was_on_ground and self.on_ground and self.velocity.dy <= 0:
+            self._play_sfx_list(self.landing_sfx_list)
+            self.states.jumped = False
+            self.states.is_falling = False
+            
+        elif not self.on_ground:
+            self.states.is_falling = True
+            
+        # Update tracker for the NEXT frame
+        self._was_on_ground = self.on_ground
+        
+        # Interaction Checks (Attacks/Damage)
+        self._detect_attack_hits()
+        self._detect_damage()
+        
+        # Check interruptions
+        if (
+            not self.page.window.focused or
+            self.states.is_attacking or 
+            self.states.taking_damage or 
+            self.states.disable_movement
+        ):
+            self.velocity.dx = 0
+            return
+        
+        if self.states.is_dashing: return
+        
+        dx = 0
+        is_shift_held = keyboard.Key.shift in self.held_keys
+        
+        # Calculate Speed
+        if (
+            is_shift_held and
+            self.stats.stamina > 0 and
+            not self.states.exhausted and
+            self.states.is_moving
+        ):
+            speed = self.stats.movement_speed * self.stats.sprint_mult
+            # Stamina Cost
+            self.stats.stamina -= self.stats.st_usage_tick * dt * 60 # Scale to dt
+            self.states.is_sprinting = True
+            self._update_stamina_bar()
+        else:
+            speed = self.stats.movement_speed
+            if self.states.exhausted: speed *= self.stats.exhaustion_modifier
+            self.states.is_sprinting = False
+            
+        # Apply Input
+        if 'a' in self.held_keys: dx -= speed
+        if 'd' in self.held_keys: dx += speed
+        
+        # Dash Logic
+        if 'c' in self.held_keys:
+            self.dash(dx)
+            if self.states.is_dashing: return
+            
+        # Apply to Physics
+        self.velocity.dx = dx
+        if dx != 0:
+            self.states.is_moving = True
+            self._flip_sprite_x(dx)
+        else:
+            self.states.is_moving = False
     
-    async def _movement_loop(self) -> None:
-        """Handles player movements."""
-        MV_DELAY: float = 0.05
-        dx: ft.Number = 0
-        while not self.states.dead:
+    def _tick_timers(self, dt: float) -> None:
+        """
+        Overrides Entity._tick_timers to handle player-specific regen.
+        """
+        super()._tick_timers(dt)        
+        if not self.states.dead:
+            self._tick_stamina(dt)
+            self._tick_health(dt)
+            self._tick_dash(dt)
+    
+    def _tick_stamina(self, dt: float) -> None:
+        if self.stats.stamina <= 0 and not self.states.exhausted:
+            self.states.exhausted = True
             
-            await self._detect_attack_hits()
-            self._detect_damage()
+            # Indication for exhaustion in the stamina bar itself
+            self._stamina_bar_stack.st_container.bgcolor = ft.Colors.YELLOW_900
+            self.stamina_bar.color = ft.Colors.RED_900
+        
+        if self.states.is_sprinting or self.states.jumped:
+            self.st_delay_timer = self.stats.st_regen_delay
+            return
+        
+        # Handle Delay (Waiting after action)
+        if self.st_delay_timer > 0:
+            self.st_delay_timer -= dt
+            return
+        
+        # Handle Regen
+        if self.stats.stamina < self.stats.max_stamina:
+            self.st_regen_timer += dt
             
-            # --- LANDING LOGIC ---
-            # 1. Detect Landing: We were falling, but physics says we are now on ground
-            if self.states.is_falling and self.on_ground:
-                self._play_sfx_list(self.landing_sfx_list)
-                self.states.is_falling = False
-                self.states.jumped = False
+            # Check if one "tick" has passed (e.g., every 0.1s)
+            if self.st_regen_timer >= self.stats.st_regen_tick:
+                self.st_regen_timer = 0
                 
-            # 2. Detect Falling: We are in the air (Jumped or walked off ledge)
-            elif not self.on_ground: self.states.is_falling = True
-            
-            if (
-                not self.page.window.focused or
-                self.states.is_attacking or
-                self.states.taking_damage or
-                self.states.disable_movement
-            ):
-                self.velocity.dx = 0
-                await asyncio.sleep(MV_DELAY)
-                continue
-            
-            is_shift_held = keyboard.Key.shift in self.held_keys
-            if is_shift_held and self.stats.stamina > 0 and not self.states.exhausted:
-                step = self.stats.movement_speed * self.stats.sprint_mult
-            else:
+                # Calculate Amount
+                amount = self.stats.stamina_regen
+                
+                # Exhaustion Logic
                 if self.states.exhausted:
-                    step = self.stats.movement_speed * self.stats.exhaustion_modifier
-                else:
-                    step = self.stats.movement_speed
-            
-            # Reset horizontal velocity when not dashing
-            if not self.states.is_dashing: dx = 0
-            
-            if 'a' in self.held_keys: dx -= step
-            if 'd' in self.held_keys: dx += step
-            
-            if (
-                ('a' in self.held_keys or 'd' in self.held_keys)
-                and 'c' in self.held_keys
-            ):
-                dx += self.dash(dx)
-            
-            def on_movement() -> None:
-                """Stamina check and update when sprinting."""
-                self.states.is_sprinting = is_shift_held
-                if self.states.is_sprinting and self.stats.stamina > 0:
-                    self.stats.stamina -= self.stats.st_usage_tick
+                    if not self.states.is_moving and not self.states.is_attacking:
+                        amount *= self.stats.exhaustion_st_multiplier
+                    else:
+                        amount = 0
+                
+                # Apply
+                if amount > 0:
+                    self.stats.stamina += amount
+                    
+                    if self.stats.stamina >= self.stats.max_stamina:
+                        self.stats.stamina = self.stats.max_stamina
+                        self.states.exhausted = False
+                        
+                        # Reset stamina bar colors
+                        self._stamina_bar_stack.st_container.bgcolor = ft.Colors.YELLOW
+                        self.stamina_bar.color = ft.Colors.GREY_800
+                        
                     self._update_stamina_bar()
-                elif self.stats.stamina <= 0:
-                    self.states.exhausted = True
-                    self.stats.stamina = 0
+    
+    def _tick_health(self, dt: float) -> None:
+        # 1. Handle Delay (Waiting after damage)
+        if self.hp_delay_timer > 0:
+            self.hp_delay_timer -= dt
+            return
+
+        # 2. Handle Regen
+        if self.stats.health < self.stats.max_health:
+            self.hp_regen_timer += dt
             
-            self._check_movement(
-                dx, on_movement=on_movement,
-                # on_direction_changed=lambda: self._play_sfx_list(self.looking_away_sfx_list)
-            )
+            if self.hp_regen_timer >= self.stats.hp_regen_tick:
+                self.hp_regen_timer = 0
+                
+                self.stats.health += self.stats.health_regen
+                if self.stats.health > self.stats.max_health:
+                    self.stats.health = self.stats.max_health
+                    
+                self._update_health_bar()
+    
+    def _tick_dash(self, dt: float) -> None:
+        # --- PHASE 1: ACTIVE DASH ---
+        if self.states.is_dashing:  # Use state flag instead of timer > 0 for safety
+            self.dash_timer -= dt
             
-            await asyncio.sleep(MV_DELAY)
+            # Force Velocity
+            self.velocity.dx = self.dash_velocity * self.dash_direction
+
+            if self.dash_timer <= 0:
+                self._reset_tint()
+                self.states.invincible = False
+                self.states.is_dashing = False
+                self.velocity.dx = 0 
+
+        # --- PHASE 2: COOLDOWN ---
+        # Only count down if we are on cooldown
+        if self._has_dashed:
+            self.dash_cooldown_timer -= dt
+            
+            if self.dash_cooldown_timer <= 0:
+                self._has_dashed = False
+                self.dash_indicator.color = None
+                try_update(self.dash_indicator)
     
     # * === DASH COOLDOWN ===
     def _make_dash_cooldown(self) -> ft.Image:
@@ -371,18 +494,18 @@ class Player(Entity):
         """Cancels all running tasks, and plays the death animation."""
         if not super().death(): return
         self._reset_states(EntityStates(dead=True))
-        self._cancel_loop_tasks()
+        self.velocity.dx = 0
         if self.on_death: self.on_death()
         self._toggle_atk_hb_border()
     
-    def dash(self, dx: float) -> ft.Number:
-        """Player dash action. Returns velocity amount."""
+    def dash(self, dx: float) -> None:
+        """Player dash action. Tick-based implementation."""
         # Checks
-        if self._has_dashed: return 0
-        if self.stats.stamina <= 0: return 0
-        elif (self.stats.stamina - self.stats.dash_st_cost) <= 0: return 0
+        if self._has_dashed: return
+        if self.stats.stamina <= 0: return
+        elif (self.stats.stamina - self.stats.dash_st_cost) <= 0: return
         
-        # Costs and states
+        # 1. Set Costs and Visuals
         self._has_dashed = True
         self.states.invincible = True
         self.states.is_dashing = True
@@ -390,27 +513,25 @@ class Player(Entity):
         self._update_stamina_bar()
         self._apply_tint(ft.Colors.PURPLE)
         self._play_sfx(sfx.whoosh.motion, 0.5)
+        self.st_delay_timer = self.stats.st_regen_delay
         
-        direction = 1 if dx > 0 else -1
-        self._debug_msg(f"Dashing to the {"left" if direction < 0 else "right"}!", debug_handler=self._debug_logs.dash)
+        # 2. Set Tick Timers (Seconds)
+        self.dash_timer = self.stats.dash_duration
+        self.dash_cooldown_timer = self.stats.dash_cooldown
         
-        async def timer() -> None:
-            """Handles the dash cooldown."""
-            await asyncio.sleep(self.stats.dash_duration)
-            self._reset_tint()
-            self.states.invincible = False
-            self.states.is_dashing = False
-            self.velocity.dx = 0
-            await asyncio.sleep(self.stats.dash_cooldown - self.stats.dash_duration)
-            self._has_dashed = False
-            self.dash_indicator.color = None
-            try_update(self.dash_indicator)
+        # 3. Set Direction
+        # If input is 0 (standing still), dash forward (facing direction)
+        if dx == 0:
+            self.dash_direction = self._get_facing_direction()
+        else:
+            self.dash_direction = 1 if dx > 0 else -1
             
-        self.page.run_task(timer)
+        # 4. Force Velocity Immediately
+        self.velocity.dx = self.dash_velocity * self.dash_direction
+        
+        # Update UI
         self.dash_indicator.color = ft.Colors.with_opacity(0.75, ft.Colors.GREY)
         try_update(self.dash_indicator)
-        
-        return self.dash_velocity * direction
     
     def jump(self) -> None:
         """Player jump action."""
@@ -422,6 +543,7 @@ class Player(Entity):
         self.stats.stamina -= self.stats.jump_st_cost
         self._update_stamina_bar()
         
+        self.st_delay_timer = self.stats.st_regen_delay
         self.velocity.dy = self.jump_velocity
         
         self.states.jumped = True
@@ -466,6 +588,8 @@ class Player(Entity):
         """Decrease player's health with logic."""
         if not super().take_damage(damage_amount, is_crit): return
         
+        self.hp_delay_timer = self.stats.hp_regen_delay
+        
         if self.states.is_attacking:
             self.states.is_attacking = False
             self.states.dealing_damage = False
@@ -490,73 +614,7 @@ class Player(Entity):
         """Revives the player."""
         if not super().revive(): return
     
-    def __call__(self, start_loops: bool = True) -> ft.Stack:
-        """
-        Returns the `Stack` control, and starts the movement and
-        animation loops.
-        """
-        if start_loops: self._start_loops()
-        return super().__call__()
-    
-    # * === RESOURCE LOOPS ===
-    async def _stamina_regen_loop(self) -> None:
-        """Handles the natural stamina regen loop."""
-        while not self.states.dead:
-            if self.stats.stamina >= self.stats.max_stamina:
-                await asyncio.sleep(self.stats.st_regen_tick)
-                continue
-            elif self.states.is_sprinting or self.states.jumped:
-                await asyncio.sleep(self.stats.st_regen_delay)
-                if self.states.is_sprinting or self.states.jumped:
-                    continue
-            
-            if self.states.exhausted and not self.states.is_moving and not self.states.is_attacking:
-                self.stats.stamina += self.stats.stamina_regen * self.stats.exhaustion_st_multiplier
-            else:
-                self.stats.stamina += self.stats.stamina_regen
-                
-            if self.stats.stamina >= self.stats.max_stamina:
-                self.stats.stamina = self.stats.max_stamina
-                self.states.exhausted = False
-                
-            self._update_stamina_bar()
-            await asyncio.sleep(self.stats.st_regen_tick)
-    
-    def _start_st_loop(self) -> None:
-        """Starts the stamina regen loop and stores it in a variable."""
-        self._debug_msg("Starting Stamina Loop!", debug_handler=self._debug_logs.stamina)
-        self._stamina_loop_task = self.page.run_task(self._stamina_regen_loop)
-    
-    async def _health_regen_loop(self) -> None:
-        """Handles the natural health regen loop."""
-        try:
-            await asyncio.sleep(self.stats.hp_regen_delay)
-            while not self.states.dead:
-                if self.stats.health >= self.stats.max_health:
-                    await asyncio.sleep(self.stats.hp_regen_tick)
-                    continue
-                
-                self.stats.health += self.stats.health_regen
-                if self.stats.health > self.stats.max_health:
-                    self.stats.health = self.stats.max_health
-                self._update_health_bar()
-                await asyncio.sleep(self.stats.hp_regen_tick)
-                
-        except asyncio.CancelledError:
-            self._update_health_bar()
-    
-    def _start_hp_loop(self) -> None:
-        """Starts the health regen loop and stores it in a variable."""
-        self._debug_msg("Starting Health Loop!", debug_handler=self._debug_logs.health)
-        self._health_loop_task = self.page.run_task(self._health_regen_loop)
-    
     # * === OTHER HELPERS ===
-    def _start_loops(self) -> None:
-        """Starts all the looping tasks."""
-        self._start_movement_loop()
-        self._start_st_loop()
-        self._start_hp_loop()
-    
     def _interrupt_action(self) -> bool:
         """
         Returns `False` if there are no interrupting actions occurring.

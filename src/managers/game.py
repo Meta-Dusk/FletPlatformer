@@ -358,7 +358,6 @@ Click outside this message to close it."""
     async def quit_to_menu(self, _: ft.ControlEvent) -> None:
         """Cleanup game and show menu"""
         self.is_game_running = False
-        self.cleanup()
         
         self.game_layer.opacity = 0
         self.pause_menu.opacity = 0
@@ -450,12 +449,4 @@ entity_stack: {len(self.entity_stack.controls)}
                 post_callback=summon_gobby
             )
         self.running_tasks.append(self.page.run_task(run_pan))
-    
-    def cleanup(self) -> None:
-        """Call this when exiting or changing levels."""
-        for task in self.running_tasks: attempt_cancel(task)
-        for entity in self.entity_list:
-            if isinstance(entity, Enemy):
-                entity._cancel_loop_tasks()
-        self.player._cancel_loop_tasks()
     
