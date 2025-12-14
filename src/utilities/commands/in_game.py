@@ -278,7 +278,7 @@ class GameCommands:
             heal_count = 0
             for e in entities:
                 if not e.states.dead:
-                    self.page.run_task(e.heal, amount, _overheal)
+                    e.heal(amount, _overheal)
                     heal_count += 1
             
             if heal_count > 0:

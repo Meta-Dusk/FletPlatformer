@@ -17,8 +17,6 @@ class GameLoop:
         self._target_fps = 60
         self._tick_rate = 1 / self._target_fps
         
-        # Register your sub-managers here
-        # They must all implement a update(dt) method
         self.physics_manager = PhysicsManager(page, entity_list)
         self.projectile_manager = ProjectileManager(page, entity_list, ground_level)
         

@@ -55,31 +55,28 @@ class Player(Entity):
         """The main setup for all player entities."""
         # ? Entity inherited class setup
         self._player_name = type.name.lower()
-        self.name = type.value.name if name is None else name
+        name = type.value.name if name is None else name
         self._init_stats = stats
         
         super().__init__(
-            sprite=sprite, name=self.name, page=page,
-            audio_manager=audio_manager, faction=Factions.HUMAN,
-            entity_list=entity_list, debug=debug, stats=self._init_stats,
-            simple_revive=simple_revive, restrict_movement=restrict_movement
+            sprite=sprite, name=name, page=page, audio_manager=audio_manager,
+            faction=Factions.HUMAN, entity_list=entity_list, debug=debug,
+            stats=self._init_stats, simple_revive=simple_revive,
+            restrict_movement=restrict_movement, show_stamina_bar=True,
+            show_dash_cooldown=True, verbose_stamina=verbose_stamina
         )
         
         # ? Player setup
         self.type = type
         self.held_keys = held_keys
-        self._handler_str = self.name
+        # self._handler_str = self.name
         
         self._has_dashed: bool = False
-        self._stamina_bar_stack = self._make_stamina_bar(attach_to_hud=True, verbose=verbose_stamina)
-        self.dash_indicator = self._make_dash_cooldown()
         
         # Sound effects
         self.landing_sfx_list: list[SFXLibrary] = []
         self.looking_away_sfx_list: list[SFXLibrary] = []
-        
-        self.last_attack_time: float = 0.0
-        
+                
         # --- NEW ANIMATION SYSTEM SETUP ---        
         # Define default animations (Subclasses should overwrite these)
         self.animations: dict[str, AnimConfig] = {
@@ -96,17 +93,23 @@ class Player(Entity):
         # ? Temp
         self.projectile_manager: ProjectileManager
         
-        # Regen timers
+        # ? Timers
+        # Stamina
         self.st_regen_timer: float = 0.0
         self.st_delay_timer: float = 0.0
         
+        # Health
         self.hp_regen_timer: float = 0.0
         self.hp_delay_timer: float = 0.0
         
+        # Healing
+        self.healing_effect_timer: float = 0.0
+        
         # TRACKING STATE
-        self._was_on_ground: bool = True 
+        self._was_on_ground: bool = True
+        self.last_attack_time: float = 0.0
 
-        # DASH STATE (New Tick Variables)
+        # DASH STATE
         self.dash_timer: float = 0.0
         self.dash_cooldown_timer: float = 0.0
         self.dash_direction: int = 0
@@ -279,9 +282,7 @@ class Player(Entity):
     
     # * === TICK UPDATES ===
     def tick_logic(self, dt: float) -> None:
-        """
-        Replaces _movement_loop. Runs every frame to check inputs.
-        """
+        """Runs every frame to check inputs, and other logic."""
         # On landing check
         if not self._was_on_ground and self.on_ground and self.velocity.dy <= 0:
             self._play_sfx_list(self.landing_sfx_list)
@@ -362,8 +363,9 @@ class Player(Entity):
             self.states.exhausted = True
             
             # Indication for exhaustion in the stamina bar itself
-            self._stamina_bar_stack.st_container.bgcolor = ft.Colors.YELLOW_900
-            self.stamina_bar.color = ft.Colors.RED_900
+            if self.stamina_bar and self._stamina_bar_stack:
+                self._stamina_bar_stack.st_container.bgcolor = ft.Colors.YELLOW_900
+                self.stamina_bar.color = ft.Colors.RED_900
         
         if self.states.is_sprinting or self.states.jumped:
             self.st_delay_timer = self.stats.st_regen_delay
@@ -401,8 +403,9 @@ class Player(Entity):
                         self.states.exhausted = False
                         
                         # Reset stamina bar colors
-                        self._stamina_bar_stack.st_container.bgcolor = ft.Colors.YELLOW
-                        self.stamina_bar.color = ft.Colors.GREY_800
+                        if self.stamina_bar and self._stamina_bar_stack:
+                            self._stamina_bar_stack.st_container.bgcolor = ft.Colors.YELLOW
+                            self.stamina_bar.color = ft.Colors.GREY_800
                         
                     self._update_stamina_bar()
     
@@ -446,21 +449,9 @@ class Player(Entity):
             
             if self.dash_cooldown_timer <= 0:
                 self._has_dashed = False
-                self.dash_indicator.color = None
-                try_update(self.dash_indicator)
-    
-    # * === DASH COOLDOWN ===
-    def _make_dash_cooldown(self) -> ft.Image:
-        """Returns the icon for the dash cooldown."""
-        _scale = 0.25
-        dash_cooldown = ft.Image(
-            src="images/icons/dash.png", filter_quality=ft.FilterQuality.NONE,
-            scale=_scale, fit=ft.BoxFit.COVER, color_blend_mode=ft.BlendMode.MODULATE,
-            left=-40, top=-22, width=256 * _scale, height=256 * _scale
-        )
-        
-        self._health_bar_stack.controls.append(dash_cooldown)
-        return dash_cooldown
+                if self.dash_indicator:
+                    self.dash_indicator.color = None
+                    try_update(self.dash_indicator)
     
     # * === CALLABLE PLAYER ACTIONS/EVENTS ===
     def attack_ranged(self) -> None:
@@ -491,8 +482,10 @@ class Player(Entity):
         )
     
     def death(self) -> None:
-        """Cancels all running tasks, and plays the death animation."""
+        """Resets states and calls `on_death`."""
+        # ? Check if action is allowed
         if not super().death(): return
+        
         self._reset_states(EntityStates(dead=True))
         self.velocity.dx = 0
         if self.on_death: self.on_death()
@@ -501,9 +494,12 @@ class Player(Entity):
     def dash(self, dx: float) -> None:
         """Player dash action. Tick-based implementation."""
         # Checks
-        if self._has_dashed: return
-        if self.stats.stamina <= 0: return
-        elif (self.stats.stamina - self.stats.dash_st_cost) <= 0: return
+        if (
+            self._has_dashed
+            or self.stats.stamina <= 0
+            # or (self.stats.stamina - self.stats.dash_st_cost) <= 0
+        ):
+            return
         
         # 1. Set Costs and Visuals
         self._has_dashed = True
@@ -530,15 +526,20 @@ class Player(Entity):
         self.velocity.dx = self.dash_velocity * self.dash_direction
         
         # Update UI
-        self.dash_indicator.color = ft.Colors.with_opacity(0.75, ft.Colors.GREY)
-        try_update(self.dash_indicator)
+        if self.dash_indicator:
+            self.dash_indicator.color = ft.Colors.with_opacity(0.75, ft.Colors.GREY)
+            try_update(self.dash_indicator)
     
     def jump(self) -> None:
         """Player jump action."""
-        if not self.on_ground or self._interrupt_action(): return
-        elif self.stats.stamina <= 0: return
-        elif (self.stats.stamina - self.stats.jump_st_cost) <= 0: return
-        elif self.states.exhausted: return
+        if (
+            not self.on_ground
+            or self._interrupt_action()
+            or self.stats.stamina <= 0
+            # or (self.stats.stamina - self.stats.jump_st_cost) <= 0
+            or self.states.exhausted
+        ):
+            return
         
         self.stats.stamina -= self.stats.jump_st_cost
         self._update_stamina_bar()
@@ -551,6 +552,7 @@ class Player(Entity):
     
     def attack(self) -> None:
         """Player attack. Combo cycles: 1 -> 2 -> 1."""
+        # ? Check if action is allowed
         if not super().attack(): return
         
         direction = self._get_facing_direction()
@@ -585,7 +587,8 @@ class Player(Entity):
         self.last_attack_time = current_time
         
     def take_damage(self, damage_amount: float, is_crit: bool = False) -> None:
-        """Decrease player's health with logic."""
+        """Decrease player's health with logic. Also resets natural regen timer."""
+        # ? Check if action is allowed and apply damage
         if not super().take_damage(damage_amount, is_crit): return
         
         self.hp_delay_timer = self.stats.hp_regen_delay
@@ -600,19 +603,10 @@ class Player(Entity):
         
         if self.stats.health <= 0: self.death()
     
-    async def heal(self, heal_amount: float, overheal: bool = False) -> None:
-        """Heals the player."""
-        if not super().heal(heal_amount, overheal): return
-        self.states.is_healing = True
-        self._update_health_bar()
-        self._apply_tint(ft.Colors.GREEN)
-        await asyncio.sleep(self.stats.healing_delay)
-        self._reset_tint()
-        self.states.is_healing = False
-    
     def revive(self) -> None:
         """Revives the player."""
         if not super().revive(): return
+        # TODO: Make lore-wise revive for player
     
     # * === OTHER HELPERS ===
     def _interrupt_action(self) -> bool:

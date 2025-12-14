@@ -64,8 +64,8 @@ class EntityStats:
     # Movement
     movement_speed: Number = 3.8
     sprint_mult: Number = 1.5
-    jump_distance: Number = 8
-    jump_strength: Number = 1.5
+    jump_distance: Number = 15
+    jump_strength: Number = 1
     jump_air_time: Number = 0.1
     jump_st_cost: Number = 2
     dash_distance: Number = 3

@@ -46,6 +46,7 @@ class Projectile:
         self.age: float = 0.0
         self.is_dead: bool = False
         self.is_exploding: bool = False
+        self.move_during_explode: bool = False
         
         # Physics State (Meters/sec)
         self.dx = stats.velocity.dx * direction_x

@@ -42,7 +42,7 @@ class ProjectileManager:
                 proj.tick_animation(dt)
                 
                 # If exploding, skip physics and collisions
-                if proj.is_exploding:
+                if proj.is_exploding and not proj.move_during_explode:
                     if proj.is_dead: # Animation finished
                         to_remove.append(proj)
                     continue
@@ -99,6 +99,10 @@ class ProjectileManager:
                 # Age Check
                 proj.age += dt
                 if proj.age >= stats.lifespan:
+                    to_remove.append(proj)
+                    continue
+                
+                if proj.is_dead:
                     to_remove.append(proj)
                     continue
                 

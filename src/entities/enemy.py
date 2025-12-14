@@ -84,6 +84,7 @@ class Enemy(Entity):
             "run": AnimConfig(frame_count=6, frame_duration=0.1),
         }
     
+    # * === TICK LOGIC ===
     def tick_animation(self, dt: float) -> bool:
         """Standard Enemy Animation Logic."""
         new_state = "idle"
@@ -205,6 +206,16 @@ class Enemy(Entity):
         self.stack.opacity = 1
         try_update(self.stack)
         await await_for_dur(self.stack.animate_opacity)
+    
+    def heal(self, heal_amount: float, overheal: bool = False) -> None:
+        """Heals the enemy."""
+        if not super().heal(heal_amount, overheal): return
+        
+        self.states.is_healing = True
+        self._update_health_bar()
+        self._apply_tint(ft.Colors.GREEN)
+        
+        self.healing_effect_timer = self.stats.healing_delay
     
     def _is_target_in_range(self, threshold: float = None) -> bool:
         """Checks if the specifically targeted `Entity` is in range."""

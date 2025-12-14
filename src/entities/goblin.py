@@ -158,6 +158,10 @@ class Goblin(Enemy):
 
     def _on_animation_finish(self) -> None:
         state = self.current_anim_state
+        
+        if state == "death":
+            self.velocity.dx = 0
+        
         if state == "revive":
             self.states.is_reviving = False
             self.states.dead = False

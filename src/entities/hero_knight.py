@@ -148,6 +148,7 @@ class HeroKnight(Player):
         
         if state == "death":
             self.states.revivable = True
+            self.velocity.dx = 0
         
         elif state == "revive":
             self.states.is_reviving = False

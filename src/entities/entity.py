@@ -25,8 +25,8 @@ class Entity(DamageHitbox):
     def __init__(
         self,
         sprite: Sprite,
-        name: str,
-        page: ft.Page,
+        name: str = "Entity",
+        page: ft.Page = None,
         audio_manager: AudioManager = None,
         faction: Factions = None,
         entity_list: list[Self] = None,
@@ -36,6 +36,9 @@ class Entity(DamageHitbox):
         stats: EntityStats = None,
         simple_revive: bool = True,
         restrict_movement: bool = False,
+        show_stamina_bar: bool = False,
+        show_dash_cooldown: bool = False,
+        verbose_stamina: bool = False
     ) -> None:
         """The main setup for all entities."""
         # Setup the DamageHitbox class
@@ -50,9 +53,12 @@ class Entity(DamageHitbox):
         self.faction: Factions = faction
         self._entity_list = entity_list if entity_list is not None else []
         self.stats: EntityStats = stats if stats else EntityStats()
-        self.show_hud = show_hud
+        self._show_hud: bool
         self.simple_revive = simple_revive
-        self._handler_str: str = "Entity"
+        self.show_stamina_bar = show_stamina_bar
+        self.show_dash_cooldown = show_dash_cooldown
+        self.verbose_stamina = verbose_stamina
+        self._handler_str: str = self.name
         self.states: EntityStates = EntityStates(restrict_movement=restrict_movement)
         if not hasattr(self, "ground_level"):
             self._ground_level: int = 0
@@ -86,6 +92,10 @@ class Entity(DamageHitbox):
         self._hitbox: ft.Container = None
         self.stack: ft.Stack = self._make_stack()
         self.hud: ft.Container = None
+        self.dash_indicator: ft.Image = None
+        
+        # Timers
+        self.healing_effect_timer: float = 0.0
         
         # Animation State
         self.anim_timer: float = 0.0
@@ -104,10 +114,48 @@ class Entity(DamageHitbox):
         
         # Finalization
         print(f"\nMaking a {faction.value} entity, named; '{name}', with {self.stats}\n")
-        if self.show_hud:
+        self.show_hud = show_hud
+    
+    # * === PROPERTIES ===
+    @property
+    def ground_level(self) -> int:
+        """The floor where entities rest upon."""
+        return self._ground_level
+    
+    @ground_level.setter
+    def ground_level(self, value: int) -> None:
+        self._ground_level = value
+        
+    @property
+    def show_hud(self) -> bool:
+        """The HUD contains information about HP and ST."""
+        return self._show_hud
+    
+    @show_hud.setter
+    def show_hud(self, enabled: bool) -> None:
+        if enabled:
             self._health_bar_stack = self._make_health_bar()
+            self._update_health_bar()
             self.nametag = self._make_nametag()
             self._make_hud()
+            if self.show_stamina_bar:
+                self._stamina_bar_stack = self._make_stamina_bar(
+                    attach_to_hud=True, verbose=self.verbose_stamina
+                )
+                if self.states.exhausted:
+                    self._stamina_bar_stack.st_container.bgcolor = ft.Colors.YELLOW_900
+                    self.stamina_bar.color = ft.Colors.RED_900
+                self._update_stamina_bar()
+            if self.show_dash_cooldown:
+                self.dash_indicator = self._make_dash_cooldown()
+        else:
+            self._health_bar_stack = None
+            self.nametag = None
+            self.stack.controls.remove(self.hud)
+            self.hud = None
+            self._stamina_bar_stack = None
+            self.dash_indicator = None
+        try_update(self.stack)
     
     # * === ANIMATION TICKS ===
     def tick_animation(self, dt: float) -> bool:
@@ -227,11 +275,11 @@ class Entity(DamageHitbox):
             
         # 3. Handle Generic Timers (Cooldowns, etc.)
         self._tick_timers(dt)
-
+        
     def tick_logic(self, dt: float) -> None:
         """
         Override this! 
-        - Players put Input handling here.
+        - Players put input handling here.
         - Enemies put AI decision making here.
         """
         pass
@@ -241,16 +289,18 @@ class Entity(DamageHitbox):
         # Example: Dash Cooldown
         if hasattr(self, "dash_cooldown_timer") and self.dash_cooldown_timer > 0:
             self.dash_cooldown_timer -= dt
+        
+        if not self.states.dead:
+            self._tick_healing_effect(dt)
     
-    # * === PROPERTIES ===
-    @property
-    def ground_level(self) -> int:
-        """The floor where entities rest upon."""
-        return self._ground_level
-    
-    @ground_level.setter
-    def ground_level(self, value: int) -> None:
-        self._ground_level = value
+    def _tick_healing_effect(self, dt: float) -> None:
+        """Handles the duration of the healing state/visuals."""
+        if self.states.is_healing:
+            self.healing_effect_timer -= dt
+            
+            if self.healing_effect_timer <= 0:
+                self.states.is_healing = False
+                self._reset_tint()
     
     # * === FUNCTIONAL WRAPPERS ===
     def _debug_msg(
@@ -279,7 +329,7 @@ class Entity(DamageHitbox):
     
     def _play_sfx_list(self, sfx: list[SFXLibrary], volume: float = None) -> None:
         """Play a list of SFX with support for directional playback."""
-        if sfx is None: return
+        if sfx is None or len(sfx) == 0: return
         for sound in sfx:
             self._play_sfx(sound, volume)
         
@@ -372,6 +422,18 @@ class Entity(DamageHitbox):
         """Returns a `NameTag` custom component."""
         return NameTag(self.name)
     
+    def _make_dash_cooldown(self) -> ft.Image:
+        """Returns the icon for the dash cooldown."""
+        _scale = 0.25
+        dash_cooldown = ft.Image(
+            src="images/icons/dash.png", filter_quality=ft.FilterQuality.NONE,
+            scale=_scale, fit=ft.BoxFit.COVER, color_blend_mode=ft.BlendMode.MODULATE,
+            left=-40, top=-22, width=256 * _scale, height=256 * _scale
+        )
+        
+        self._health_bar_stack.controls.append(dash_cooldown)
+        return dash_cooldown
+    
     def _make_stamina_bar(self, *, verbose: bool = False, attach_to_hud: bool = False) -> StaminaBar:
         """Returns a `StaminaBar` custom component."""
         stamina_bar = StaminaBar(self.stats, verbose=verbose)
@@ -403,7 +465,6 @@ class Entity(DamageHitbox):
         return ft.Stack(
             controls=[ft.Container(self.sprite, data=self.faction)],
             left=PAGE_CENTER_WIDTH - SPRITE_CENTER_WIDTH, bottom=self.ground_level,
-            # animate_position=ft.Animation(100, ft.AnimationCurve.EASE_IN_OUT),
             width=self.sprite.width, height=self.sprite.height,
             clip_behavior=ft.ClipBehavior.NONE
         )
@@ -413,14 +474,15 @@ class Entity(DamageHitbox):
         if self.health_bar is None: return
         self.health_bar.value = abs((self.stats.health / self.stats.max_health) - 1)
         try_update(self.health_bar)
-        self._health_bar_stack.hp_label.current_value = round(self.stats.health, 1)
+        if self._health_bar_stack:
+            self._health_bar_stack.hp_label.current_value = round(self.stats.health, 1)
     
     def _update_stamina_bar(self) -> None:
         """Updates the stamina bar if provided."""
         if self.stamina_bar is None: return
         self.stamina_bar.value = abs((self.stats.stamina / self.stats.max_stamina) - 1)
         try_update(self.stamina_bar)
-        if self._stamina_bar_stack.verbose:
+        if self._stamina_bar_stack and self._stamina_bar_stack.verbose:
             self._stamina_bar_stack.st_label.current_value = round(self.stats.stamina, 1)
     
     def _get_facing_direction(self) -> Literal[-1, 1]:
@@ -588,6 +650,10 @@ class Entity(DamageHitbox):
             self.stats.health += heal_amount
             
         heal_text = HealthText(value=f"+{heal_amount}", right=-105, top=4, color=ft.Colors.GREEN_ACCENT, anim_right=-80)
+        self.states.is_healing = True
+        self._apply_tint(ft.Colors.GREEN)
+        self._update_health_bar()
+        self.healing_effect_timer = self.stats.healing_delay
         
         self.stack.controls.append(heal_text)
         try_update(self.stack)
