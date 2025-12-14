@@ -2,7 +2,7 @@ import flet as ft
 import asyncio, random
 from pynput import keyboard
 
-from audio.audio_manager import global_audio_manager
+from audio.audio_manager import global_audio_manager as audio_manager
 from audio.music_data import MusicLibrary
 
 from components.menus import PauseMenu, SettingsMenu
@@ -30,7 +30,6 @@ from managers.game_mixins import NewPlayer, NewEnemy
 from managers.game_loop import GameLoop
 
 music = MusicLibrary()
-audio_manager = global_audio_manager
 
 class GameManager(GameCommands, MenuManager, SettingsManager):
     """Central hub for the game UI and states."""
@@ -145,7 +144,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         kb_manager.on_press_callback = self._handle_input_press
         
         self.game_loop = GameLoop(
-            self.page, self.entity_list, ground_level=self.ground_level
+            self.page, self.entity_list, audio_manager, ground_level=self.ground_level
         )
         self.projectile_stack = self.game_loop.projectile_manager.projectile_layer
         self.game_loop.start()

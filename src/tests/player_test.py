@@ -22,7 +22,7 @@ async def test(page: ft.Page):
     player = HeroKnight(page, global_audio_manager, kb_manager.held_keys, debug=True)    
     entity_list = [player]
     
-    game_loop = GameLoop(page, entity_list)
+    game_loop = GameLoop(page, entity_list, global_audio_manager)
     game_loop.start()
     projectile_manager = game_loop.projectile_manager
     projectile_manager.debug = True

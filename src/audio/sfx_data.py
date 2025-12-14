@@ -92,6 +92,12 @@ class ButtonSFX:
 class UISounds:
     buttons = ButtonSFX()
 
+@dataclass
+class ExplosionsSFX:
+    small = sound_path("small_explosion")
+    sparkler_ignite = sound_path("sparkler_ignite")
+    light_spark_sizzle = sound_path("light_spark_sizzle")
+
 # * Main Sound Library
 @dataclass
 class SFXLibrary:
@@ -108,4 +114,5 @@ class SFXLibrary:
     impacts = ImpactsSFX()
     whoosh = WhooshSFX()
     ui = UISounds()
+    explosions = ExplosionsSFX()
     

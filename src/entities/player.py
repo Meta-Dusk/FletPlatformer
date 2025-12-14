@@ -462,7 +462,8 @@ class Player(Entity):
             direction=direction,
             owner=self,
             stats=PresetProjectileStats.SmallBomb,
-            src="images/enemies/goblin/projectile_0.png"
+            src="images/enemies/goblin/projectile_0.png",
+            sfx_upon_spawn=(sfx.explosions.sparkler_ignite, 0.5)
         )
     
     def death(self) -> None:

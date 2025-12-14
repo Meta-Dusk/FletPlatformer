@@ -4,11 +4,17 @@ import flet as ft
 from entities.entity import Entity
 from managers.physics import PhysicsManager
 from managers.projectiles import ProjectileManager
+from audio.audio_manager import AudioManager
 
 class GameLoop:
     def __init__(
-        self, page: ft.Page, entity_list: list[Entity],
-        *, is_paused: bool = False, ground_level: int = 0
+        self,
+        page: ft.Page,
+        entity_list: list[Entity],
+        audio_manager: AudioManager,
+        *,
+        is_paused: bool = False,
+        ground_level: int = 0
     ) -> None:
         self.page = page
         self.entity_list = entity_list
@@ -18,7 +24,7 @@ class GameLoop:
         self._tick_rate = 1 / self._target_fps
         
         self.physics_manager = PhysicsManager(page, entity_list)
-        self.projectile_manager = ProjectileManager(page, entity_list, ground_level)
+        self.projectile_manager = ProjectileManager(page, audio_manager, entity_list, ground_level)
     
     @property
     def is_paused(self) -> bool:

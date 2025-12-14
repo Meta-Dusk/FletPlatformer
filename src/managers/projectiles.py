@@ -5,13 +5,21 @@ from entities.entity import Entity
 from entities.projectile import Projectile, ProjectileStats
 from utilities.collisions import check_collision
 from utilities.components import try_update
+from audio.audio_manager import AudioManager
+from audio.sfx_data import SFXLibrary
 
 class ProjectileManager:
     def __init__(
-        self, page: ft.Page, entity_list: list[Entity] = None,
-        ground_level: int = 0, *, debug: bool = False
+        self,
+        page: ft.Page,
+        audio_manager: AudioManager,
+        entity_list: list[Entity] = None,
+        ground_level: int = 0,
+        *,
+        debug: bool = False
     ) -> None:
         self.page = page
+        self.audio_manager = audio_manager
         self.entity_list = entity_list
         self.active_projectiles: list[Projectile] = []
         self.projectile_layer = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
@@ -23,14 +31,18 @@ class ProjectileManager:
         
     def spawn_projectile(
         self, start_x: float, start_y: float, direction: int,
-        owner: Entity, stats: ProjectileStats, src: str
+        owner: Entity, stats: ProjectileStats, src: str,
+        sfx_upon_spawn: tuple[SFXLibrary, float] = None
     ) -> None:
         # 1. Create
-        proj = Projectile(start_x, start_y, direction, owner, stats, src)
+        proj = Projectile(
+            start_x, start_y, direction, owner, stats, src,
+            self.audio_manager, sfx_upon_spawn=sfx_upon_spawn
+        )
         
         # 2. Add to Logic & Visuals
         self.active_projectiles.append(proj)
-        self.projectile_layer.controls.append(proj.stack_obj)
+        self.projectile_layer.controls.append(proj)
         
     def update(self, dt: float):
         to_remove = []
@@ -67,13 +79,13 @@ class ProjectileManager:
                 move_x = proj.dx * self.ppm * dt
                 move_y = proj.dy * self.ppm * dt
                 
-                proj.stack_obj.left += move_x
-                proj.stack_obj.bottom += move_y
+                proj.left += move_x
+                proj.bottom += move_y
                 
                 # --- C. MAP COLLISIONS ---
                 if stats.collides_with_map:
-                    if proj.stack_obj.bottom < self.ground_level:
-                        proj.stack_obj.bottom = self.ground_level
+                    if proj.bottom < self.ground_level:
+                        proj.bottom = self.ground_level
                         
                         # Decide: Bounce or Stick?
                         if stats.bounciness > 0 and abs(proj.dy) > 1.0:
@@ -92,9 +104,9 @@ class ProjectileManager:
 
                 # --- D. BOUNDS & LIFESPAN ---
                 is_off_screen = (
-                    proj.stack_obj.left < -200 or 
-                    proj.stack_obj.left > self.page.width + 200 or 
-                    proj.stack_obj.bottom < -200
+                    proj.left < -200 or 
+                    proj.left > self.page.width + 200 or 
+                    proj.bottom < -200
                 )
                 
                 if is_off_screen and not stats.collides_with_map:
@@ -137,8 +149,8 @@ class ProjectileManager:
             for dead_proj in to_remove:
                 if dead_proj in self.active_projectiles:
                     self.active_projectiles.remove(dead_proj)
-                if dead_proj.stack_obj in self.projectile_layer.controls:
-                    self.projectile_layer.controls.remove(dead_proj.stack_obj)
+                if dead_proj in self.projectile_layer.controls:
+                    self.projectile_layer.controls.remove(dead_proj)
             
         if has_updates:
             try_update(self.projectile_layer)
@@ -175,8 +187,8 @@ class ProjectileManager:
         
         # Determine Blast Radius
         # Center of the projectile
-        center_x = proj.stack_obj.left + (proj.stats.width / 2)
-        center_y = proj.stack_obj.bottom + (proj.stats.height / 2)
+        center_x = proj.left + (proj.stats.width / 2)
+        center_y = proj.bottom + (proj.stats.height / 2)
         
         # Use custom AoE radius or fallback to projectile width * scale
         radius = proj.stats.aoe_radius if proj.stats.aoe_radius > 0 else proj.stats.width * 1.5

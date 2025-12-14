@@ -1,8 +1,10 @@
 import flet as ft
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
-from entities.features.entity_data import AnimConfig
+from entities.features.entity_data import AnimConfig, SFXRegistry
+from audio.audio_manager import AudioManager
+from audio.sfx_data import SFXLibrary
 from utilities.values import pathify
 from utilities.components import try_update
 
@@ -22,6 +24,7 @@ class ProjectileStats:
     gravity: ft.Number = 0.0
     lifespan: ft.Number = 3.0
     friendly_fire: bool = False
+    sfx_registry: SFXRegistry = field(default_factory=SFXRegistry)
     
     # Physics toggles
     collides_with_map: bool = False 
@@ -44,6 +47,13 @@ class ProjectileStats:
     # Animations
     fly_anim: AnimConfig = None
     explode_anim: AnimConfig = None
+
+# Registering SFX for projectile presets
+sfx = SFXLibrary()
+
+small_bomb_sfx = SFXRegistry()
+small_bomb_sfx.add("fly", sfx.explosions.light_spark_sizzle, volume=0.5, frame=0)
+small_bomb_sfx.add("explode", sfx.explosions.small, volume=0.5, frame=9)
 
 @dataclass
 class PresetProjectileStats:
@@ -72,15 +82,19 @@ class PresetProjectileStats:
         
         fly_anim=AnimConfig(frame_count=3, frame_duration=0.1, loop=True, start_frame=0),
         explode_anim=AnimConfig(frame_count=16, frame_duration=0.08, loop=False, start_frame=3),
+        sfx_registry=small_bomb_sfx
     )
 
-class Projectile:
+class Projectile(ft.Container):
     def __init__(
         self, start_x: ft.Number, start_y: ft.Number, 
         direction_x: int,
         owner: "Entity",  
         stats: ProjectileStats,
-        src: str
+        src: str,
+        audio_manager: AudioManager,
+        *,
+        sfx_upon_spawn: tuple[SFXLibrary, float] = None
     ) -> None:
         self.owner = owner
         self.stats = stats
@@ -88,6 +102,8 @@ class Projectile:
         self.is_dead: bool = False
         self.is_exploding: bool = False
         self.has_dealt_damage: bool = False
+        self.audio_manager = audio_manager
+        self.sfx_upon_spawn = sfx_upon_spawn
         
         # Physics State
         self.dx = stats.velocity.dx * direction_x
@@ -98,7 +114,7 @@ class Projectile:
         self.current_frame: int = 0
         self.base_src_path = pathify(src)
         
-        # 1. DYNAMIC STATE DETECTION
+        # DYNAMIC STATE DETECTION
         # Parses "projectile_0.png" -> state="projectile"
         try:
             stem = self.base_src_path.stem
@@ -109,17 +125,20 @@ class Projectile:
 
         self.current_config = stats.fly_anim
         
+        # Callables
+        self.play_sfx: Callable[[SFXLibrary, float], None] = None
+        
         # Visuals
         _scale = 2
-        self.content = ft.Image(
+        self.sprite = ft.Image(
             src=src, fit=ft.BoxFit.CONTAIN,
             filter_quality=ft.FilterQuality.NONE,
             gapless_playback=True, scale=_scale,
             offset=stats.offset
         )
         
-        self.stack_obj = ft.Container(
-            content=self.content,
+        super().__init__(
+            content=self.sprite,
             left=start_x, bottom=start_y,
             width=stats.width, height=stats.height,
             alignment=ft.Alignment.CENTER,
@@ -143,10 +162,35 @@ class Projectile:
                     if self.is_exploding:
                         self.is_dead = True
             
+            current_state_key = "explode" if self.is_exploding else "fly"
+            events = self.stats.sfx_registry.get(current_state_key, self.current_frame)
+            for event in events:
+                if self.play_sfx:
+                    self.play_sfx(event.sfx, event.volume)
+            
             self._update_src()
             return True
         return False
-
+    
+    def did_mount(self):
+        self.play_sfx = self._play_sfx
+        self.play_sfx(*self.sfx_upon_spawn)
+    
+    def _play_sfx(self, sfx: SFXLibrary, volume: float = None) -> None:
+        """Play an SFX with directional playback based on projectile position."""
+        if not self.audio_manager: return
+        
+        # Calculate panning based on screen position
+        right_vol = (self.left + (self.stats.width / 2)) / self.page.width
+        left_vol = 1.0 - right_vol
+        
+        self.audio_manager.play_sfx(
+            sfx_path=sfx,
+            left_volume=left_vol,
+            right_volume=right_vol,
+            base_volume=volume
+        )
+    
     def explode(self):
         """Triggers the explosion state."""
         if self.is_exploding: return
@@ -183,8 +227,6 @@ class Projectile:
     def get_rect(self):
         """Returns (left, bottom, width, height) for collision."""
         return (
-            self.stack_obj.left, 
-            self.stack_obj.bottom, 
-            self.stats.width, 
-            self.stats.height
+            self.left, self.bottom,
+            self.stats.width, self.stats.height
         )

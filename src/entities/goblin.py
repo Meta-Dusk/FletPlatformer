@@ -52,6 +52,7 @@ class Goblin(Enemy):
             "death": AnimConfig(frame_count=4, frame_duration=0.1, loop=False),
             "attack-1": AnimConfig(frame_count=8, frame_duration=self.stats.attack_frame_delay, loop=False),
             "attack-2": AnimConfig(frame_count=8, frame_duration=self.stats.attack_frame_delay, loop=False),
+            "attack-3": AnimConfig(frame_count=8, frame_duration=self.stats.attack_frame_delay, loop=False),
         }
         
         self.sfx_registry = SFXRegistry()
