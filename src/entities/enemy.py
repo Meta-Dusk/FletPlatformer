@@ -184,8 +184,9 @@ class Enemy(Entity):
     def take_damage(self, damage_amount: float, is_crit: bool = False) -> bool:
         """Decrease enemy's health with logic. Returns `True` if entity has died."""
         if not super().take_damage(damage_amount, is_crit): return False
-        self.states.is_moving = False
-        self.velocity.dx = 0
+        if not self.states.stun_immune:
+            self.states.is_moving = False
+            self.velocity.dx = 0
         
         # Interruption Logic
         if self.states.is_attacking and not self.states.stun_immune:

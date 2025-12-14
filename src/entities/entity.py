@@ -96,6 +96,7 @@ class Entity(DamageHitbox):
         
         # Timers
         self.healing_effect_timer: float = 0.0
+        self.hit_cooldown: float = 0.0
         
         # Animation State
         self.anim_timer: float = 0.0
@@ -289,6 +290,13 @@ class Entity(DamageHitbox):
         # Example: Dash Cooldown
         if hasattr(self, "dash_cooldown_timer") and self.dash_cooldown_timer > 0:
             self.dash_cooldown_timer -= dt
+        
+        # Manually reset the damage flag if we ignored the stun animation
+        if self.hit_cooldown > 0:
+            self.hit_cooldown -= dt
+            if self.hit_cooldown <= 0:
+                self.states.taking_damage = False
+                self._reset_tint()
         
         if not self.states.dead:
             self._tick_healing_effect(dt)
@@ -596,7 +604,12 @@ class Entity(DamageHitbox):
         _damage_amount = damage_amount * damage_reduction
         
         self.states.taking_damage = True
-        self.states.stunned = True
+        
+        if not self.states.stun_immune:
+            self.states.stunned = True
+        else:
+            self.hit_cooldown = 0.2
+            self._on_stun_immune_hit()
         
         self.stats.health -= _damage_amount
         
@@ -608,6 +621,10 @@ class Entity(DamageHitbox):
             
         try_update(self.stack)
         return True
+    
+    def _on_stun_immune_hit(self):
+        """Override this to play specific sounds or effects when resisting stun."""
+        pass
     
     def death(self) -> bool:
         """

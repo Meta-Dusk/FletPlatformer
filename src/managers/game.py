@@ -440,14 +440,9 @@ entity_stack: {len(self.entity_stack.controls)}
         async def run_pan():
             def summon_gobby(): self.summon_enemy(EnemyType.GOBLIN)
             await stage_panning_loop(
-                background_stack=self.background_stack,
-                foreground_stack=self.foreground_stack,
-                page=self.page,
-                player=self.player,
-                entity_list=self.entity_list,
-                stage=self.stage,
-                post_callback=summon_gobby,
-                projectile_stack=self.game_loop.projectile_manager.projectile_layer
+                game_manager=self,
+                projectile_stack=self.game_loop.projectile_manager.projectile_layer,
+                post_callback=summon_gobby
             )
         self.running_tasks.append(self.page.run_task(run_pan))
     

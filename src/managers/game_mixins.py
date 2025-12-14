@@ -1,3 +1,4 @@
+import flet as ft
 from typing import Any
 
 from entities.entity import Entity
@@ -16,12 +17,26 @@ class GameManagerMimic:
     def __init__(
         self, show_borders: bool,
         entity_list: list[Entity],
-        ground_level: int
+        ground_level: int,
+        entity_stack: ft.Stack,
+        page: ft.Page,
+        player: Player,
+        background_stack: ft.Stack,
+        foreground_stack: ft.Stack,
+        projectile_stack: ft.Stack,
+        stage: ft.Stack
     ) -> None:
         """**OPTIONAL** init. You don't need to call this inside the `GameManager`."""
         self.show_borders = show_borders
         self.entity_list = entity_list
         self.ground_level = ground_level
+        self.entity_stack = entity_stack
+        self.page = page
+        self.player = player
+        self.background_stack = background_stack
+        self.foreground_stack = foreground_stack
+        self.projectile_stack = projectile_stack
+        self.stage = stage
 
 # * === MIXINS ===
 class GameManagerMixin:

@@ -81,7 +81,7 @@ class Goblin(Enemy):
         
         new_state = "idle"
         if self.states.dead: new_state = "death"
-        elif self.states.taking_damage: new_state = "take-hit"
+        elif self.states.stunned: new_state = "take-hit"
         elif self.states.is_attacking:
             new_state = f"attack-{self.states.attack_phase}" if self.states.attack_phase > 0 else "attack-1"
         elif self.states.is_moving: new_state = "run"
@@ -127,9 +127,10 @@ class Goblin(Enemy):
             case "attack-1":
                 match frame:
                     case 2:
-                        if random.randint(1, 2) > 1:
+                        if random.random() < 0.5:
                             self._apply_tint(ft.Colors.YELLOW)
                             self.states.stun_immune = True
+                            self.anim_timer = 0
                     case 5:
                         self._reset_tint()
                         self.states.stun_immune = False
@@ -157,7 +158,10 @@ class Goblin(Enemy):
                     case 1:
                         self._update_health_bar()
                         self._knockback_self(self.target)
-
+    
+    def _on_stun_immune_hit(self):
+        self._play_sfx(sfx.impacts.shield_block_shortsword)
+    
     def _on_animation_finish(self) -> None:
         state = self.current_anim_state
         
@@ -227,7 +231,8 @@ class Goblin(Enemy):
             self.states.is_moving = False
             
             if self.attack_cooldown_timer <= 0 and not self.states.is_attacking:
-                self.states.attack_phase = random.choice([1, 2])
+                # self.states.attack_phase = random.choice([1, 2])
+                self.states.attack_phase = 1
                 self.attack()
                 self.attack_cooldown_timer = self.attack_cooldown_duration
                 
