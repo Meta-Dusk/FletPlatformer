@@ -1,31 +1,50 @@
 from pynput import keyboard
+from typing import Callable
 
-held_keys_set = set[str | keyboard.KeyCode]
+KeyType = str | keyboard.Key | keyboard.KeyCode
+HeldKeys = set[KeyType]
 
 # A set to keep track of what is currently pressed
-held_keys: held_keys_set = set()
+held_keys: HeldKeys = set()
+
+on_press_callback: Callable[[KeyType], None] = None
 
 # Setup Pynput Listeners (Non-blocking)
-def on_press(key: keyboard.KeyCode):
-    """Registers pressed keys in the `held_keys` set."""
+def _get_key_id(key: KeyType) -> KeyType:
+    """Standardizes key to lowercase char or Key object."""
     try:
-        # Handle standard keys (a, b, c)
-        held_keys.add(key.char.lower())
+        if hasattr(key, 'char') and key.char is not None:
+            return key.char.lower()
     except AttributeError:
-        # Handle special keys (space, enter, arrow keys)
-        held_keys.add(key)
-        
-def on_release(key: keyboard.KeyCode):
-    """Removes released keys in the `held_keys` set."""
-    try:
-        if hasattr(key, 'char') and key.char.lower() in held_keys:
-            held_keys.remove(key.char.lower())
-        elif key in held_keys:
-            held_keys.remove(key)
-    except KeyError:
-        pass # Key was already removed or never added
+        pass
+    return key
 
-def start():
+def on_press(key: KeyType) -> None:
+    """Internal Pynput handler."""
+    key_id = _get_key_id(key)
+    
+    # --- SPAM FILTER ---
+    # If key is already held, the OS is spamming "press" events.
+    # We ignore them to prevent lag and logic duplication.
+    if key_id in held_keys: 
+        return
+
+    held_keys.add(key_id)
+    
+    # Trigger the Game Manager's handler
+    if on_press_callback:
+        on_press_callback(key_id)
+
+def on_release(key: KeyType) -> None:
+    """Internal Pynput handler."""
+    key_id = _get_key_id(key)
+    
+    if key_id in held_keys:
+        held_keys.remove(key_id)
+    # We usually don't need a callback for release in this game style,
+    # but you could add one here if needed.
+
+def start() -> None:
     """Start the listener in a non-blocking way"""
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()

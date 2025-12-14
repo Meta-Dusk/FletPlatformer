@@ -3,10 +3,9 @@ from typing import Callable, Awaitable
 
 from utilities.commands.ui import DevConsole
 from utilities.components import try_update
-
 from components.menus import SettingsMenu, PauseMenu, MainMenu
-
 from entities.player import Player
+from managers.game_loop import GameLoop
 
 class MenuManager:
     """A `GameManager` mixin for handling menus."""
@@ -16,7 +15,8 @@ class MenuManager:
         is_game_running: bool, player: Player,
         ui_stack: ft.Stack, game_layer: ft.Container, stage: ft.Stack,
         debug_msg: Callable[[str], None] = None,
-        start_game: Callable[[ft.ControlEvent], Awaitable[None]] = None
+        start_game: Callable[[ft.ControlEvent], Awaitable[None]] = None,
+        game_loop: GameLoop = None
     ) -> None:
         """**OPTIONAL** init. You don't need to call this inside the `GameManager`."""
         self.console = console
@@ -31,6 +31,7 @@ class MenuManager:
         self.stage = stage
         self._debug_msg = debug_msg
         self.start_game = start_game
+        self.game_loop = game_loop
     
     # * === COMPONENT METHODS ===
     def _make_main_menu(self) -> None:
@@ -108,9 +109,10 @@ class MenuManager:
         self.ui_stack.disabled = not game_hud
         
         # Handle Player Movement Locking
-        if self.player:
-            # Player can move ONLY if the game HUD is the active focus
-            self.player.states.disable_movement = not game_hud
+        if self.game_loop: self.game_loop.is_paused = not game_hud
+        # if self.player:
+        #     # Player can move ONLY if the game HUD is the active focus
+        #     self.player.states.disable_movement = not game_hud
     
     # * === MENU CALLBACKS ===
     async def open_settings(self, _: ft.ControlEvent) -> None:

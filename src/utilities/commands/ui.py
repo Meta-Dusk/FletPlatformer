@@ -1,9 +1,11 @@
 import flet as ft
 from typing import Callable, Any
 import inspect, asyncio
+from pynput import keyboard
 
 from utilities.commands.parser import CommandParser, CommandNameArg
-
+from utilities.components import try_update
+from utilities.keyboard_manager import KeyType
 
 class DevConsole(ft.Container):
     def __init__(self, visible: bool = False) -> None:
@@ -62,19 +64,20 @@ class DevConsole(ft.Container):
     
     async def toggle(self) -> None:
         self.visible = not self.visible
-        self.update()
+        try_update(self)
         if not self.visible: return
-        await self.input_field.focus()
+        try: await self.input_field.focus()
+        except RuntimeError: pass
         self.input_field.value = ""
         self.syntax_hint.value = ""
         self.suggestion_view.controls.clear()
-        self.update()
+        try_update(self)
     
-    async def handle_keyboard(self, e: ft.KeyboardEvent) -> None:
+    async def handle_keyboard(self, e: KeyType) -> None:
         if not self.visible: return
         
         if ( # ? Only get suggestion with 1 'Tab' press if only 1 suggestion available
-            e.key == "Tab" and self._current_suggestions
+            e == keyboard.Key.tab and self._current_suggestions
             and len(self.suggestion_view.controls) == 1
         ):
             best_guess = self._current_suggestions[0]
@@ -82,7 +85,7 @@ class DevConsole(ft.Container):
     
     def log(self, message: str, color: str = ft.Colors.WHITE) -> None:
         self.log_view.controls.append(ft.Text(message, color=color))
-        self.update()
+        try_update(self)
     
     def register_command(
         self, command_structure: str, handler: Callable[..., Any],
@@ -176,7 +179,7 @@ class DevConsole(ft.Container):
                 on_click=lambda _, val=s: self.page.run_task(self._apply_smart_suggestion, val)
             )
             self.suggestion_view.controls.append(btn)
-        self.update()
+        try_update(self)
         
     async def _apply_smart_suggestion(self, suggestion_value: str) -> None:
         current_text = self.input_field.value
@@ -193,7 +196,7 @@ class DevConsole(ft.Container):
         self.input_field.value = new_text
         await self.input_field.focus()
         self._on_input_change(None) 
-        self.update()
+        try_update(self)
         
     async def _on_submit(self, e: ft.ControlEvent) -> None:
         input_field: ft.TextField = e.control
@@ -212,4 +215,4 @@ class DevConsole(ft.Container):
         self.suggestion_view.controls.clear()
         self.syntax_hint.value = ""
         await input_field.focus()
-        self.update()
+        try_update(self)

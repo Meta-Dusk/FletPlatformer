@@ -119,7 +119,7 @@ class PauseMenu(Menu):
         """Provide callbacks for the Pause Menu buttons."""
         title = ft.Text("PAUSED", size=80, font_family=FontStyles.MEDODICA)
         subtitle = ft.Text(
-            "Game is still running!", size=20, font_family=FontStyles.LIEF,
+            "Yes, it's actually paused.", size=20, font_family=FontStyles.LIEF,
             offset=ft.Offset(0.0, -1.0), color=ft.Colors.RED
         )
         
@@ -150,7 +150,7 @@ class SettingsMenu(Menu):
         
         title = ft.Text("SETTINGS", size=80, font_family=FontStyles.MEDODICA)
         self.subtitle = ft.Text(
-            "Game is still running!", size=20, font_family=FontStyles.LIEF,
+            "Yes, it's actually paused.", size=20, font_family=FontStyles.LIEF,
             offset=ft.Offset(0.0, -1.0), color=ft.Colors.RED, visible=False
         )
         

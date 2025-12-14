@@ -1,222 +1,340 @@
 import flet as ft
 import random, asyncio
+from typing import Literal
 
 from entities.enemy import Enemy, EnemyType, get_inversely_scaling_stats
-from entities.entity import Entity, EntityStats
+from entities.entity import Entity, EntityStats, AnimConfig
+from entities.features.entity_data import SFXRegistry
+from entities.player import PlayerType, Player
+from entities.projectile import PresetProjectileStats
 
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
 
-from utilities.components import try_update, await_for_dur
-
 sfx = SFXLibrary()
 
-# TODO: Attempt to implement a ranged attack
 class Goblin(Enemy):
-    """A preset `Enemy` class specifically for the Goblin enemy type."""
     def __init__(
-        self, page: ft.Page = None, audio_manager: AudioManager = None,
-        target: Enemy = None, name: str = None, entity_list: list[Entity] = None,
-        *, debug: bool = False
+        self,
+        page: ft.Page = None,
+        audio_manager: AudioManager = None,
+        target: Enemy = None,
+        name: str = None,
+        entity_list: list[Entity] = None,
+        projectile_manager = None,
+        *,
+        debug: bool = False,
+        simple_revive: bool = True
     ) -> None:
-        """Makes a custom `Enemy` class specifically for making a goblin enemy."""
         if name is None: name = self.generate_rnd_name()
         
-        # Random stats
         rnd_health_range = (10, 20)
-        min_mv_speed = 10
+        min_mv_speed = 2.8
         rnd_health, rnd_mv_speed = get_inversely_scaling_stats(rnd_health_range, min_mv_speed)
         
         if name in {"Gerald", "Rin"}:
-            SPECIAL_FACTOR: float = 2.0
-            rnd_mv_speed *= SPECIAL_FACTOR
-            rnd_health *= SPECIAL_FACTOR
+            rnd_health *= 2.0
+            rnd_mv_speed *= 1.5
             
         custom_stats = EntityStats(
-            movement_speed=rnd_mv_speed,
-            health=rnd_health, max_health=rnd_health
+            movement_speed=rnd_mv_speed, health=rnd_health, max_health=rnd_health,
+            stun_immune_bonus_armor=100
         )
         
         super().__init__(
-            type=EnemyType.GOBLIN, page=page, audio_manager=audio_manager, target=target,
-            name=name, entity_list=entity_list, debug=debug, stats=custom_stats
+            type=EnemyType.GOBLIN, page=page, audio_manager=audio_manager,
+            target=target, name=name, entity_list=entity_list, debug=debug,
+            stats=custom_stats, simple_revive=simple_revive,
+            projectile_manager=projectile_manager
         )
         
-        # Hitboxes
-        self._make_atk_hitbox(
-            p1_r_left=-15, p1_width=180, p1_height=100,
-            p2_r_left=70, p2_width=140, p2_height=80
-        )
+        self.animations = {
+            "idle": AnimConfig(frame_count=4, frame_duration=0.1),
+            "run": AnimConfig(frame_count=7, frame_duration=0.1),
+            "take-hit": AnimConfig(frame_count=4, frame_duration=0.1, loop=False),
+            "death": AnimConfig(frame_count=4, frame_duration=0.1, loop=False),
+            "attack-1": AnimConfig(frame_count=8, frame_duration=self.stats.attack_frame_delay, loop=False),
+            "attack-2": AnimConfig(frame_count=8, frame_duration=self.stats.attack_frame_delay, loop=False),
+            "attack-3": AnimConfig(frame_count=12, frame_duration=self.stats.attack_frame_delay, loop=False),
+        }
+        
+        self.sfx_registry = SFXRegistry()
+        MV_VOLUME = 0.2
+        self.sfx_registry.add("run", sfx.footsteps.footstep_grass_1, MV_VOLUME, frame=2)
+        self.sfx_registry.add("run", sfx.footsteps.footstep_grass_2, MV_VOLUME, frame=5)
+        self.sfx_registry.add("attack-1", sfx.enemy.boggart_hya, frame=5)
+        self.sfx_registry.add("attack-2", sfx.enemy.boggart_hya, frame=5)
+        self.sfx_registry.add("take-hit", sfx.enemy.goblin_hurt, frame=1)
+        self.sfx_registry.add("death", sfx.enemy.goblin_scream, frame=0)
+        self.sfx_registry.add("death", sfx.impacts.flesh_impact_2, frame=0)
+        self.sfx_registry.add("revive", sfx.magic.strike, frame=3)
+        
+        self._make_atk_hitbox(p1_r_left=-15, p1_width=180, p1_height=100, p2_r_left=70, p2_width=140, p2_height=80)
         self._make_self_hitbox(width=70, height=75, r_left=40)
         
-        # Other setup
-        self._rnd_dx: int = 0
-    
-    def generate_rnd_name(self) -> None:
-        """Returns a random name from the list."""
-        names = ["Gobby", "Gibby", "Geeb", "Goob", "Gubby", "Gebby", "Gub", "Gerald", "Gibby", "Gib",
-                "Gob", "Gobber", "Gob Lin", "Gob Gob", "Geb Geb", "Gub Gub", "Gib Gib", "Gibba", "Gibber",
-                "Gob Rin", "Gobrin", "Rin"]
+        self.ai_timer: float = 0.0
+        self.ai_decision_delay: float = 0.5
+        self.current_ai_goal: str | Literal["idle", "chase", "attack", "attack_ranged"] = "idle"
+        
+        self.attack_cooldown_timer: float = 0.0
+        self.attack_cooldown_duration: float = 1.5
+        
+        self.wander_timer: float = 0.0
+        self.wander_direction: Literal[-1, 0, 1] = 0
+        self.target_dx: float = 0.0
+        
+        self._spawning_in: bool = True
+
+    def generate_rnd_name(self) -> str:
+        names = [
+            "Gobby", "Gibby", "Geeb", "Goob", "Gubby", "Gebby", "Gub", "Gerald", "Gibby", "Gib",
+            "Gob", "Gobber", "Gob Lin", "Gob Gob", "Geb Geb", "Gub Gub", "Gib Gib", "Gibba", "Gibber",
+            "Gob Rin", "Gobrin", "Rin"
+        ]
         return random.choice(names)
     
-    # * === ONE-SHOT ANIMATIONS ===
-    async def _attack_anim(self) -> None:
-        """Handles the enemy's attack animations with combos."""
-        prefix = f"attack-{self.states.attack_phase}"
-        mod_atk_delay = self.stats.attack_frame_delay * 1.5
-        FRAMES = 7
+    def tick_animation(self, dt: float) -> bool:
+        if self._tick_simple_revive(dt): return True
+        if self.states.is_reviving: return False
         
-        for frame in range(FRAMES + 1):
-            await asyncio.sleep(mod_atk_delay if self.states.stun_immune else self.stats.attack_frame_delay)
-            if self.states.attack_phase == 1:
-                # 50% chance of parry
-                if frame == 2 and random.randint(1, 2) > 1:
-                    self._apply_tint(ft.Colors.YELLOW)
-                    self.states.stun_immune = True
-                elif frame == 5:
-                    self._reset_tint()
-                    self.states.stun_immune = False
-                elif frame == 6:
-                    self._modify_self_hitbox(width=80, height=80, r_left=10)
-            elif self.states.attack_phase == 2:
-                if frame == 0: self._modify_self_hitbox(r_left=30)
-                elif frame == 1: self._modify_self_hitbox(r_left=0)
-                elif frame == 2: self._modify_self_hitbox(r_left=-5, height=60)
-                elif frame in {2, 3, 4}:
-                    if self.target.states.is_attacking: await asyncio.sleep(0.05)
-                elif frame == 5: self._modify_self_hitbox(r_left=50, height=60)
-                
-            if frame == 5: self._play_sfx(sfx.enemy.boggart_hya)
-            elif frame == 6:
-                self.states.dealing_damage = True
-                self._toggle_atk_hb_border()
-            elif frame == 7:
+        new_state = "idle"
+        if self.states.dead: new_state = "death"
+        elif self.states.stunned: new_state = "take-hit"
+        elif self.states.is_attacking:
+            new_state = f"attack-{self.states.attack_phase}" if self.states.attack_phase > 0 else "attack-1"
+        elif self.states.is_moving: new_state = "run"
+            
+        did_frame_change = False
+        
+        if new_state != self.current_anim_state:
+            if "attack" in self.current_anim_state and "attack" not in new_state:
+                self.states.is_attacking = False
                 self.states.dealing_damage = False
-                self._toggle_atk_hb_border()
-            self.sprite.change_src(self._get_spr_path(prefix, frame))
+                self._modify_self_hitbox(reset=True)
+            self.current_anim_state = new_state
+            self.current_frame = 0
+            self.anim_timer = 0.0
+            did_frame_change = True
+        else:
+            config = self.animations.get(self.current_anim_state)
+            if config:
+                self.anim_timer += dt
+                if self.anim_timer >= config.frame_duration:
+                    self.anim_timer = 0
+                    self.current_frame += 1
+                    if self.current_frame >= config.frame_count:
+                        if config.loop: self.current_frame = 0
+                        else: self.current_frame = config.frame_count - 1
+                    did_frame_change = True
+                    
+        if did_frame_change:
+            self._handle_specific_frames()
+            events = self.sfx_registry.get(self.current_anim_state, self.current_frame)
+            for e in events: self._play_sfx(e.sfx, e.volume)
+            self._update_sprite_src()
+            config = self.animations.get(self.current_anim_state)
+            if config and not config.loop and self.current_frame >= config.frame_count - 1:
+                self._on_animation_finish()
+            return True
+        return False
+    
+    def _handle_specific_frames(self) -> None:
+        state = self.current_anim_state
+        frame = self.current_frame
+        match state:
+            case "attack-1":
+                match frame:
+                    case 2: # 50% chance of stun parry
+                        if random.random() < 0.5:
+                            self._apply_tint(ft.Colors.YELLOW)
+                            self.states.stun_immune = True
+                            self.anim_timer = 0
+                    case 5:
+                        if self.states.stun_immune:
+                            self._reset_tint()
+                            self.states.stun_immune = False
+                    case 6:
+                        self._modify_self_hitbox(width=80, height=80, r_left=10)
+                        self.states.dealing_damage = True
+                        self._toggle_atk_hb_border()
+                    case 7:
+                        self.states.dealing_damage = False
+                        self._toggle_atk_hb_border()
+            case "attack-2":
+                match frame:
+                    case 0: self._modify_self_hitbox(r_left=30)
+                    case 1: self._modify_self_hitbox(r_left=0)
+                    case 2: self._modify_self_hitbox(r_left=-5, height=60)
+                    case 5: self._modify_self_hitbox(r_left=50, height=60)
+                    case 6:
+                        self.states.dealing_damage = True
+                        self._toggle_atk_hb_border()
+                    case 7:
+                        self.states.dealing_damage = False
+                        self._toggle_atk_hb_border()
+            case "take-hit":
+                match frame:
+                    case 1:
+                        self._update_health_bar()
+                        self._knockback_self(self.target)
+    
+    def _on_stun_immune_hit(self):
+        super()._on_stun_immune_hit()
+        if (
+            isinstance(self.target, Player)
+            and self.target.type == PlayerType.HERO_KNIGHT
+        ):
+            self._play_sfx(sfx.impacts.shield_block_shortsword)
+    
+    def _on_animation_finish(self) -> None:
+        state = self.current_anim_state
+        
+        if state == "death":
+            self.velocity.dx = 0
+        
+        if state == "revive":
+            self.states.is_reviving = False
+            self.states.dead = False
+            self.states.revivable = False
+            self._reset_states()
+            self._full_heal()
+            self._update_health_bar()
+            self._reset_tint()
+            self.current_anim_state = "idle"
+            self.current_frame = 0
+            self._update_sprite_src()
+        
+        elif state == "take-hit":
+            self.states.taking_damage = False
+            self.states.is_moving = False
+            self.states.dealing_damage = False
+            self.states.stunned = False
+            self._reset_tint()
+            self.ai_timer = 0
+            self.velocity.dx = 0
+            self.current_ai_goal = "chase"
+            self._decide_next_move()
+        
+        elif "attack" in state:
+            self.states.is_attacking = False
+            self.states.dealing_damage = False
+            self._modify_self_hitbox(reset=True)
+        
+        if state == "attack-3":
+            self.attack_ranged()
+
+    def tick_logic(self, dt: float) -> None:
+        """Handles AI state machine."""
+        # ALWAYS UPDATE TIMERS
+        if self.attack_cooldown_timer > 0:
+            self.attack_cooldown_timer -= dt
+        
+        self.ai_timer -= dt
+        
+        # BLOCKING STATES
+        if (
+            self.states.dead
+            or self.states.is_attacking
+            or self.states.disable_movement
+            or self._spawning_in
+        ):
+            self.velocity.dx = 0
+            return
             
-        self._modify_self_hitbox(reset=True)
-        self.states.is_attacking = False
-        self._attack_task = None
-        self._toggle_atk_hb_border()
-    
-    async def _death_anim(self) -> None:
-        """Handles the enemy's death animation."""
-        FRAMES = 3
-        self._update_health_bar()
-        self._play_sfx(sfx.enemy.goblin_scream)
-        self._play_sfx(sfx.impacts.flesh_impact_2)
-        
-        for frame in range(FRAMES + 1):
-            await asyncio.sleep(self._LOGIC_DELAY)
-            self.sprite.change_src(self._get_spr_path("death", frame))
-    
-    async def _take_hit_anim(self, play_animation: bool = True) -> None:
-        """Handles the enemy's taking damage animation."""
-        FRAMES: int = 3
-        
-        for frame in range(FRAMES + 1):
-            await asyncio.sleep(self._LOGIC_DELAY)
-            if play_animation: self.sprite.change_src(self._get_spr_path("take-hit", frame))
-            if frame == 1:
-                self._update_health_bar()
-                self._play_sfx(sfx.enemy.goblin_hurt)
-                if self.target.states.attack_phase == 1: self._play_sfx(sfx.impacts.flesh_impact_1)
-                elif self.target.states.attack_phase == 2: self._play_sfx(sfx.impacts.axe_hit_flesh)
-            if frame == 2: self._knockback_self(self.target)
+        # AI DECISION
+        if self.ai_timer <= 0:
+            self.ai_timer = self.ai_decision_delay + (random.random() * 0.2)
+            self._decide_next_move()
             
-        self.states.taking_damage = False
-        self._take_hit_task = None
-        self._reset_tint()
-    
-    async def _revive_anim(self) -> None:
-        """Handles the goblin's revival animation."""
-        frame: int = 3
-        FRAME_DURATION: float = 0.25
-        self._play_sfx(sfx.magic.strike)
+        # EXECUTE GOAL
+        if self.current_ai_goal == "chase":
+            self.velocity.dx = self.target_dx
+            if self.velocity.dx != 0:
+                self._flip_sprite_x(self.velocity.dx)
+                self.states.is_moving = True
+                
+        elif self.current_ai_goal == "attack":
+            self.velocity.dx = 0
+            self.states.is_moving = False
+            
+            if self.attack_cooldown_timer <= 0 and not self.states.is_attacking:
+                self.states.attack_phase = random.choice([1, 2])
+                # self.states.attack_phase = 1
+                self.attack()
+                self.attack_cooldown_timer = self.attack_cooldown_duration
         
-        while frame >= 0:
-            await asyncio.sleep(FRAME_DURATION)
-            self.sprite.change_src(self._get_spr_path("death", frame))
-            frame -= 1
-    
-    # * === CUSTOM MOVEMENT LOOP ===
-    async def _movement_loop(self) -> None:
-        """Handles the goblin's simple AI."""
-        MV_DELAY: float = 0.05
-        ATK_DELAY: float = 1.0
+        elif self.current_ai_goal == "attack_ranged":
+            self.velocity.dx = 0
+            self.states.is_moving = False
+            
+            if self.attack_cooldown_timer <= 0 and not self.states.is_attacking:
+                # Force State 3 (The Bomb Throw)
+                self.states.attack_phase = 3
+                self.attack()
+                # Apply a slightly longer cooldown for bombs to prevent spam
+                self.attack_cooldown_timer = self.attack_cooldown_duration + 1.0
         
-        # Announce if goblin is spawned in the scene (sfx + fade in)
-        await asyncio.sleep(self._LOGIC_DELAY)
-        self._play_sfx(sfx.enemy.goblin_cackle)
-        self.stack.opacity = 1
-        try_update(self.stack)
-        await await_for_dur(self.stack.animate_opacity)
-        
-        while not self.states.dead:
-            if self.states.disable_movement:
+        elif self.current_ai_goal == "idle":
+            self.wander_timer -= dt
+            if self.wander_timer <= 0:
+                self.wander_timer = random.uniform(1.0, 3.0)
+                rand_val = random.random()
+                if rand_val < 0.6: self.wander_direction = 0
+                elif rand_val < 0.8: self.wander_direction = -1
+                else: self.wander_direction = 1
+            
+            self.velocity.dx = self.wander_direction * (self.stats.movement_speed * 0.5)
+            if self.velocity.dx != 0:
+                self._flip_sprite_x(self.velocity.dx)
+                self.states.is_moving = True
+            else:
                 self.states.is_moving = False
-                await asyncio.sleep(self._LOGIC_DELAY)
-                continue
+
+    def _decide_next_move(self):
+        """Simple State Machine logic."""
+        if not self.target or self.target.states.dead:
+            self.current_ai_goal = "idle"
+            return
+
+        dist = self._get_center_point(self.target) - self._get_center_point(self)
+        abs_dist = abs(dist)
+        
+        # Melee Range -> Slice and Dice
+        if abs_dist <= self.melee_range:
+            self.current_ai_goal = "attack"
+            self._flip_sprite_x(1 if dist > 0 else -1)
+        
+        # Ranged Range -> Throw Bomb
+        elif abs_dist <= self.type.value.ranged_range and self.attack_cooldown_timer <= 0:
+            self.current_ai_goal = "attack_ranged"
+            self._flip_sprite_x(1 if dist > 0 else -1)
+        
+        # Too Far - Chase
+        else:
+            self.current_ai_goal = "chase"
+            direction = 1 if dist > 0 else -1
+            self.target_dx = direction * self.stats.movement_speed
             
-            dx, dy = 0, 0
-            
-            # ? Chase Target (if out of range)
-            if not self._is_target_in_range():
-                if self.target and not self.target.states.dead:
-                    self._debug_msg(f"Chasing {self.target.name}", end=" -> ", debug_handler=self._debug_logs.movement)
-                    if self._get_center_point(self.target) > self._get_center_point(self):
-                        if self.target.states.dealing_damage:
-                            dx = -self.stats.movement_speed
-                        else: dx = self.stats.movement_speed
-                    elif self._get_center_point(self.target) < self._get_center_point(self):
-                        if self.target.states.dealing_damage:
-                            dx = self.stats.movement_speed
-                        else: dx = -self.stats.movement_speed
-                    self.is_idling = False
-                else: self.is_idling = True
+            if self.target.states.dealing_damage:
+                self.target_dx *= -1
                 
-            else: # ? Attack Target (if in range)
-                if self.target and not self.target.states.dead:
-                    self._debug_msg("Attacking target", debug_handler=self._debug_logs.attack)
-                    
-                    # Predict target if target is jumping
-                    if self.target.states.jumped:
-                        if self.target.states.is_attacking:
-                            self.states.attack_phase = 0
-                        else: self.states.attack_phase = 1
-                        if (
-                            self._get_center_point(self.target) > self._get_center_point(self) or
-                            self._get_center_point(self.target) < self._get_center_point(self)
-                        ):
-                            self._flip_char(dx)
-                    
-                    self.attack()
-                    await asyncio.sleep(ATK_DELAY)
-                    continue
-                else: self.is_idling = True
-            
-            # ? Simple idle mechanic
-            if self.is_idling:
-                if self._rnd_dx == 0:
-                    # 10% chance of attempting random movement when idle
-                    if random.randint(1, 10) > 9:
-                        self._rnd_dx = random.randint(-1, 1) * self.stats.movement_speed
-                else:
-                    # 30% chance of staying still when idle
-                    if random.randint(1, 10) > 7: self._rnd_dx = 0
-                    else: dx += self._rnd_dx
-            
-            self._check_movement(dx, dy)
-            if self.states.is_moving:
-                self.states.dealing_damage = False
-                try_update(self.stack)
-            await asyncio.sleep(MV_DELAY)
+    async def spawn_sequence(self) -> None:
+        self._spawning_in = True
+        await asyncio.sleep(0.5)
+        self._play_sfx(sfx.enemy.goblin_cackle)
+        await super().spawn_sequence()
+        self._spawning_in = False
     
-    # * === LOOPING ANIMATIONS ===
-    async def _animation_loop(self):
-        """Handles the goblin's different animation loops."""
-        await super()._animation_loop(
-            running_frames=7, running_frames_duration=0.075,
-            idle_frames=3
+    def attack_ranged(self) -> None:
+        """Testing for projectile: 'Small Bomb'."""
+        if self._get_facing_direction() < 0:
+            offset = -self.stack.width / 2
+        else:
+            offset = 0
+        super().attack_ranged(
+            start_x=self.stack.left + self.stack.width / 2 + offset,
+            start_y=self.stack.bottom + self.stack.height / 2,
+            stats=PresetProjectileStats.SmallBomb,
+            src="images/enemies/goblin/projectile_0.png",
+            sfx_upon_spawn=(sfx.explosions.sparkler_ignite, 0.5)
         )

@@ -4,14 +4,13 @@ from dataclasses import dataclass
 from enum import Enum
 
 from entities.entity import Entity
-from entities.features.entity_data import EntityStates, EntityStats, Factions
+from entities.features.entity_data import EntityStates, EntityStats, Factions, AnimConfig
 
 from images import Sprite
 
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
 
-from utilities.tasks import attempt_cancel
 from utilities.collisions import is_in_x_range
 from utilities.components import try_update, await_for_dur
 
@@ -23,26 +22,18 @@ class EnemyData:
     width: ft.Number = 150
     height: ft.Number = 150
     melee_range: int = 100
+    ranged_range: int = 200
 
-# TODO: Implement more enemy types
 class EnemyType(Enum):
     """Available enemy types."""
-    FLYING_EYE = EnemyData("Flying Eye") # ! Not yet implemented
-    GOBLIN = EnemyData("Gobby", melee_range=120)
-    MUSHROOM = EnemyData("Mushy")        # ! Not yet implemented
-    SKELETON = EnemyData("Skelly")       # ! Not yet implemented
+    FLYING_EYE = EnemyData("Flying Eye")
+    GOBLIN = EnemyData("Gobby", melee_range=180, ranged_range=450)
+    MUSHROOM = EnemyData("Mushy")
+    SKELETON = EnemyData("Skelly")
 
 def get_inversely_scaling_stats(
     rnd_hp_range: tuple[int, int], min_mv_speed: int
 ) -> tuple[int, int]:
-    """
-    Calculates an inversely scaling pair of values for
-    the HP and movement speed. The higher the HP,
-    the lower the movement speed.
-    
-    Returns:
-        tuple: (`rnd_health`, `rnd_mv_speed`)
-    """
     rnd_health = random.randint(*rnd_hp_range)
     _, max_hp = rnd_hp_range
     k = max_hp * min_mv_speed
@@ -52,12 +43,21 @@ def get_inversely_scaling_stats(
 class Enemy(Entity):
     """Handles an enemy's actions and states."""
     def __init__(
-        self, type: EnemyType, page: ft.Page,
-        audio_manager: AudioManager, target: Entity = None,
-        name: str = None, entity_list: list[Entity] = None,
-        *, debug: bool = False, stats: EntityStats = None
+        self,
+        type: EnemyType,
+        page: ft.Page,
+        audio_manager: AudioManager,
+        target: Entity = None,
+        name: str = None,
+        entity_list: list[Entity] = None,
+        projectile_manager = None,
+        *,
+        debug: bool = False,
+        stats: EntityStats = None,
+        simple_revive: bool = True
     ) -> None:
         """The main setup for all enemy-type entities."""
+        
         # ? Entity inherited class setup
         self._enemy_name = type.name.lower()
         _sprite = Sprite(
@@ -70,184 +70,164 @@ class Enemy(Entity):
         super().__init__(
             sprite=_sprite, name=self.name, page=page,
             audio_manager=audio_manager, faction=Factions.NONHUMAN,
-            entity_list=entity_list, debug=debug, stats=self._init_stats
+            entity_list=entity_list, projectile_manager=projectile_manager,
+            debug=debug, stats=self._init_stats, simple_revive=simple_revive
         )
         
         # ? Internal class setup
         self.type = type
         self.target = target
         self._handler_str = self.name
-        self.is_idling: bool = False
         self.melee_range: int = type.value.melee_range
-    
-    async def _animation_loop(
-        self, *, starting_frame: int = 0,
-        running_frames: int = None,
-        running_frames_duration: float = None,
-        idle_frames: int = None,
-        footsteps_volume: float = 0.2
-    ):
-        """Handles an enemy's different animation loops."""
-        frame: int = starting_frame
-        if (
-            running_frames is None or
-            running_frames_duration is None or
-            idle_frames is None
-        ):
-            raise ValueError("Missing arguments for '_animation_loop'!")
         
-        while not self.states.dead:
-            # Give way to other animations
-            if self.states.is_attacking or self.states.taking_damage or self.states.dead:
-                await asyncio.sleep(self._LOGIC_DELAY)
-                continue
+        # Visuals
+        self.animations: dict[str, AnimConfig] = {
+            "idle": AnimConfig(frame_count=4, frame_duration=0.1),
+            "run": AnimConfig(frame_count=6, frame_duration=0.1),
+        }
+    
+    # * === TICK LOGIC ===
+    def tick_animation(self, dt: float) -> bool:
+        """Standard Enemy Animation Logic."""
+        new_state = "idle"
+        
+        if self.states.dead:
+            new_state = "death"
+        elif self.states.taking_damage:
+            new_state = "take-hit"
+        elif self.states.is_attacking:
+            new_state = "attack"
+        elif self.states.is_moving:
+            new_state = "run"
             
-            # Running animation
-            if self.states.is_moving:
-                if frame > running_frames: frame = 0
-                await asyncio.sleep(running_frames_duration)
-                self.sprite.change_src(self._get_spr_path("run", frame))
-                if frame == 2: self._play_sfx(sfx.footsteps.footstep_grass_1, footsteps_volume)
-                if frame == 5: self._play_sfx(sfx.footsteps.footstep_grass_1, footsteps_volume)
-             
-             # Idle animation
-            else:
-                if frame > idle_frames: frame = 0
-                await asyncio.sleep(self._LOGIC_DELAY)
-                self.sprite.change_src(self._get_spr_path("idle", frame))
+        # Handle State Change
+        if new_state != self.current_anim_state:
+            self.current_anim_state = new_state
+            self.current_frame = 0
+            self.anim_timer = 0.0
+            self._update_sprite_src()
+            return True
+
+        # Advance Timer
+        config = self.animations.get(self.current_anim_state)
+        if not config: return False
+        
+        self.anim_timer += dt
+        if self.anim_timer >= config.frame_duration:
+            self.anim_timer = 0
+            self.current_frame += 1
             
-            frame += 1
+            if self.current_frame >= config.frame_count:
+                if config.loop:
+                    self.current_frame = 0
+                else:
+                    self.current_frame = config.frame_count - 1
+            
+            self._update_sprite_src()
+            return True
+        return False
     
     # * === CLEANUP ===
     def remove_selves(self) -> None:
         """Removes `self` from `stage` and `_entity_list`."""
         entity_stack = self._get_parent()
-        
-        msg_1 = "Attempting to remove 'self' from 'entity_stack':"
-        self._debug_msg(f"{msg_1} {len(entity_stack.controls)} -> ", end="", debug_handler=self._debug_logs.cleanup)
         if self.stack in entity_stack.controls:
             entity_stack.controls.remove(self.stack)
             try_update(entity_stack)
-        self._debug_msg(len(entity_stack.controls), include_handler=False, debug_handler=self._debug_logs.cleanup)
-        
-        msg_2 = "Attempting to remove 'self' from '_entity_list':"
-        self._debug_msg(f"{msg_2} {len(self._entity_list)} -> ", end="", debug_handler=self._debug_logs.cleanup)
-        if self._entity_list is not None and self in self._entity_list: self._entity_list.remove(self)
-        self._debug_msg(len(self._entity_list), include_handler=False, debug_handler=self._debug_logs.cleanup)
+        if self._entity_list is not None and self in self._entity_list: 
+            self._entity_list.remove(self)
     
     # * === CALLABLE PLAYER ACTIONS/EVENTS ===
-    def __call__(self, *, start_loops: bool = True, center_spawn: bool = True) -> ft.Stack:
+    def __call__(self, *, center_spawn: bool = True) -> ft.Stack:
         """
-        Returns the `Stack` control, and starts the movement and
-        animation loops. Set `center_spawn` to make the enemy spawn
-        random across the x-axis.
+        Returns the `Stack` control. Set `center_spawn` to make the enemy spawn
+        randomly across the x-axis.
         """
         if not center_spawn:
             width = self.sprite.width
             new_left = random.randint(width, int(self.page.width)) - width
             self.stack.left = new_left
-        if start_loops: self._start_loops()
+            
+        # Trigger the spawn effect (visuals only)
+        self.page.run_task(self.spawn_sequence)
+        
         return super().__call__()
     
-    async def death(self) -> None:
-        """Cancels all running tasks, and plays the death animation."""
-        if not super().death(): return
-        CLEANUP_DELAY: float = 1.0
-        
-        # ? Death states and stats
-        self._reset_states(EntityStates(dead=True))
-        self._debug_msg(f"{self.name} has died!", debug_handler=self._debug_logs.death)
-        self._update_health_bar()
-        self._apply_tint(ft.Colors.RED)
-        
-        # ? Animation handling
-        attempt_cancel(self._animation_loop_task)
-        self._cancel_temp_tasks()
-        await self._death_anim()
-        self._toggle_atk_hb_border()
-        await asyncio.sleep(CLEANUP_DELAY)
-        
-        # ? Despawn and cleanup
-        self.stack.opacity = 0
-        try_update(self.stack)
-        await await_for_dur(self.stack.animate_opacity)
-        self._cancel_loop_tasks()
-        self._cleanup_ready = True
-        self.states.revivable = True
-        
-    def attack(self) -> None:
-        """
-        Enemy attack. Melee combo cycles: 1 -> 2 -> 1.
-        Ranged attack based on distance to player.
-        """
-        if not super().attack(): return
-        self.states.attack_phase += 1
-        if self.states.attack_phase > 2: self.states.attack_phase = 1
-        self._debug_msg(f"Attacking! Phase: {self.states.attack_phase}", debug_handler=self._debug_logs.attack)
-        self.states.is_attacking = True
-        self.states.dealing_damage = False
-        self._attack_task = self.page.run_task(self._attack_anim)
-    
-    def take_damage(self, damage_amount: float, is_crit: bool = False) -> bool:
-        """Decrease enemy's health with logic. Returns `True` if entity has died."""
-        if not super().take_damage(damage_amount, is_crit): return False
-        self.states.is_moving = False
-        
-        if self.states.is_attacking:
-            if self.states.stun_immune and self.stats.health > 0:
-                self._play_sfx(sfx.impacts.shield_block_shortsword, 1.0)
-            elif not self.states.stun_immune:
-                attempt_cancel(self._attack_task)
-                self.states.is_attacking = False
-                self.states.dealing_damage = False
-                self._toggle_atk_hb_border()
-                self._modify_self_hitbox(reset=True)
-                
-        self._apply_tint(ft.Colors.RED)
-        if self.stats.health <= 0:
-            self.page.run_task(self.death)
-            return True
-        else:
-            if self._take_hit_task: attempt_cancel(self._take_hit_task)
-            if self.states.stun_immune:
-                self._take_hit_task = self.page.run_task(self._take_hit_anim, False)
-            else: self._take_hit_task = self.page.run_task(self._take_hit_anim)
-            return False
-    
-    async def revive(self) -> None:
-        """Revives the enemy."""
-        if not super().revive(): return
-        self.states.revivable = False
-        self._debug_msg(f"Reviving: {self.name}", debug_handler=self._debug_logs.revive)
+    async def spawn_sequence(self) -> None:
+        """Handles the fade-in visual effect on spawn."""
+        # Wait a random bit to stagger spawns visually
+        await asyncio.sleep(random.uniform(0.1, 0.5))
         self.stack.opacity = 1
         try_update(self.stack)
         await await_for_dur(self.stack.animate_opacity)
         
-        await self._revive_anim()
-        self._reset_states()
-        self._full_heal()
-        self._reset_tint()
+    async def death(self) -> None:
+        """Kills the enemy and fades out."""
+        if not super().death(): return
+        CLEANUP_DELAY: float = 2.0
+        
+        self._reset_states(EntityStates(dead=True))
         self._update_health_bar()
-        self._start_loops()
+        self._apply_tint(ft.Colors.RED)
+        self._toggle_atk_hb_border()
+        
+        await asyncio.sleep(CLEANUP_DELAY)
+        self.stack.opacity = 0
+        try_update(self.stack)
+        await await_for_dur(self.stack.animate_opacity)
+        self._cleanup_ready = True
+        self.states.revivable = True
+        
+    def attack(self) -> None:
+        if not super().attack(): return
+        self.states.is_attacking = True
+        self.states.dealing_damage = False
     
-    # * === OTHER HELPERS ===
-    def _start_loops(self) -> None:
-        """Starts the looping tasks."""
-        self._start_animation_loop()
-        self._start_movement_loop()
+    def take_damage(self, damage_amount: float, is_crit: bool = False) -> bool:
+        """Decrease enemy's health with logic. Returns `True` if entity has died."""
+        if not super().take_damage(damage_amount, is_crit): return False
+        if not self.states.stun_immune:
+            self.states.is_moving = False
+            self.velocity.dx = 0
+        
+        # Interruption Logic
+        if self.states.is_attacking and not self.states.stun_immune:
+            self.states.is_attacking = False
+            self.states.dealing_damage = False
+            self._toggle_atk_hb_border()
+            self._modify_self_hitbox(reset=True)
+            
+        self._apply_tint(ft.Colors.RED)
+        if self.stats.health <= 0:
+            self.page.run_task(self.death)
+            return True
+        return False
+    
+    async def revive(self) -> None:
+        """Revives the enemy."""
+        if not super().revive(): return
+        self.stack.opacity = 1
+        try_update(self.stack)
+        await await_for_dur(self.stack.animate_opacity)
+    
+    def heal(self, heal_amount: float, overheal: bool = False) -> None:
+        """Heals the enemy."""
+        if not super().heal(heal_amount, overheal): return
+        
+        self.states.is_healing = True
+        self._update_health_bar()
+        self._apply_tint(ft.Colors.GREEN)
+        
+        self.healing_effect_timer = self.stats.healing_delay
     
     def _is_target_in_range(self, threshold: float = None) -> bool:
         """Checks if the specifically targeted `Entity` is in range."""
         if self.target is None: return False
-        
-        # We assume the target (i.e., Player) has a sprite and stack
-        p_w = self.target.sprite.width
-        
         return is_in_x_range(
             entity1_stack=self.stack,
             entity1_w=self.sprite.width,
             entity2_stack=self.target.stack,
-            entity2_w=p_w,
+            entity2_w=self.target.sprite.width,
             threshold=self.melee_range if threshold is None else threshold
         )
         
