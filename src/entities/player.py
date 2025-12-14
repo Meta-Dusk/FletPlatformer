@@ -1,4 +1,4 @@
-import asyncio, inspect, time
+import time
 import flet as ft
 from pynput import keyboard
 from dataclasses import dataclass
@@ -6,7 +6,7 @@ from enum import Enum
 
 from entities.entity import Entity
 from entities.features.entity_data import EntityStates, EntityStats, Factions, AnimConfig, AnimationState
-from entities.projectile import ProjectileStats
+from entities.projectile import PresetProjectileStats
 
 from images import Sprite
 
@@ -16,7 +16,6 @@ from audio.sfx_data import SFXLibrary
 from utilities.collisions import check_collision
 from utilities.components import try_update
 from utilities.keyboard_manager import HeldKeys
-from utilities.physics import Velocity
 
 from managers.projectiles import ProjectileManager
 
@@ -457,27 +456,12 @@ class Player(Entity):
     def attack_ranged(self) -> None:
         direction = self._get_facing_direction()
         
-        bomb_stats = ProjectileStats(
-            velocity=Velocity(dx=5.0, dy=4.0),
-            gravity=9.8,
-            damage=10,
-            collides_with_map=True,
-            bounciness=0.25,
-            friction=25.0,
-            lifespan=5.0,
-            width=100,
-            height=100,
-            offset=ft.Offset(0, 0.35),
-            fly_anim=AnimConfig(frame_count=3, frame_duration=0.1, loop=True),
-            explode_anim=AnimConfig(frame_count=19, frame_duration=0.08, loop=False),
-        )
-        
         self.projectile_manager.spawn_projectile(
             start_x=self.stack.left + self.stack.width / 2,
             start_y=(self.stack.bottom + self.stack.height / 2) - 50,
             direction=direction,
             owner=self,
-            stats=bomb_stats,
+            stats=PresetProjectileStats.SmallBomb,
             src="images/enemies/goblin/projectile_0.png"
         )
     

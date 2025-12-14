@@ -25,6 +25,7 @@ async def test(page: ft.Page):
     game_loop = GameLoop(page, entity_list)
     game_loop.start()
     projectile_manager = game_loop.projectile_manager
+    projectile_manager.debug = True
     player.projectile_manager = projectile_manager
     
     take_dmg_btn = ft.Button("Take Damage", on_click=lambda _: player.take_damage(5, is_crit=True))

@@ -68,6 +68,8 @@ class Goblin(Enemy):
         self.wander_timer: float = 0.0
         self.wander_direction: int = 0
         self.target_dx: float = 0.0
+        
+        self._spawning_in: bool = True
 
     def generate_rnd_name(self) -> str:
         names = ["Gobby", "Gibby", "Geeb", "Goob", "Gerald", "Rin"]
@@ -191,34 +193,29 @@ class Goblin(Enemy):
             self._modify_self_hitbox(reset=True)
 
     def tick_logic(self, dt: float) -> None:
-        """
-        Replaces _movement_loop. Handles AI state machine.
-        """
-        # 0. ALWAYS UPDATE TIMERS
+        """Handles AI state machine."""
+        # ALWAYS UPDATE TIMERS
         if self.attack_cooldown_timer > 0:
             self.attack_cooldown_timer -= dt
         
         self.ai_timer -= dt
         
-        # 1. BLOCKING STATES
-        if self.states.dead:
-            self.velocity.dx = 0
-            return
-
-        if self.states.is_attacking:
-            self.velocity.dx = 0
-            return
-            
-        if self.states.disable_movement:
+        # BLOCKING STATES
+        if (
+            self.states.dead
+            or self.states.is_attacking
+            or self.states.disable_movement
+            or self._spawning_in
+        ):
             self.velocity.dx = 0
             return
             
-        # 2. AI DECISION
+        # AI DECISION
         if self.ai_timer <= 0:
             self.ai_timer = self.ai_decision_delay + (random.random() * 0.2)
             self._decide_next_move()
             
-        # 3. EXECUTE GOAL
+        # EXECUTE GOAL
         if self.current_ai_goal == "chase":
             self.velocity.dx = self.target_dx
             if self.velocity.dx != 0:
@@ -271,6 +268,8 @@ class Goblin(Enemy):
                 self.target_dx *= -1
                 
     async def spawn_sequence(self) -> None:
+        self._spawning_in = True
         await asyncio.sleep(0.5)
         self._play_sfx(sfx.enemy.goblin_cackle)
         await super().spawn_sequence()
+        self._spawning_in = False

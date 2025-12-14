@@ -1,4 +1,5 @@
 import flet as ft
+import math, asyncio
 
 from entities.entity import Entity
 from entities.projectile import Projectile, ProjectileStats
@@ -8,12 +9,13 @@ from utilities.components import try_update
 class ProjectileManager:
     def __init__(
         self, page: ft.Page, entity_list: list[Entity] = None,
-        ground_level: int = 0
+        ground_level: int = 0, *, debug: bool = False
     ) -> None:
         self.page = page
         self.entity_list = entity_list
         self.active_projectiles: list[Projectile] = []
         self.projectile_layer = ft.Stack(expand=True, alignment=ft.Alignment.CENTER)
+        self.debug = debug
         
         # Physics Configuration
         self.ppm = 50.0       # Pixels Per Meter (Must match PhysicsManager)
@@ -31,7 +33,6 @@ class ProjectileManager:
         self.projectile_layer.controls.append(proj.stack_obj)
         
     def update(self, dt: float):
-        """Global loop for all projectiles."""
         to_remove = []
         has_updates = False
         
@@ -40,111 +41,97 @@ class ProjectileManager:
             
             for proj in self.active_projectiles:
                 proj.tick_animation(dt)
-                
-                # If exploding, skip physics and collisions
-                if proj.is_exploding and not proj.move_during_explode:
-                    if proj.is_dead: # Animation finished
-                        to_remove.append(proj)
-                    continue
-                
                 stats = proj.stats
                 
-                # --- 1. APPLY GRAVITY ---
+                # --- A. EXPLOSION LOGIC (The "Grenade" Phase) ---
+                if proj.is_exploding:
+                    # 1. Check for Damage Frame
+                    if (
+                        not proj.has_dealt_damage and
+                        stats.damage_frame > -1 and
+                        proj.current_frame >= stats.damage_frame
+                    ):
+                        self._apply_area_damage(proj)
+                        proj.has_dealt_damage = True
+                    
+                    if proj.has_dealt_damage:
+                        # 2. Check for cleanup
+                        if proj.is_dead:
+                            to_remove.append(proj)
+                        continue # Skip physics for exploding objects
+                
+                # --- B. PHYSICS ---
                 if stats.gravity != 0:
                     proj.dy -= stats.gravity * dt
                 
-                # --- 2. APPLY MOVEMENT (Scaled by PPM) ---
                 move_x = proj.dx * self.ppm * dt
                 move_y = proj.dy * self.ppm * dt
                 
                 proj.stack_obj.left += move_x
                 proj.stack_obj.bottom += move_y
                 
-                # --- 3. MAP COLLISIONS ---
+                # --- C. MAP COLLISIONS ---
                 if stats.collides_with_map:
-                    # 1. Check Floor Collision FIRST
                     if proj.stack_obj.bottom < self.ground_level:
                         proj.stack_obj.bottom = self.ground_level
                         
-                        # 2. NOW decide: Explode or Bounce?
-                        if stats.explode_anim:
-                            proj.explode() # Triggers animation, freezes physics
+                        # Decide: Bounce or Stick?
+                        if stats.bounciness > 0 and abs(proj.dy) > 1.0:
+                            proj.dy = -proj.dy * stats.bounciness
+                            # Friction on bounce
+                            proj.dx *= 0.8 
                         else:
-                            # Standard Bounce / Friction Logic
-                            if stats.bounciness > 0 and abs(proj.dy) > 1.0:
-                                proj.dy = -proj.dy * stats.bounciness
-                            else:
-                                proj.dy = 0
-                                if stats.friction > 0 and proj.dx != 0:
-                                    friction_loss = stats.friction * dt
-                                    if abs(proj.dx) <= friction_loss:
-                                        proj.dx = 0
-                                    else:
-                                        proj.dx -= friction_loss if proj.dx > 0 else -friction_loss
-                                    
-                # --- 4. BOUNDS & LIFESPAN CHECK ---
-                # Remove if off-screen (unless it's a map object that should stay)
+                            proj.dy = 0
+                            # Ground Friction
+                            if stats.friction > 0 and proj.dx != 0:
+                                friction_loss = stats.friction * dt
+                                if abs(proj.dx) <= friction_loss:
+                                    proj.dx = 0
+                                else:
+                                    proj.dx -= math.copysign(friction_loss, proj.dx)
+
+                # --- D. BOUNDS & LIFESPAN ---
                 is_off_screen = (
                     proj.stack_obj.left < -200 or 
                     proj.stack_obj.left > self.page.width + 200 or 
                     proj.stack_obj.bottom < -200
                 )
                 
-                # If it's a "physical" object (collides_with_map), we let it stay on the floor.
-                # If it's a "magic" object (no collision), off-screen means delete.
                 if is_off_screen and not stats.collides_with_map:
                     to_remove.append(proj)
                     continue
 
-                # Age Check
                 proj.age += dt
                 if proj.age >= stats.lifespan:
-                    to_remove.append(proj)
+                    # [NEW] Timeout Logic: Explode or Delete?
+                    if stats.explode_anim:
+                        proj.explode()
+                    else:
+                        to_remove.append(proj)
                     continue
                 
                 if proj.is_dead:
                     to_remove.append(proj)
                     continue
                 
-                # TODO: Rework entity collisions to also use hitboxes
-                # --- 5. ENTITY COLLISIONS (Implemented) ---
-                if not self.entity_list: continue
-
-                p_rect = proj.get_rect()
-                hit_something = False
-                
-                for entity in self.entity_list:
-                    # Skip self, dead entities, and same faction (Friendly Fire protection)
-                    if (entity == proj.owner or 
-                        entity.states.dead or 
-                        (hasattr(entity, "faction") and entity.faction == proj.owner.faction)):
-                        continue
+                # --- E. ENTITY COLLISIONS (Impact) ---
+                # This only handles direct hits (arrows/bullets), not explosions.
+                hit_entity = self._check_entity_impact(proj)
+                if hit_entity:
+                    # If it's a grenade, hitting an enemy stops it and starts the timer/boom
+                    # If it's an arrow (impact_damage=True), it hurts immediately
+                    if stats.impact_damage:
+                        hit_entity.take_damage(stats.damage)
+                        # Knockback
+                        k_dir = 1 if proj.dx > 0 else -1
+                        hit_entity.velocity.dx += k_dir * proj.stats.impact_knockback
+                        to_remove.append(proj)
                     
-                    e_rect = entity._get_self_global_rect()
-                    
-                    if check_collision(*p_rect, *e_rect):
-                        # HIT!
-                        # TODO: Rework damage to only apply when exploding
-                        entity.take_damage(stats.damage)
-                        
-                        # Apply Knockback
-                        knockback_dir = 1 if proj.dx > 0 else -1
-                        entity.velocity.dx += knockback_dir * 2.0
-                        
-                        # --- MODIFIED LOGIC ---
-                        if stats.explode_anim:
-                            proj.explode() # Freeze physics, start boom
-                            # Do NOT append to to_remove yet; 
-                            # the 'is_exploding' check at the top of the loop will handle removal later.
-                        else:
-                            to_remove.append(proj) # No anim, delete instantly
-                            
-                        hit_something = True
-                        # break
+                    elif stats.explode_anim:
+                         # Grenade logic: Hit body -> Stop -> Boom
+                         proj.explode()
                 
-                if hit_something: continue
-
-        # --- CLEANUP & RENDER ---
+        # --- CLEANUP ---
         if to_remove:
             has_updates = True
             for dead_proj in to_remove:
@@ -155,3 +142,110 @@ class ProjectileManager:
             
         if has_updates:
             try_update(self.projectile_layer)
+
+    def _get_hitbox(self, entity: Entity) -> tuple[float, float, float, float]:
+        """
+        Helper: Gets precise hitbox if available, else sprite bounds.
+        Returns global (left, bottom, width, height).
+        """
+        # We use the method explicitly defined in your Entity class
+        # which already handles the logic you requested:
+        return entity._get_self_global_rect()
+
+    def _check_entity_impact(self, proj: Projectile) -> Entity | None:
+        """Checks for direct physical collision between projectile body and entities."""
+        if not self.entity_list: return None
+        
+        p_rect = proj.get_rect()
+        
+        for entity in self.entity_list:
+            if self._should_skip_target(proj, entity): continue
+            
+            e_rect = self._get_hitbox(entity)
+            if check_collision(*p_rect, *e_rect):
+                return entity
+        return None
+
+    def _apply_area_damage(self, proj: Projectile):
+        """
+        [NEW] The 'Explosion' detection system.
+        Uses a separate check when the explosion animation hits the specific frame.
+        """
+        if not self.entity_list: return
+        
+        # Determine Blast Radius
+        # Center of the projectile
+        center_x = proj.stack_obj.left + (proj.stats.width / 2)
+        center_y = proj.stack_obj.bottom + (proj.stats.height / 2)
+        
+        # Use custom AoE radius or fallback to projectile width * scale
+        radius = proj.stats.aoe_radius if proj.stats.aoe_radius > 0 else proj.stats.width * 1.5
+        
+        # Visualize (Debug)
+        if self.debug:
+            self._visualize_explosion(center_x, center_y, radius, (proj.stats.height / 2) - 20)
+        
+        # Create Explosion Rect (Centered)
+        exp_rect = (
+            center_x - radius, # Left
+            center_y - radius, # Bottom
+            radius * 2,        # Width
+            radius * 2         # Height
+        )
+        
+        for entity in self.entity_list:
+            if self._should_skip_target(proj, entity): continue
+            
+            e_rect = self._get_hitbox(entity)
+            
+            if check_collision(*exp_rect, *e_rect):
+                entity.take_damage(proj.stats.damage)
+                
+                # Explosion Knockback (Away from center)
+                e_center = e_rect[0] + (e_rect[2] / 2)
+                dir = 1 if e_center > center_x else -1
+                entity.velocity.dx += dir * proj.stats.explosion_knockback
+                entity.velocity.dy += proj.stats.explosion_knockback
+                
+    def _should_skip_target(self, proj: Projectile, entity: Entity) -> bool:
+        """Common filter for Friendly Fire and Dead entities."""
+        if (
+            entity == proj.owner
+            or entity.states.dead
+            or entity.faction == proj.owner.faction
+            or not proj.stats.friendly_fire
+        ): return True
+        return False
+    
+    def _visualize_explosion(
+        self, center_x: float, center_y: float, radius: float,
+        y_offset: ft.Number = 0,
+    ) -> None:
+        """Spawns a temporary visual indicator for the explosion radius."""
+        diameter = radius * 2
+        
+        # Create a circle representing the blast zone
+        indicator = ft.Container(
+            left=center_x - radius,
+            bottom=center_y - radius - y_offset,
+            width=diameter,
+            height=diameter,
+            border=ft.Border.all(1, ft.Colors.RED), # Clear Red Border
+            bgcolor=ft.Colors.with_opacity(0.2, ft.Colors.RED), # Slight tint
+            border_radius=radius,
+            shape=ft.BoxShape.CIRCLE,
+        )
+        
+        self.projectile_layer.controls.append(indicator)
+        # Force an update so it appears immediately
+        try_update(self.projectile_layer) 
+        
+        # Schedule cleanup task (fades out or just removes)
+        async def _cleanup():
+            await asyncio.sleep(0.3) # Show for 0.3 seconds
+            if indicator in self.projectile_layer.controls:
+                self.projectile_layer.controls.remove(indicator)
+                try_update(self.projectile_layer)
+        
+        # Use the page reference to run the async task
+        self.page.run_task(_cleanup)

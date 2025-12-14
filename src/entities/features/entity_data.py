@@ -106,6 +106,7 @@ class AnimConfig:
     frame_count: int
     frame_duration: float
     loop: bool = True
+    start_frame: int = 0
 
 AnimationState = Literal[
     "moving", "falling", "idle", "run", "jump", "fall", "attack", "take-hit", "death",

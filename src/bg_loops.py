@@ -5,6 +5,7 @@ from typing import Callable
 from entities.player import Player
 from entities.entity import Entity
 from entities.enemy import Enemy
+from entities.projectile import Projectile
 
 from utilities.components import try_update
 
@@ -33,7 +34,8 @@ async def stage_panning_loop(
     background_stack: ft.Stack, foreground_stack: ft.Stack,
     page: ft.Page, player: Player, entity_list: list[Entity],
     stage: ft.Stack,
-    post_callback: Callable[[None], None] = None
+    post_callback: Callable[[None], None] = None,
+    projectile_stack: ft.Stack = None
 ):
     """
     Handles the stage panning with temporary animation injection for entities.
@@ -131,7 +133,7 @@ async def stage_panning_loop(
         
     while True:
         await asyncio.sleep(1)
-        if not player.stack: continue
+        if not player.stack or len(projectile_stack.controls) > 0: continue
         
         # Calculate positions
         player_x = player.stack.left

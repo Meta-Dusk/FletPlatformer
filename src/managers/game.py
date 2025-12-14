@@ -446,7 +446,8 @@ entity_stack: {len(self.entity_stack.controls)}
                 player=self.player,
                 entity_list=self.entity_list,
                 stage=self.stage,
-                post_callback=summon_gobby
+                post_callback=summon_gobby,
+                projectile_stack=self.game_loop.projectile_manager.projectile_layer
             )
         self.running_tasks.append(self.page.run_task(run_pan))
     
