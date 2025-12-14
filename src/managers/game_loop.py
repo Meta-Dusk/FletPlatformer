@@ -12,14 +12,22 @@ class GameLoop:
     ) -> None:
         self.page = page
         self.entity_list = entity_list
-        self.is_paused = is_paused
+        self._is_paused = is_paused
         self.is_running = False
         self._target_fps = 60
         self._tick_rate = 1 / self._target_fps
         
         self.physics_manager = PhysicsManager(page, entity_list)
         self.projectile_manager = ProjectileManager(page, entity_list, ground_level)
-        
+    
+    @property
+    def is_paused(self) -> bool:
+        return self._is_paused
+    
+    @is_paused.setter
+    def is_paused(self, is_paused: bool) -> None:
+        self._is_paused = is_paused
+    
     def start(self):
         if not self.is_running:
             self.is_running = True

@@ -87,6 +87,7 @@ class EntityStats:
     # Resistance
     knockback_resistance: Number = 1
     armor: Number = 0
+    stun_immune_bonus_armor: Number = 0
     
 @dataclass
 class DebugLogs:

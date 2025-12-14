@@ -140,6 +140,7 @@ class HeroKnight(Player):
             
             case "death":
                 match frame:
+                    case 0: self.velocity.dx = 0
                     case 3: self._update_health_bar()
                 
     def _on_animation_finish(self) -> None:

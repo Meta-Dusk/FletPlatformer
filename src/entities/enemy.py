@@ -26,7 +26,7 @@ class EnemyData:
 class EnemyType(Enum):
     """Available enemy types."""
     FLYING_EYE = EnemyData("Flying Eye")
-    GOBLIN = EnemyData("Gobby", melee_range=120)
+    GOBLIN = EnemyData("Gobby", melee_range=180)
     MUSHROOM = EnemyData("Mushy")
     SKELETON = EnemyData("Skelly")
 
@@ -194,7 +194,7 @@ class Enemy(Entity):
             self.states.dealing_damage = False
             self._toggle_atk_hb_border()
             self._modify_self_hitbox(reset=True)
-                
+            
         self._apply_tint(ft.Colors.RED)
         if self.stats.health <= 0:
             self.page.run_task(self.death)

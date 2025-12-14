@@ -600,7 +600,11 @@ class Entity(DamageHitbox):
         """
         if self.states.dead or self.states.taking_damage or self.states.invincible: return False
         
-        damage_reduction: float = round(ARMOR_SCALING_CONSTANT / (ARMOR_SCALING_CONSTANT + self.stats.armor), 1)
+        if self.states.stun_immune:
+            armor_amount = self.stats.armor + self.stats.stun_immune_bonus_armor
+        else:
+            armor_amount = self.stats.armor
+        damage_reduction: float = round(ARMOR_SCALING_CONSTANT / (ARMOR_SCALING_CONSTANT + armor_amount), 1)
         _damage_amount = damage_amount * damage_reduction
         
         self.states.taking_damage = True
@@ -623,8 +627,11 @@ class Entity(DamageHitbox):
         return True
     
     def _on_stun_immune_hit(self):
-        """Override this to play specific sounds or effects when resisting stun."""
-        pass
+        """
+        Call this first before doing additional before,
+        such as playing specific sounds or effects when resisting stun.
+        """
+        self._update_health_bar()
     
     def death(self) -> bool:
         """

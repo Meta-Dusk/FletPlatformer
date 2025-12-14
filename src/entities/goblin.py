@@ -5,6 +5,7 @@ from typing import Literal
 from entities.enemy import Enemy, EnemyType, get_inversely_scaling_stats
 from entities.entity import Entity, EntityStats, AnimConfig
 from entities.features.entity_data import SFXRegistry
+from entities.player import PlayerType, Player
 
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
@@ -29,11 +30,20 @@ class Goblin(Enemy):
         min_mv_speed = 2.8
         rnd_health, rnd_mv_speed = get_inversely_scaling_stats(rnd_health_range, min_mv_speed)
         
-        if name in {"Gerald", "Rin"}: rnd_health *= 2.0
+        if name in {"Gerald", "Rin"}:
+            rnd_health *= 2.0
+            rnd_mv_speed *= 1.5
             
-        custom_stats = EntityStats(movement_speed=rnd_mv_speed, health=rnd_health, max_health=rnd_health)
+        custom_stats = EntityStats(
+            movement_speed=rnd_mv_speed, health=rnd_health, max_health=rnd_health,
+            stun_immune_bonus_armor=100
+        )
         
-        super().__init__(type=EnemyType.GOBLIN, page=page, audio_manager=audio_manager, target=target, name=name, entity_list=entity_list, debug=debug, stats=custom_stats, simple_revive=simple_revive)
+        super().__init__(
+            type=EnemyType.GOBLIN, page=page, audio_manager=audio_manager,
+            target=target, name=name, entity_list=entity_list, debug=debug,
+            stats=custom_stats, simple_revive=simple_revive
+        )
         
         self.animations = {
             "idle": AnimConfig(frame_count=4, frame_duration=0.1),
@@ -66,15 +76,19 @@ class Goblin(Enemy):
         self.attack_cooldown_duration: float = 1.5
         
         self.wander_timer: float = 0.0
-        self.wander_direction: int = 0
+        self.wander_direction: Literal[-1, 0, 1] = 0
         self.target_dx: float = 0.0
         
         self._spawning_in: bool = True
 
     def generate_rnd_name(self) -> str:
-        names = ["Gobby", "Gibby", "Geeb", "Goob", "Gerald", "Rin"]
+        names = [
+            "Gobby", "Gibby", "Geeb", "Goob", "Gubby", "Gebby", "Gub", "Gerald", "Gibby", "Gib",
+            "Gob", "Gobber", "Gob Lin", "Gob Gob", "Geb Geb", "Gub Gub", "Gib Gib", "Gibba", "Gibber",
+            "Gob Rin", "Gobrin", "Rin"
+        ]
         return random.choice(names)
-
+    
     def tick_animation(self, dt: float) -> bool:
         if self._tick_simple_revive(dt): return True
         if self.states.is_reviving: return False
@@ -119,21 +133,22 @@ class Goblin(Enemy):
                 self._on_animation_finish()
             return True
         return False
-
+    
     def _handle_specific_frames(self) -> None:
         state = self.current_anim_state
         frame = self.current_frame
         match state:
             case "attack-1":
                 match frame:
-                    case 2:
+                    case 2: # 50% chance of stun parry
                         if random.random() < 0.5:
                             self._apply_tint(ft.Colors.YELLOW)
                             self.states.stun_immune = True
                             self.anim_timer = 0
                     case 5:
-                        self._reset_tint()
-                        self.states.stun_immune = False
+                        if self.states.stun_immune:
+                            self._reset_tint()
+                            self.states.stun_immune = False
                     case 6:
                         self._modify_self_hitbox(width=80, height=80, r_left=10)
                         self.states.dealing_damage = True
@@ -160,7 +175,12 @@ class Goblin(Enemy):
                         self._knockback_self(self.target)
     
     def _on_stun_immune_hit(self):
-        self._play_sfx(sfx.impacts.shield_block_shortsword)
+        super()._on_stun_immune_hit()
+        if (
+            isinstance(self.target, Player)
+            and self.target.type == PlayerType.HERO_KNIGHT
+        ):
+            self._play_sfx(sfx.impacts.shield_block_shortsword)
     
     def _on_animation_finish(self) -> None:
         state = self.current_anim_state
@@ -231,8 +251,8 @@ class Goblin(Enemy):
             self.states.is_moving = False
             
             if self.attack_cooldown_timer <= 0 and not self.states.is_attacking:
-                # self.states.attack_phase = random.choice([1, 2])
-                self.states.attack_phase = 1
+                self.states.attack_phase = random.choice([1, 2])
+                # self.states.attack_phase = 1
                 self.attack()
                 self.attack_cooldown_timer = self.attack_cooldown_duration
                 

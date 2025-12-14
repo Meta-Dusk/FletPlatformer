@@ -11,14 +11,13 @@ from components.custom_switches import TextAndToggle
 from components.popups import SimpleDialog
 
 import utilities.keyboard_manager as kb_manager
-from utilities.tasks import attempt_cancel
 from utilities.components import try_update, await_for_dur
 from utilities.commands.ui import DevConsole
 from utilities.commands.in_game import GameCommands
 from utilities.performance_monitor import PerformanceMonitor
 from utilities.tutorial_handler import TutorialHandler
 
-from entities.enemy import EnemyType, Enemy
+from entities.enemy import EnemyType
 from entities.entity import Entity
 from entities.player import Player, PlayerType
 
@@ -145,7 +144,9 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         kb_manager.start()
         kb_manager.on_press_callback = self._handle_input_press
         
-        self.game_loop = GameLoop(self.page, self.entity_list, ground_level=self.ground_level)
+        self.game_loop = GameLoop(
+            self.page, self.entity_list, ground_level=self.ground_level
+        )
         self.projectile_stack = self.game_loop.projectile_manager.projectile_layer
         self.game_loop.start()
         
