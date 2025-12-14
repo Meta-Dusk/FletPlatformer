@@ -6,6 +6,7 @@ from entities.enemy import Enemy, EnemyType, get_inversely_scaling_stats
 from entities.entity import Entity, EntityStats, AnimConfig
 from entities.features.entity_data import SFXRegistry
 from entities.player import PlayerType, Player
+from entities.projectile import PresetProjectileStats
 
 from audio.audio_manager import AudioManager
 from audio.sfx_data import SFXLibrary
@@ -20,6 +21,7 @@ class Goblin(Enemy):
         target: Enemy = None,
         name: str = None,
         entity_list: list[Entity] = None,
+        projectile_manager = None,
         *,
         debug: bool = False,
         simple_revive: bool = True
@@ -42,7 +44,8 @@ class Goblin(Enemy):
         super().__init__(
             type=EnemyType.GOBLIN, page=page, audio_manager=audio_manager,
             target=target, name=name, entity_list=entity_list, debug=debug,
-            stats=custom_stats, simple_revive=simple_revive
+            stats=custom_stats, simple_revive=simple_revive,
+            projectile_manager=projectile_manager
         )
         
         self.animations = {
@@ -52,7 +55,7 @@ class Goblin(Enemy):
             "death": AnimConfig(frame_count=4, frame_duration=0.1, loop=False),
             "attack-1": AnimConfig(frame_count=8, frame_duration=self.stats.attack_frame_delay, loop=False),
             "attack-2": AnimConfig(frame_count=8, frame_duration=self.stats.attack_frame_delay, loop=False),
-            "attack-3": AnimConfig(frame_count=8, frame_duration=self.stats.attack_frame_delay, loop=False),
+            "attack-3": AnimConfig(frame_count=12, frame_duration=self.stats.attack_frame_delay, loop=False),
         }
         
         self.sfx_registry = SFXRegistry()
@@ -71,7 +74,7 @@ class Goblin(Enemy):
         
         self.ai_timer: float = 0.0
         self.ai_decision_delay: float = 0.5
-        self.current_ai_goal: str | Literal["idle", "chase", "attack"] = "idle"
+        self.current_ai_goal: str | Literal["idle", "chase", "attack", "attack_ranged"] = "idle"
         
         self.attack_cooldown_timer: float = 0.0
         self.attack_cooldown_duration: float = 1.5
@@ -216,6 +219,9 @@ class Goblin(Enemy):
             self.states.is_attacking = False
             self.states.dealing_damage = False
             self._modify_self_hitbox(reset=True)
+        
+        if state == "attack-3":
+            self.attack_ranged()
 
     def tick_logic(self, dt: float) -> None:
         """Handles AI state machine."""
@@ -256,7 +262,18 @@ class Goblin(Enemy):
                 # self.states.attack_phase = 1
                 self.attack()
                 self.attack_cooldown_timer = self.attack_cooldown_duration
-                
+        
+        elif self.current_ai_goal == "attack_ranged":
+            self.velocity.dx = 0
+            self.states.is_moving = False
+            
+            if self.attack_cooldown_timer <= 0 and not self.states.is_attacking:
+                # Force State 3 (The Bomb Throw)
+                self.states.attack_phase = 3
+                self.attack()
+                # Apply a slightly longer cooldown for bombs to prevent spam
+                self.attack_cooldown_timer = self.attack_cooldown_duration + 1.0
+        
         elif self.current_ai_goal == "idle":
             self.wander_timer -= dt
             if self.wander_timer <= 0:
@@ -282,9 +299,17 @@ class Goblin(Enemy):
         dist = self._get_center_point(self.target) - self._get_center_point(self)
         abs_dist = abs(dist)
         
+        # Melee Range -> Slice and Dice
         if abs_dist <= self.melee_range:
             self.current_ai_goal = "attack"
             self._flip_sprite_x(1 if dist > 0 else -1)
+        
+        # Ranged Range -> Throw Bomb
+        elif abs_dist <= self.type.value.ranged_range and self.attack_cooldown_timer <= 0:
+            self.current_ai_goal = "attack_ranged"
+            self._flip_sprite_x(1 if dist > 0 else -1)
+        
+        # Too Far - Chase
         else:
             self.current_ai_goal = "chase"
             direction = 1 if dist > 0 else -1
@@ -299,3 +324,17 @@ class Goblin(Enemy):
         self._play_sfx(sfx.enemy.goblin_cackle)
         await super().spawn_sequence()
         self._spawning_in = False
+    
+    def attack_ranged(self) -> None:
+        """Testing for projectile: 'Small Bomb'."""
+        if self._get_facing_direction() < 0:
+            offset = -self.stack.width / 2
+        else:
+            offset = 0
+        super().attack_ranged(
+            start_x=self.stack.left + self.stack.width / 2 + offset,
+            start_y=self.stack.bottom + self.stack.height / 2,
+            stats=PresetProjectileStats.SmallBomb,
+            src="images/enemies/goblin/projectile_0.png",
+            sfx_upon_spawn=(sfx.explosions.sparkler_ignite, 0.5)
+        )

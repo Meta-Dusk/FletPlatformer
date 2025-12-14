@@ -16,6 +16,7 @@ class HeroKnight(Player):
         audio_manager: AudioManager,
         held_keys: HeldKeys,
         entity_list: list[Entity] = None,
+        projectile_manager = None,
         *,
         debug: bool = False,
         verbose_stamina: bool = False,
@@ -31,7 +32,7 @@ class HeroKnight(Player):
         super().__init__(
             page, audio_manager, sprite, held_keys, entity_list, debug=debug,
             verbose_stamina=verbose_stamina, type=PlayerType.HERO_KNIGHT, stats=stats,
-            simple_revive=simple_revive
+            simple_revive=simple_revive, projectile_manager=projectile_manager
         )
         
         # --- 1. DEFINE ANIMATIONS ---
@@ -84,9 +85,9 @@ class HeroKnight(Player):
             p2_r_left=120, p2_width=140, p2_height=162
         )
         self._make_self_hitbox(width=95, height=110, r_left=55)
-
+        
         self.landing_sfx_list = [sfx.player.jump_landing, sfx.impacts.landing_on_grass]
-
+        
     def tick_animation(self, dt: float) -> bool:
         """
         Overrides base logic to handle HeroKnight specific Hitboxes and State Logic.

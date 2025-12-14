@@ -22,11 +22,12 @@ class EnemyData:
     width: ft.Number = 150
     height: ft.Number = 150
     melee_range: int = 100
+    ranged_range: int = 200
 
 class EnemyType(Enum):
     """Available enemy types."""
     FLYING_EYE = EnemyData("Flying Eye")
-    GOBLIN = EnemyData("Gobby", melee_range=180)
+    GOBLIN = EnemyData("Gobby", melee_range=180, ranged_range=450)
     MUSHROOM = EnemyData("Mushy")
     SKELETON = EnemyData("Skelly")
 
@@ -49,6 +50,7 @@ class Enemy(Entity):
         target: Entity = None,
         name: str = None,
         entity_list: list[Entity] = None,
+        projectile_manager = None,
         *,
         debug: bool = False,
         stats: EntityStats = None,
@@ -68,8 +70,8 @@ class Enemy(Entity):
         super().__init__(
             sprite=_sprite, name=self.name, page=page,
             audio_manager=audio_manager, faction=Factions.NONHUMAN,
-            entity_list=entity_list, debug=debug, stats=self._init_stats,
-            simple_revive=simple_revive
+            entity_list=entity_list, projectile_manager=projectile_manager,
+            debug=debug, stats=self._init_stats, simple_revive=simple_revive
         )
         
         # ? Internal class setup

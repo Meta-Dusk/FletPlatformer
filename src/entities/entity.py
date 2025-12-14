@@ -1,4 +1,4 @@
-import asyncio, random, inspect
+import random
 import flet as ft
 from pathlib import Path
 from typing import Self, Callable, Literal
@@ -17,8 +17,11 @@ from components.hud_elements import NameTag
 
 from entities.features.hitboxes import DamageHitbox
 from entities.features.entity_data import Factions, EntityStats, EntityStates, ARMOR_SCALING_CONSTANT, DebugLogs, AnimConfig, SFXRegistry
+from entities.projectile import ProjectileStats
 
 from utilities.physics import Velocity
+
+# from managers.game_mixins import ProjectileManagerMimic
 
 class Entity(DamageHitbox):
     """Entity base class. Handles the sprite and some states."""
@@ -30,6 +33,7 @@ class Entity(DamageHitbox):
         audio_manager: AudioManager = None,
         faction: Factions = None,
         entity_list: list[Self] = None,
+        projectile_manager = None,
         *,
         show_hud: bool = True,
         debug: bool = False,
@@ -50,6 +54,7 @@ class Entity(DamageHitbox):
         self.page = page
         self.audio_manager = audio_manager
         self.debug = debug
+        self.projectile_manager = projectile_manager
         self.faction: Factions = faction
         self._entity_list = entity_list if entity_list is not None else []
         self.stats: EntityStats = stats if stats else EntityStats()
@@ -574,6 +579,24 @@ class Entity(DamageHitbox):
             knockback = entity.stats.attack_knockback * self.stats.knockback_resistance
         self.velocity.dx += knockback
         self.velocity.dy += abs(knockback) * 1.5
+    
+    def attack_ranged(
+        self, start_x: float = None, start_y: float = None,
+        direction: Literal[-1, 1] = None,
+        stats: ProjectileStats = None, src: str = "",
+        sfx_upon_spawn: tuple[SFXLibrary, float] = None,
+    ) -> None:
+        """Shoots out a projectile."""
+        direction = self._get_facing_direction()
+        if start_x is None: start_x = self.stack.left + self.stack.width / 2
+        if start_y is None: start_y = (self.stack.bottom + self.stack.height / 2) - 50
+        
+        self.projectile_manager.spawn_projectile(
+            start_x=start_x, start_y=start_y,
+            direction=direction,
+            owner=self, stats=stats, src=src,
+            sfx_upon_spawn=sfx_upon_spawn
+        )
     
     def attack(self) -> bool:
         """

@@ -43,6 +43,7 @@ class Player(Entity):
         held_keys: HeldKeys,
         entity_list: list[Entity] = None,
         name: str = None,
+        projectile_manager = None,
         *,
         debug: bool = False,
         verbose_stamina: bool = False,
@@ -62,7 +63,8 @@ class Player(Entity):
             faction=Factions.HUMAN, entity_list=entity_list, debug=debug,
             stats=self._init_stats, simple_revive=simple_revive,
             restrict_movement=restrict_movement, show_stamina_bar=True,
-            show_dash_cooldown=True, verbose_stamina=verbose_stamina
+            show_dash_cooldown=True, verbose_stamina=verbose_stamina,
+            projectile_manager=projectile_manager
         )
         
         # ? Player setup
@@ -453,14 +455,9 @@ class Player(Entity):
                     try_update(self.dash_indicator)
     
     # * === CALLABLE PLAYER ACTIONS/EVENTS ===
-    def attack_ranged(self) -> None:
-        direction = self._get_facing_direction()
-        
-        self.projectile_manager.spawn_projectile(
-            start_x=self.stack.left + self.stack.width / 2,
-            start_y=(self.stack.bottom + self.stack.height / 2) - 50,
-            direction=direction,
-            owner=self,
+    def attack_ranged(self):
+        """Testing for projectile: 'Small Bomb'."""
+        super().attack_ranged(
             stats=PresetProjectileStats.SmallBomb,
             src="images/enemies/goblin/projectile_0.png",
             sfx_upon_spawn=(sfx.explosions.sparkler_ignite, 0.5)

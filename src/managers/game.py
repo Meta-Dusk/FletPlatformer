@@ -144,7 +144,8 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         kb_manager.on_press_callback = self._handle_input_press
         
         self.game_loop = GameLoop(
-            self.page, self.entity_list, audio_manager, ground_level=self.ground_level
+            self.page, self.entity_list, audio_manager, ground_level=self.ground_level,
+            debug=self.show_borders # TODO: Fix 'show_borders' not working for projectiles
         )
         self.projectile_stack = self.game_loop.projectile_manager.projectile_layer
         self.game_loop.start()
@@ -441,7 +442,7 @@ entity_stack: {len(self.entity_stack.controls)}
             def summon_gobby(): self.summon_enemy(EnemyType.GOBLIN)
             await stage_panning_loop(
                 game_manager=self,
-                projectile_stack=self.game_loop.projectile_manager.projectile_layer,
+                projectile_stack=self.projectile_stack,
                 post_callback=summon_gobby
             )
         self.running_tasks.append(self.page.run_task(run_pan))

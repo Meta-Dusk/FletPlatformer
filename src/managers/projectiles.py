@@ -1,5 +1,6 @@
 import flet as ft
 import math, asyncio
+from typing import Literal
 
 from entities.entity import Entity
 from entities.projectile import Projectile, ProjectileStats
@@ -30,7 +31,7 @@ class ProjectileManager:
         self.ground_level = ground_level
         
     def spawn_projectile(
-        self, start_x: float, start_y: float, direction: int,
+        self, start_x: float, start_y: float, direction: Literal[-1, 1],
         owner: Entity, stats: ProjectileStats, src: str,
         sfx_upon_spawn: tuple[SFXLibrary, float] = None
     ) -> None:

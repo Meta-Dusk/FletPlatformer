@@ -1,17 +1,40 @@
 import flet as ft
-from typing import Any
+from typing import Any, Callable, Literal
 
 from entities.entity import Entity
 from entities.enemy import EnemyType, Enemy
 from entities.goblin import Goblin
 from entities.player import PlayerType, Player
 from entities.hero_knight import HeroKnight
+from entities.projectile import ProjectileStats
 
 from audio.audio_manager import global_audio_manager
+from audio.sfx_data import SFXLibrary
 
 from utilities.keyboard_manager import held_keys
 
+Direction = Literal[-1, 1]
+SpawnProjectileCallableType = Callable[[float, float, Direction, Entity, ProjectileStats, tuple[SFXLibrary, float]], None]
+
 # * === TEMP CLASSES (MIMICS) ===
+class ProjectileManagerMimic:
+    """Temporary class for mimicking the `ProjectileManager`."""
+    def __init__(
+        self, projectile_layer: ft.Stack,
+        spawn_projectile: SpawnProjectileCallableType,
+    ):
+        """**OPTIONAL** init. You don't need to call this inside the `GameManager`."""
+        self.projectile_layer = projectile_layer
+        self.spawn_projectile = spawn_projectile
+
+class GameLoopMimic:
+    """Temporary class for mimicking the `GameLoop`."""
+    def __init__(
+        self, projectile_manager: ProjectileManagerMimic
+    ):
+        """**OPTIONAL** init. You don't need to call this inside the `GameManager`."""
+        self.projectile_manager = projectile_manager
+
 class GameManagerMimic:
     """Temporary class for mimicking the `GameManager`."""
     def __init__(
@@ -23,8 +46,8 @@ class GameManagerMimic:
         player: Player,
         background_stack: ft.Stack,
         foreground_stack: ft.Stack,
-        projectile_stack: ft.Stack,
-        stage: ft.Stack
+        stage: ft.Stack,
+        game_loop: GameLoopMimic
     ) -> None:
         """**OPTIONAL** init. You don't need to call this inside the `GameManager`."""
         self.show_borders = show_borders
@@ -35,8 +58,8 @@ class GameManagerMimic:
         self.player = player
         self.background_stack = background_stack
         self.foreground_stack = foreground_stack
-        self.projectile_stack = projectile_stack
         self.stage = stage
+        self.game_loop = game_loop
 
 # * === MIXINS ===
 class GameManagerMixin:
@@ -60,6 +83,7 @@ class GameManagerMixin:
             "page": self.game_manager.page,
             "audio_manager": global_audio_manager,
             "entity_list": self.game_manager.entity_list,
+            "projectile_manager": self.game_manager.game_loop.projectile_manager,
             "debug": debug
         }
         

@@ -14,7 +14,8 @@ class GameLoop:
         audio_manager: AudioManager,
         *,
         is_paused: bool = False,
-        ground_level: int = 0
+        ground_level: int = 0,
+        debug: bool = False
     ) -> None:
         self.page = page
         self.entity_list = entity_list
@@ -22,9 +23,12 @@ class GameLoop:
         self.is_running = False
         self._target_fps = 60
         self._tick_rate = 1 / self._target_fps
+        self.debug = debug
         
         self.physics_manager = PhysicsManager(page, entity_list)
-        self.projectile_manager = ProjectileManager(page, audio_manager, entity_list, ground_level)
+        self.projectile_manager = ProjectileManager(
+            page, audio_manager, entity_list, ground_level, debug=self.debug
+        )
     
     @property
     def is_paused(self) -> bool:
