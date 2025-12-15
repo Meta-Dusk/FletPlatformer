@@ -24,7 +24,7 @@ class EntityStates:
     restrict_movement: bool = False
     
     # Attacking
-    attack_phase: Number = 0
+    attack_phase: int = 0
     is_attacking: bool = False
     is_falling: bool = False
     dealing_damage: bool = False    
@@ -41,6 +41,7 @@ class EntityStates:
     disable_movement: bool = False
     dead: bool = False
     taking_damage: bool = False
+    enable_flight: bool = False
 
 @dataclass
 class EntityStats:
@@ -126,7 +127,7 @@ class SFXRegistry:
         """Internal storage: (`state`, `frame`) -> `SFXEvent`"""
         self._data: dict[tuple[AnimationState, int], list[SFXEvent]] = defaultdict(list)
         
-    def add(self, state: AnimationState, sfx: SFXLibrary, volume: float = 1.0, *, frame: int):
+    def add(self, state: AnimationState, sfx: SFXLibrary, volume: float = 1.0, *, frame: int = 0):
         """Registers an SFX event. Refer to the type hints for `state`."""
         self._data[(state, frame)].append(SFXEvent(sfx, volume))
         

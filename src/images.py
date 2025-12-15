@@ -68,11 +68,13 @@ class Sprite(ft.Image):
         filter_quality: ft.FilterQuality = ft.FilterQuality.NONE,
         fit: ft.BoxFit = ft.BoxFit.COVER, gapless_playback: bool = True,
         scale: ft.Scale = ft.Scale(scale_x=2, scale_y=2),
-        offset: ft.Offset = ft.Offset(0, 0.145), debug: bool = False
+        offset: ft.Offset = ft.Offset(0, 0.145), debug: bool = False,
+        rotate: ft.RotateValue = ft.Rotate(0, ft.Alignment.CENTER)
     ) -> None:
         super().__init__(
             src=src, width=width, height=height, filter_quality=filter_quality,
-            fit=fit, gapless_playback=gapless_playback, scale=scale, offset=offset
+            fit=fit, gapless_playback=gapless_playback, scale=scale, offset=offset,
+            rotate=rotate
         )
         self.debug = debug
         self._handler_str = "Sprite"

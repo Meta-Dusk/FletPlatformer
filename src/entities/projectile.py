@@ -31,6 +31,7 @@ class ProjectileStats:
     bounciness: ft.Number = 0.0
     friction: ft.Number = 0.0
     stop_on_explode: bool = False
+    is_parryable: bool = False
     
     # Explosion / Damage Logic
     impact_damage: bool = True
@@ -52,8 +53,11 @@ class ProjectileStats:
 sfx = SFXLibrary()
 
 small_bomb_sfx = SFXRegistry()
-small_bomb_sfx.add("fly", sfx.explosions.light_spark_sizzle, volume=0.5, frame=0)
+small_bomb_sfx.add("fly", sfx.explosions.light_spark_sizzle, volume=0.5)
 small_bomb_sfx.add("explode", sfx.explosions.small, volume=0.5, frame=9)
+
+banshee_blast_sfx = SFXRegistry()
+banshee_blast_sfx.add("explode", sfx.whoosh.swish_blast_2, volume=0.5)
 
 @dataclass
 class PresetProjectileStats:
@@ -70,19 +74,39 @@ class PresetProjectileStats:
         bounciness=0.6,
         friction=10.0,
         stop_on_explode=True,
+        is_parryable=True,
         
         # Logic
         impact_damage=False,
         damage_frame=9,
         aoe_radius=50,
         
-        width=100,
-        height=100,
+        width=100, height=100,
         offset=ft.Offset(0, 0.35),
         
-        fly_anim=AnimConfig(frame_count=3, frame_duration=0.1, loop=True, start_frame=0),
+        fly_anim=AnimConfig(frame_count=3, frame_duration=0.1),
         explode_anim=AnimConfig(frame_count=16, frame_duration=0.08, loop=False, start_frame=3),
         sfx_registry=small_bomb_sfx
+    )
+    BansheeBlast = ProjectileStats(
+        velocity=Velocity(dx=10.0, dy=10.0),
+        gravity=0,
+        lifespan=1.0,
+        damage=8,
+        
+        collides_with_map=True,
+        stop_on_explode=True,
+        is_parryable=True,
+        
+        impact_damage=False,
+        damage_frame=0,
+        aoe_radius=30,
+        
+        width=48, height=48,
+        
+        fly_anim=AnimConfig(frame_count=3, frame_duration=0.1),
+        explode_anim=AnimConfig(frame_count=8, frame_duration=0.1, loop=False, start_frame=3),
+        sfx_registry=banshee_blast_sfx
     )
 
 class Projectile(ft.Container):
@@ -134,7 +158,8 @@ class Projectile(ft.Container):
             src=src, fit=ft.BoxFit.CONTAIN,
             filter_quality=ft.FilterQuality.NONE,
             gapless_playback=True, scale=_scale,
-            offset=stats.offset
+            offset=stats.offset,
+            color_blend_mode=ft.BlendMode.SRC_A_TOP
         )
         
         super().__init__(
@@ -164,9 +189,10 @@ class Projectile(ft.Container):
             
             current_state_key = "explode" if self.is_exploding else "fly"
             events = self.stats.sfx_registry.get(current_state_key, self.current_frame)
-            for event in events:
-                if self.play_sfx:
-                    self.play_sfx(event.sfx, event.volume)
+            if events and len(events) > 0:
+                for event in events:
+                    if self.play_sfx:
+                        self.play_sfx(event.sfx, event.volume)
             
             self._update_src()
             return True
@@ -206,6 +232,13 @@ class Projectile(ft.Container):
             self.current_frame = 0
             self.anim_timer = 0
             self.has_dealt_damage = False
+            
+            events = self.stats.sfx_registry.get("explode", 0)
+            if events and len(events) > 0:
+                for event in events:
+                    if self.play_sfx:
+                        self.play_sfx(event.sfx, event.volume)
+            
             self._update_src()
         else:
             self.is_dead = True
@@ -230,3 +263,35 @@ class Projectile(ft.Container):
             self.left, self.bottom,
             self.stats.width, self.stats.height
         )
+    
+    def parry(self, new_owner: "Entity") -> bool:
+        """
+        Reflects the projectile back at the shooter.
+        Returns `True` if successful.
+        """
+        # 1. Validation
+        if (
+            not self.stats.is_parryable
+            or self.is_exploding
+            or self.is_dead
+        ): 
+            return False
+        
+        # 2. Swap Ownership (Now it hurts the enemy!)
+        self.owner = new_owner
+        
+        # 3. Reverse & Boost Physics
+        # Flip X direction and add speed to make it feel powerful
+        self.dx *= -1 * new_owner.stats.attack_knockback
+        
+        # Pop it up slightly in the air if it was falling
+        self.dy = abs(self.dy) + new_owner.stats.attack_knockback
+        
+        # 4. Reset Damage Flags (For grenades/piercing)
+        self.has_dealt_damage = False
+        
+        # 5. Visual Feedback (Optional: Reset tint or flash)
+        self.sprite.color = ft.Colors.with_opacity(0.5, ft.Colors.WHITE)
+        try_update(self.content)
+        
+        return True

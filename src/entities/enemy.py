@@ -2,6 +2,7 @@ import asyncio, random
 import flet as ft
 from dataclasses import dataclass
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from entities.entity import Entity
 from entities.features.entity_data import EntityStates, EntityStats, Factions, AnimConfig
@@ -14,6 +15,9 @@ from audio.sfx_data import SFXLibrary
 from utilities.collisions import is_in_x_range
 from utilities.components import try_update, await_for_dur
 
+if TYPE_CHECKING:
+    from managers.enemy_manager import EnemyManager
+
 sfx = SFXLibrary()
 
 @dataclass
@@ -23,10 +27,11 @@ class EnemyData:
     height: ft.Number = 150
     melee_range: int = 100
     ranged_range: int = 200
+    is_flying: bool = False
 
 class EnemyType(Enum):
     """Available enemy types."""
-    FLYING_EYE = EnemyData("Flying Eye")
+    FLYING_EYE = EnemyData("Flying Eye", melee_range=100, ranged_range=300, is_flying=True)
     GOBLIN = EnemyData("Gobby", melee_range=180, ranged_range=450)
     MUSHROOM = EnemyData("Mushy")
     SKELETON = EnemyData("Skelly")
@@ -51,6 +56,7 @@ class Enemy(Entity):
         name: str = None,
         entity_list: list[Entity] = None,
         projectile_manager = None,
+        enemy_manager: "EnemyManager" = None,
         *,
         debug: bool = False,
         stats: EntityStats = None,
@@ -71,14 +77,18 @@ class Enemy(Entity):
             sprite=_sprite, name=self.name, page=page,
             audio_manager=audio_manager, faction=Factions.NONHUMAN,
             entity_list=entity_list, projectile_manager=projectile_manager,
-            debug=debug, stats=self._init_stats, simple_revive=simple_revive
+            debug=debug, stats=self._init_stats, simple_revive=simple_revive,
+            enable_flight=type.value.is_flying
         )
         
         # ? Internal class setup
         self.type = type
         self.target = target
         self._handler_str = self.name
-        self.melee_range: int = type.value.melee_range
+        self.enemy_manager = enemy_manager
+        
+        if self.enemy_manager:
+            self.enemy_manager.register(self)
         
         # Visuals
         self.animations: dict[str, AnimConfig] = {
@@ -165,6 +175,9 @@ class Enemy(Entity):
         """Kills the enemy and fades out."""
         if not super().death(): return
         CLEANUP_DELAY: float = 2.0
+        
+        if self.enemy_manager:
+            self.enemy_manager.unregister(self)
         
         self._reset_states(EntityStates(dead=True))
         self._update_health_bar()

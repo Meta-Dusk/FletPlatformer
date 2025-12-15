@@ -25,17 +25,18 @@ class PhysicsManager:
             
             # --- A. APPLY GRAVITY ---
             # If above ground, pull down
-            if entity.stack.bottom > entity.ground_level:
-                entity.velocity.dy -= self.gravity * dt
-                entity.on_ground = False
-            else:
-                # Only snap to ground if we are NOT moving up (Jumping)
-                if entity.velocity.dy <= 0:
-                    entity.on_ground = True
-                    entity.velocity.dy = 0 
-                else:
-                    # We are on the ground (y=0) but moving up (dy>0), so we are airborne
+            if not entity.states.enable_flight:
+                if entity.stack.bottom > entity.ground_level:
+                    entity.velocity.dy -= self.gravity * dt
                     entity.on_ground = False
+                else:
+                    # Only snap to ground if we are NOT moving up (Jumping)
+                    if entity.velocity.dy <= 0:
+                        entity.on_ground = True
+                        entity.velocity.dy = 0 
+                    else:
+                        # We are on the ground (y=0) but moving up (dy>0), so we are airborne
+                        entity.on_ground = False
                 
             # --- B. APPLY VELOCITY ---
             # Velocity (Units/sec) * PPM (Pixels/Unit) * dt (Seconds) = Pixels moved

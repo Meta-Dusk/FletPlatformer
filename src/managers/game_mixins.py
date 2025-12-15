@@ -4,6 +4,7 @@ from typing import Any, Callable, Literal
 from entities.entity import Entity
 from entities.enemy import EnemyType, Enemy
 from entities.goblin import Goblin
+from entities.flying_eye import FlyingEye
 from entities.player import PlayerType, Player
 from entities.hero_knight import HeroKnight
 from entities.projectile import ProjectileStats
@@ -13,8 +14,9 @@ from audio.sfx_data import SFXLibrary
 
 from utilities.keyboard_manager import held_keys
 
+SoundEffect = tuple[SFXLibrary, float]
 Direction = Literal[-1, 1]
-SpawnProjectileCallableType = Callable[[float, float, Direction, Entity, ProjectileStats, tuple[SFXLibrary, float]], None]
+SpawnProjectileCallableType = Callable[[float, float, Direction, Entity, ProjectileStats, SoundEffect], None]
 
 # * === TEMP CLASSES (MIMICS) ===
 class ProjectileManagerMimic:
@@ -27,13 +29,19 @@ class ProjectileManagerMimic:
         self.projectile_layer = projectile_layer
         self.spawn_projectile = spawn_projectile
 
+class EnemyManagerMimic:
+    def __init__(self):
+        pass
+
 class GameLoopMimic:
     """Temporary class for mimicking the `GameLoop`."""
     def __init__(
-        self, projectile_manager: ProjectileManagerMimic
+        self, projectile_manager: ProjectileManagerMimic,
+        enemy_manager: EnemyManagerMimic
     ):
         """**OPTIONAL** init. You don't need to call this inside the `GameManager`."""
         self.projectile_manager = projectile_manager
+        self.enemy_manager = enemy_manager
 
 class GameManagerMimic:
     """Temporary class for mimicking the `GameManager`."""
@@ -47,7 +55,7 @@ class GameManagerMimic:
         background_stack: ft.Stack,
         foreground_stack: ft.Stack,
         stage: ft.Stack,
-        game_loop: GameLoopMimic
+        game_loop: GameLoopMimic,
     ) -> None:
         """**OPTIONAL** init. You don't need to call this inside the `GameManager`."""
         self.show_borders = show_borders
@@ -111,28 +119,39 @@ class GameManagerMixin:
 
 # * --- WRAPPED ENTITIES ---
 class NewGoblin(Goblin, GameManagerMixin):
-    """
-    Wrapped `Goblin` class to be used in the `GameMaker` class.
-    Automatically spawns into the scene once called.
-    """
+    """Wrapped `Goblin` class to be used in the `GameMaker` class."""
     def __init__(
         self, game_manager: GameManagerMimic, name: str = None,
-        *, center_spawn: bool = True, debug = False
+        *, center_spawn: bool = True, debug = False, enemy_manager = None
     ) -> None:
         """Automatically gets spawned into the scene post-init."""
         self._configure_from_manager(game_manager)
         super().__init__(
             target=game_manager.player,
             name=name,
+            enemy_manager=enemy_manager,
+            **self._get_base_kwargs(debug)
+        )
+        self._spawn_into_scene(center_spawn=center_spawn)
+
+class NewFlyingEye(FlyingEye, GameManagerMixin):
+    """Wrapped `FlyingEye` class to be used in the `GameMaker` class."""
+    def __init__(
+        self, game_manager: GameManagerMimic, name: str = None,
+        *, center_spawn: bool = True, debug = False, enemy_manager = None
+    ) -> None:
+        """Automatically gets spawned into the scene post-init."""
+        self._configure_from_manager(game_manager)
+        super().__init__(
+            target=game_manager.player,
+            name=name,
+            enemy_manager=enemy_manager,
             **self._get_base_kwargs(debug)
         )
         self._spawn_into_scene(center_spawn=center_spawn)
 
 class NewHeroKnight(HeroKnight, GameManagerMixin):
-    """
-    Wrapped `HeroKnight` class to be used in the `GameMaker` class.
-    Automatically spawns into the scene once called.
-    """
+    """Wrapped `HeroKnight` class to be used in the `GameMaker` class."""
     def __init__(self, game_manager: GameManagerMimic, *, debug = False) -> None:
         """Automatically gets spawned into the scene post-init."""
         self._configure_from_manager(game_manager)
@@ -175,7 +194,16 @@ def NewEnemy(
     """
     match type:
         case EnemyType.GOBLIN:
-            return NewGoblin(game_manager, debug=debug, center_spawn=center_spawn)
-            
+            return NewGoblin(
+                game_manager, center_spawn=center_spawn, debug=debug,
+                enemy_manager=game_manager.game_loop.enemy_manager
+            )
+        
+        case EnemyType.FLYING_EYE:
+            return NewFlyingEye(
+                game_manager, center_spawn=center_spawn, debug=debug,
+                enemy_manager=game_manager.game_loop.enemy_manager
+            )
+        
         case _:
             raise NotImplementedError(f"Enemy type {type.name} is not implemented!")

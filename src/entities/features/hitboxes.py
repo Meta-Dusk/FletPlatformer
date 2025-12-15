@@ -129,7 +129,7 @@ class DamageHitbox:
     def _make_atk_hitbox(
         self, p1_r_left: int, p1_width: int, p1_height: int,
         p2_r_left: int, p2_width: int, p2_height: int,
-        bottom: int = 0
+        bottom: int = 0, p1_bottom: int = None, p2_bottom: int = None
     ) -> None:
         """
         Makes the attack hitboxes for the various attack phases. Only supports two attack phases.\n
@@ -138,18 +138,22 @@ class DamageHitbox:
         Additionally, these offsets are _relative_ to the `self.stack`, which is where the hitboxes reside.\n
         These hitboxes must also have a `width` and a `height`.
         """
-        hb_bottom = bottom
+        _p1_bottom = bottom
+        _p2_bottom = bottom
+        if p1_bottom: _p1_bottom = p1_bottom
+        if p2_bottom: _p2_bottom = p2_bottom
+        
         p1_l_left = self.sprite.width - p1_r_left - p1_width # Phase 1 Config
         p2_l_left = self.sprite.width - p2_r_left - p2_width # Phase 2 Config
         
         hb_pos_data = {
             1: HitboxPos(
-                l_left=p1_l_left, l_bottom=hb_bottom, 
-                r_left=p1_r_left, r_bottom=hb_bottom
+                l_left=p1_l_left, l_bottom=_p1_bottom,
+                r_left=p1_r_left, r_bottom=_p1_bottom
             ),
             2: HitboxPos(
-                l_left=p2_l_left, l_bottom=hb_bottom, 
-                r_left=p2_r_left, r_bottom=hb_bottom
+                l_left=p2_l_left, l_bottom=_p2_bottom,
+                r_left=p2_r_left, r_bottom=_p2_bottom
             )
         }
         hb_data_1 = Hitbox(self.faction, hb_pos_data, 1)
@@ -158,13 +162,13 @@ class DamageHitbox:
         # Create Containers (Store them in self._atk_hitboxes)
         atk_hitbox_1 = ft.Container(
             width=p1_width, height=p1_height, 
-            left=p1_r_left, bottom=hb_bottom,
+            left=p1_r_left, bottom=_p1_bottom,
             data=hb_data_1
         )
         
         atk_hitbox_2 = ft.Container(
             width=p2_width, height=p2_height, 
-            left=p2_r_left, bottom=hb_bottom,
+            left=p2_r_left, bottom=_p2_bottom,
             data=hb_data_2
         )
         

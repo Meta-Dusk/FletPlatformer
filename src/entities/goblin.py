@@ -4,7 +4,6 @@ from typing import Literal
 
 from entities.enemy import Enemy, EnemyType, get_inversely_scaling_stats
 from entities.entity import Entity, EntityStats, AnimConfig
-from entities.features.entity_data import SFXRegistry
 from entities.player import PlayerType, Player
 from entities.projectile import PresetProjectileStats
 
@@ -24,7 +23,8 @@ class Goblin(Enemy):
         projectile_manager = None,
         *,
         debug: bool = False,
-        simple_revive: bool = True
+        simple_revive: bool = True,
+        enemy_manager = None,
     ) -> None:
         if name is None: name = self.generate_rnd_name()
         
@@ -32,7 +32,7 @@ class Goblin(Enemy):
         min_mv_speed = 2.8
         rnd_health, rnd_mv_speed = get_inversely_scaling_stats(rnd_health_range, min_mv_speed)
         
-        if name in {"Gerald", "Rin"}:
+        if name in {"Gnar", "Muck", "Shank", "Gerald", "Steve"}:
             rnd_health *= 2.0
             rnd_mv_speed *= 1.5
             
@@ -45,7 +45,7 @@ class Goblin(Enemy):
             type=EnemyType.GOBLIN, page=page, audio_manager=audio_manager,
             target=target, name=name, entity_list=entity_list, debug=debug,
             stats=custom_stats, simple_revive=simple_revive,
-            projectile_manager=projectile_manager
+            projectile_manager=projectile_manager, enemy_manager=enemy_manager
         )
         
         self.animations = {
@@ -58,7 +58,6 @@ class Goblin(Enemy):
             "attack-3": AnimConfig(frame_count=12, frame_duration=self.stats.attack_frame_delay, loop=False),
         }
         
-        self.sfx_registry = SFXRegistry()
         MV_VOLUME = 0.2
         self.sfx_registry.add("run", sfx.footsteps.footstep_grass_1, MV_VOLUME, frame=2)
         self.sfx_registry.add("run", sfx.footsteps.footstep_grass_2, MV_VOLUME, frame=5)
@@ -69,7 +68,10 @@ class Goblin(Enemy):
         self.sfx_registry.add("death", sfx.impacts.flesh_impact_2, frame=0)
         self.sfx_registry.add("revive", sfx.magic.strike, frame=3)
         
-        self._make_atk_hitbox(p1_r_left=-15, p1_width=180, p1_height=100, p2_r_left=70, p2_width=140, p2_height=80)
+        self._make_atk_hitbox(
+            p1_r_left=-15, p1_width=180, p1_height=100,
+            p2_r_left=70, p2_width=140, p2_height=80
+        )
         self._make_self_hitbox(width=70, height=75, r_left=40)
         
         self.ai_timer: float = 0.0
@@ -86,10 +88,21 @@ class Goblin(Enemy):
         self._spawning_in: bool = True
 
     def generate_rnd_name(self) -> str:
-        names = [
-            "Gobby", "Gibby", "Geeb", "Goob", "Gubby", "Gebby", "Gub", "Gerald", "Gibby", "Gib",
-            "Gob", "Gobber", "Gob Lin", "Gob Gob", "Geb Geb", "Gub Gub", "Gib Gib", "Gibba", "Gibber",
-            "Gob Rin", "Gobrin", "Rin"
+        names = [ # Total: 37
+            # The "Classic" Goblin Sounds (Guttural)
+            "Gnar", "Krug", "Zog", "Rakk", "Vex", "Snark", "Grit", "Brog", 
+            
+            # The "Scrappy/Gross" Ones
+            "Scab", "Grub", "Rot", "Snot", "Muck", "Sludge", "Wart", "Fungus",
+            
+            # The "Sneaky" Ones
+            "Snitch", "Shank", "Swipe", "Klepto", "Skulk", "Rat", "Weasel",
+            
+            # The "Silly/Punny" Ones
+            "Boblin", "Gnob", "Hob", "Nob", "Gobby", "Goob", "Gobber",
+            
+            # The "Suspiciously Normal" Ones (Always funny for monsters)
+            "Gerald", "Kevin", "Steve", "Gary", "Dave", "Frank", "Harold"
         ]
         return random.choice(names)
     
@@ -160,6 +173,7 @@ class Goblin(Enemy):
                     case 7:
                         self.states.dealing_damage = False
                         self._toggle_atk_hb_border()
+                        
             case "attack-2":
                 match frame:
                     case 0: self._modify_self_hitbox(r_left=30)
@@ -172,6 +186,7 @@ class Goblin(Enemy):
                     case 7:
                         self.states.dealing_damage = False
                         self._toggle_atk_hb_border()
+                        
             case "take-hit":
                 match frame:
                     case 1:
@@ -185,6 +200,7 @@ class Goblin(Enemy):
             and self.target.type == PlayerType.HERO_KNIGHT
         ):
             self._play_sfx(sfx.impacts.shield_block_shortsword)
+        self._update_health_bar()
     
     def _on_animation_finish(self) -> None:
         state = self.current_anim_state
@@ -192,7 +208,7 @@ class Goblin(Enemy):
         if state == "death":
             self.velocity.dx = 0
         
-        if state == "revive":
+        elif state == "revive":
             self.states.is_reviving = False
             self.states.dead = False
             self.states.revivable = False
@@ -291,32 +307,52 @@ class Goblin(Enemy):
                 self.states.is_moving = False
 
     def _decide_next_move(self):
-        """Simple State Machine logic."""
+        """Squad-based AI logic."""
         if not self.target or self.target.states.dead:
             self.current_ai_goal = "idle"
             return
 
-        dist = self._get_center_point(self.target) - self._get_center_point(self)
+        dist = self.target._get_center_point() - self._get_center_point()
         abs_dist = abs(dist)
         
-        # Melee Range -> Slice and Dice
-        if abs_dist <= self.melee_range:
-            self.current_ai_goal = "attack"
-            self._flip_sprite_x(1 if dist > 0 else -1)
+        # [NEW] Ask the Manager for a role
+        am_i_melee = True # Default to True if no manager exists
+        if self.enemy_manager:
+            am_i_melee = self.enemy_manager.request_melee_role(self)
         
-        # Ranged Range -> Throw Bomb
-        elif abs_dist <= self.type.value.ranged_range and self.attack_cooldown_timer <= 0:
-            self.current_ai_goal = "attack_ranged"
-            self._flip_sprite_x(1 if dist > 0 else -1)
-        
-        # Too Far - Chase
+        # --- EXECUTE ROLE ---
+        if am_i_melee:
+            # (Standard Aggressive Behavior)
+            if abs_dist <= self.type.value.melee_range:
+                self.current_ai_goal = "attack"
+                self._flip_sprite_x(1 if dist > 0 else -1)
+            else:
+                self.current_ai_goal = "chase"
+                direction = 1 if dist > 0 else -1
+                self.target_dx = direction * self.stats.movement_speed
+                
         else:
-            self.current_ai_goal = "chase"
-            direction = 1 if dist > 0 else -1
-            self.target_dx = direction * self.stats.movement_speed
+            # (Tactical Ranged Behavior)
+            # 1. Back off if too close
+            if abs_dist < (self.type.value.ranged_range - 50):
+                self.current_ai_goal = "chase"
+                direction = -1 if dist > 0 else 1 # Move away
+                self.target_dx = direction * self.stats.movement_speed
+                self._flip_sprite_x(-direction) # Face player while retreating
+                
+            # 2. Throw bomb if at good distance
+            elif abs_dist <= (self.type.value.ranged_range + 50):
+                if self.attack_cooldown_timer <= 0:
+                    self.current_ai_goal = "attack_ranged"
+                    self._flip_sprite_x(1 if dist > 0 else -1)
+                else:
+                    self.current_ai_goal = "idle" 
             
-            if self.target.states.dealing_damage:
-                self.target_dx *= -1
+            # 3. Close distance if too far
+            else:
+                self.current_ai_goal = "chase"
+                direction = 1 if dist > 0 else -1
+                self.target_dx = direction * self.stats.movement_speed
                 
     async def spawn_sequence(self) -> None:
         self._spawning_in = True
@@ -326,14 +362,14 @@ class Goblin(Enemy):
         self._spawning_in = False
     
     def attack_ranged(self) -> None:
-        """Testing for projectile: 'Small Bomb'."""
+        """Shoots out a projectile: 'Small Bomb'."""
         if self._get_facing_direction() < 0:
             offset = -self.stack.width / 2
         else:
             offset = 0
         super().attack_ranged(
-            start_x=self.stack.left + self.stack.width / 2 + offset,
-            start_y=self.stack.bottom + self.stack.height / 2,
+            start_x=self.stack.left + (self.stack.width / 2) + offset,
+            start_y=self.stack.bottom + (self.stack.height / 2),
             stats=PresetProjectileStats.SmallBomb,
             src="images/enemies/goblin/projectile_0.png",
             sfx_upon_spawn=(sfx.explosions.sparkler_ignite, 0.5)

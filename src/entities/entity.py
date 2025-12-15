@@ -42,7 +42,8 @@ class Entity(DamageHitbox):
         restrict_movement: bool = False,
         show_stamina_bar: bool = False,
         show_dash_cooldown: bool = False,
-        verbose_stamina: bool = False
+        verbose_stamina: bool = False,
+        enable_flight: bool = False,
     ) -> None:
         """The main setup for all entities."""
         # Setup the DamageHitbox class
@@ -52,19 +53,28 @@ class Entity(DamageHitbox):
         self.sprite = sprite
         self.name = name
         self.page = page
+        
         self.audio_manager = audio_manager
-        self.debug = debug
         self.projectile_manager = projectile_manager
+        self.debug = debug
+        
         self.faction: Factions = faction
         self._entity_list = entity_list if entity_list is not None else []
-        self.stats: EntityStats = stats if stats else EntityStats()
         self._show_hud: bool
+        
         self.simple_revive = simple_revive
+        
         self.show_stamina_bar = show_stamina_bar
         self.show_dash_cooldown = show_dash_cooldown
         self.verbose_stamina = verbose_stamina
+        
         self._handler_str: str = self.name
-        self.states: EntityStates = EntityStates(restrict_movement=restrict_movement)
+        self.stats: EntityStats = stats if stats else EntityStats()
+        self.states: EntityStates = EntityStates(
+            restrict_movement=restrict_movement,
+            enable_flight=enable_flight
+        )
+        
         if not hasattr(self, "ground_level"):
             self._ground_level: int = 0
         self.velocity: Velocity = Velocity()
@@ -106,7 +116,7 @@ class Entity(DamageHitbox):
         # Animation State
         self.anim_timer: float = 0.0
         self.current_frame: int = 0
-        self.current_anim_state: str = "idle" # "idle", "run", "fall", etc.
+        self.current_anim_state: str | Literal["idle", "run", "fall", "attack"] = "idle"
         
         self.sfx_registry = SFXRegistry()
         
@@ -518,9 +528,9 @@ class Entity(DamageHitbox):
             return True
         return False
     
-    def _get_center_point(self, entity: Self) -> int:
-        """Returns the center point aligned at the bottom of the entity."""
-        return entity.stack.left + (entity.stack.width / 2)
+    def _get_center_point(self) -> int:
+        """Returns the center point aligned at the bottom self."""
+        return self.stack.left + (self.stack.width / 2)
     
     # * === OTHER HELPERS ===
     def _full_heal(self) -> None:
@@ -573,9 +583,9 @@ class Entity(DamageHitbox):
         if self.states.dead: return
         self.velocity.dx = 0
         knockback: int = 0
-        if entity._get_center_point(entity) > self._get_center_point(self):
+        if entity._get_center_point() > self._get_center_point():
             knockback = -entity.stats.attack_knockback * self.stats.knockback_resistance
-        elif entity._get_center_point(entity) < self._get_center_point(self):
+        elif entity._get_center_point() < self._get_center_point():
             knockback = entity.stats.attack_knockback * self.stats.knockback_resistance
         self.velocity.dx += knockback
         self.velocity.dy += abs(knockback) * 1.5
