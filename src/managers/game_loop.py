@@ -2,8 +2,11 @@ import asyncio, time
 import flet as ft
 
 from entities.entity import Entity
+
 from managers.physics import PhysicsManager
 from managers.projectiles import ProjectileManager
+from managers.enemy_manager import EnemyManager
+
 from audio.audio_manager import AudioManager
 
 class GameLoop:
@@ -29,6 +32,7 @@ class GameLoop:
         self.projectile_manager = ProjectileManager(
             page, audio_manager, entity_list, ground_level, debug=self.debug
         )
+        self.enemy_manager = EnemyManager()
     
     @property
     def is_paused(self) -> bool:

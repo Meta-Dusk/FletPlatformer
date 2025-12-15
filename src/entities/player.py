@@ -277,9 +277,9 @@ class Player(Entity):
             # Get Enemy's Body Rect
             enemy_rect = enemy._get_self_global_rect()
             
-            if not check_collision(*player_weapon_rect, *enemy_rect): return
-            self._debug_msg(f"Hit enemy: {enemy.name}", debug_handler=self._debug_logs.attack)
-            self._handle_hit_logic(enemy)
+            if check_collision(*player_weapon_rect, *enemy_rect):
+                self._debug_msg(f"Hit enemy: {enemy.name}", debug_handler=self._debug_logs.attack)
+                self._handle_hit_logic(enemy)
         
         # ? --- PROJECTILE PARRY DETECTION ---
         # We access the list directly from the manager
@@ -292,10 +292,10 @@ class Player(Entity):
             # 2. Collision Check
             projectile_rect = projectile.get_rect() # (left, bottom, w, h)
             
-            if not check_collision(*player_weapon_rect, *projectile_rect): return
-            # 3. Trigger Parry
-            if not projectile.parry(new_owner=self): return
-            self._play_sfx(sfx.impacts.shield_block_shortsword, volume=0.8)
+            if check_collision(*player_weapon_rect, *projectile_rect):
+                # 3. Trigger Parry
+                if projectile.parry(new_owner=self):
+                    self._play_sfx(sfx.impacts.shield_block_shortsword, volume=0.8)
         
     # * === TICK UPDATES ===
     def tick_logic(self, dt: float) -> None:

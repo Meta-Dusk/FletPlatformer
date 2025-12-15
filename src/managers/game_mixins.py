@@ -27,13 +27,19 @@ class ProjectileManagerMimic:
         self.projectile_layer = projectile_layer
         self.spawn_projectile = spawn_projectile
 
+class EnemyManagerMimic:
+    def __init__(self):
+        pass
+
 class GameLoopMimic:
     """Temporary class for mimicking the `GameLoop`."""
     def __init__(
-        self, projectile_manager: ProjectileManagerMimic
+        self, projectile_manager: ProjectileManagerMimic,
+        enemy_manager: EnemyManagerMimic
     ):
         """**OPTIONAL** init. You don't need to call this inside the `GameManager`."""
         self.projectile_manager = projectile_manager
+        self.enemy_manager = enemy_manager
 
 class GameManagerMimic:
     """Temporary class for mimicking the `GameManager`."""
@@ -47,7 +53,7 @@ class GameManagerMimic:
         background_stack: ft.Stack,
         foreground_stack: ft.Stack,
         stage: ft.Stack,
-        game_loop: GameLoopMimic
+        game_loop: GameLoopMimic,
     ) -> None:
         """**OPTIONAL** init. You don't need to call this inside the `GameManager`."""
         self.show_borders = show_borders
@@ -117,13 +123,14 @@ class NewGoblin(Goblin, GameManagerMixin):
     """
     def __init__(
         self, game_manager: GameManagerMimic, name: str = None,
-        *, center_spawn: bool = True, debug = False
+        *, center_spawn: bool = True, debug = False, enemy_manager = None
     ) -> None:
         """Automatically gets spawned into the scene post-init."""
         self._configure_from_manager(game_manager)
         super().__init__(
             target=game_manager.player,
             name=name,
+            enemy_manager=enemy_manager,
             **self._get_base_kwargs(debug)
         )
         self._spawn_into_scene(center_spawn=center_spawn)
@@ -175,7 +182,10 @@ def NewEnemy(
     """
     match type:
         case EnemyType.GOBLIN:
-            return NewGoblin(game_manager, debug=debug, center_spawn=center_spawn)
+            return NewGoblin(
+                game_manager, debug=debug, center_spawn=center_spawn,
+                enemy_manager=game_manager.game_loop.enemy_manager
+            )
             
         case _:
             raise NotImplementedError(f"Enemy type {type.name} is not implemented!")

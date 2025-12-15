@@ -24,7 +24,8 @@ class Goblin(Enemy):
         projectile_manager = None,
         *,
         debug: bool = False,
-        simple_revive: bool = True
+        simple_revive: bool = True,
+        enemy_manager = None,
     ) -> None:
         if name is None: name = self.generate_rnd_name()
         
@@ -45,7 +46,7 @@ class Goblin(Enemy):
             type=EnemyType.GOBLIN, page=page, audio_manager=audio_manager,
             target=target, name=name, entity_list=entity_list, debug=debug,
             stats=custom_stats, simple_revive=simple_revive,
-            projectile_manager=projectile_manager
+            projectile_manager=projectile_manager, enemy_manager=enemy_manager
         )
         
         self.animations = {
@@ -185,6 +186,7 @@ class Goblin(Enemy):
             and self.target.type == PlayerType.HERO_KNIGHT
         ):
             self._play_sfx(sfx.impacts.shield_block_shortsword)
+        self._update_health_bar()
     
     def _on_animation_finish(self) -> None:
         state = self.current_anim_state
@@ -291,7 +293,7 @@ class Goblin(Enemy):
                 self.states.is_moving = False
 
     def _decide_next_move(self):
-        """Simple State Machine logic."""
+        """Squad-based AI logic."""
         if not self.target or self.target.states.dead:
             self.current_ai_goal = "idle"
             return
@@ -299,24 +301,44 @@ class Goblin(Enemy):
         dist = self._get_center_point(self.target) - self._get_center_point(self)
         abs_dist = abs(dist)
         
-        # Melee Range -> Slice and Dice
-        if abs_dist <= self.melee_range:
-            self.current_ai_goal = "attack"
-            self._flip_sprite_x(1 if dist > 0 else -1)
+        # [NEW] Ask the Manager for a role
+        am_i_melee = True # Default to True if no manager exists
+        if self.enemy_manager:
+            am_i_melee = self.enemy_manager.request_melee_role(self)
         
-        # Ranged Range -> Throw Bomb
-        elif abs_dist <= self.type.value.ranged_range and self.attack_cooldown_timer <= 0:
-            self.current_ai_goal = "attack_ranged"
-            self._flip_sprite_x(1 if dist > 0 else -1)
-        
-        # Too Far - Chase
+        # --- EXECUTE ROLE ---
+        if am_i_melee:
+            # (Standard Aggressive Behavior)
+            if abs_dist <= self.type.value.melee_range:
+                self.current_ai_goal = "attack"
+                self._flip_sprite_x(1 if dist > 0 else -1)
+            else:
+                self.current_ai_goal = "chase"
+                direction = 1 if dist > 0 else -1
+                self.target_dx = direction * self.stats.movement_speed
+                
         else:
-            self.current_ai_goal = "chase"
-            direction = 1 if dist > 0 else -1
-            self.target_dx = direction * self.stats.movement_speed
+            # (Tactical Ranged Behavior)
+            # 1. Back off if too close
+            if abs_dist < (self.type.value.ranged_range - 50):
+                self.current_ai_goal = "chase"
+                direction = -1 if dist > 0 else 1 # Move away
+                self.target_dx = direction * self.stats.movement_speed
+                self._flip_sprite_x(-direction) # Face player while retreating
+                
+            # 2. Throw bomb if at good distance
+            elif abs_dist <= (self.type.value.ranged_range + 50):
+                if self.attack_cooldown_timer <= 0:
+                    self.current_ai_goal = "attack_ranged"
+                    self._flip_sprite_x(1 if dist > 0 else -1)
+                else:
+                    self.current_ai_goal = "idle" 
             
-            if self.target.states.dealing_damage:
-                self.target_dx *= -1
+            # 3. Close distance if too far
+            else:
+                self.current_ai_goal = "chase"
+                direction = 1 if dist > 0 else -1
+                self.target_dx = direction * self.stats.movement_speed
                 
     async def spawn_sequence(self) -> None:
         self._spawning_in = True

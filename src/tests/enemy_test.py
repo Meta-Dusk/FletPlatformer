@@ -99,9 +99,12 @@ async def test(page: ft.Page) -> None:
         "run": AnimConfig(frame_count=8, frame_duration=0.075),
     }
     
-    goblin = Goblin(page, audio_manager, dummy_player, entity_list=entity_list)
+    goblin = Goblin(
+        page, audio_manager, dummy_player, entity_list=entity_list,
+        projectile_manager=game_loop.projectile_manager,
+        enemy_manager=game_loop.enemy_manager
+    )
     goblin.toggle_show_border(show_border=True, show_atk_hb=True)
-    goblin.projectile_manager = game_loop.projectile_manager
     
     entity_list.extend([dummy_player, goblin])
     
