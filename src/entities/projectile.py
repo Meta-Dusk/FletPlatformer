@@ -31,6 +31,7 @@ class ProjectileStats:
     bounciness: ft.Number = 0.0
     friction: ft.Number = 0.0
     stop_on_explode: bool = False
+    is_parryable: bool = False
     
     # Explosion / Damage Logic
     impact_damage: bool = True
@@ -70,6 +71,7 @@ class PresetProjectileStats:
         bounciness=0.6,
         friction=10.0,
         stop_on_explode=True,
+        is_parryable=True,
         
         # Logic
         impact_damage=False,
@@ -134,7 +136,8 @@ class Projectile(ft.Container):
             src=src, fit=ft.BoxFit.CONTAIN,
             filter_quality=ft.FilterQuality.NONE,
             gapless_playback=True, scale=_scale,
-            offset=stats.offset
+            offset=stats.offset,
+            color_blend_mode=ft.BlendMode.SRC_A_TOP
         )
         
         super().__init__(
@@ -230,3 +233,35 @@ class Projectile(ft.Container):
             self.left, self.bottom,
             self.stats.width, self.stats.height
         )
+    
+    def parry(self, new_owner: "Entity") -> bool:
+        """
+        Reflects the projectile back at the shooter.
+        Returns `True` if successful.
+        """
+        # 1. Validation
+        if (
+            not self.stats.is_parryable
+            or self.is_exploding
+            or self.is_dead
+        ): 
+            return False
+        
+        # 2. Swap Ownership (Now it hurts the enemy!)
+        self.owner = new_owner
+        
+        # 3. Reverse & Boost Physics
+        # Flip X direction and add speed to make it feel powerful
+        self.dx *= -1.5
+        
+        # Pop it up slightly in the air if it was falling
+        self.dy = abs(self.dy) + 5.0
+        
+        # 4. Reset Damage Flags (For grenades/piercing)
+        self.has_dealt_damage = False
+        
+        # 5. Visual Feedback (Optional: Reset tint or flash)
+        self.sprite.color = ft.Colors.with_opacity(0.5, ft.Colors.WHITE)
+        try_update(self.content)
+        
+        return True

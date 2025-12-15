@@ -24,7 +24,7 @@ class EntityStates:
     restrict_movement: bool = False
     
     # Attacking
-    attack_phase: Number = 0
+    attack_phase: int = 0
     is_attacking: bool = False
     is_falling: bool = False
     dealing_damage: bool = False    

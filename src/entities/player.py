@@ -260,27 +260,43 @@ class Player(Entity):
         """Checks if the Player's active attack hitbox collides with any enemy."""
         if not self.states.dealing_damage or not self._entity_list: return
         
-        # ... (Get Active Hitbox logic) ...
-        hb_index = self.states.attack_phase - 1
-        active_hb = self._atk_hitboxes[hb_index]
+        # Get Active Hitbox
+        hb_index: int = self.states.attack_phase - 1
+        active_hb: ft.Container = self._atk_hitboxes[hb_index]
         
         # Player Weapon Global Coords
         w_left = self.stack.left + (active_hb.left or 0)
         w_bottom = self.stack.bottom + (active_hb.bottom or 0)
         
+        player_weapon_rect = (w_left, w_bottom, active_hb.width, active_hb.height)
+        
+        # ? --- ENEMY HIT DETECTION ---
         for enemy in self._entity_list:
             if enemy.faction == Factions.HUMAN or enemy.states.dead: continue
             
             # Get Enemy's Body Rect
-            e_left, e_bottom, e_w, e_h = enemy._get_self_global_rect()
+            enemy_rect = enemy._get_self_global_rect()
             
-            if check_collision(
-                r1_left=w_left, r1_bottom=w_bottom, r1_w=active_hb.width, r1_h=active_hb.height, # Player Weapon
-                r2_left=e_left, r2_bottom=e_bottom, r2_w=e_w, r2_h=e_h # Enemy Body
-            ):
-                self._debug_msg(f"Hit enemy: {enemy.name}", debug_handler=self._debug_logs.attack)
-                self._handle_hit_logic(enemy)
-    
+            if not check_collision(*player_weapon_rect, *enemy_rect): return
+            self._debug_msg(f"Hit enemy: {enemy.name}", debug_handler=self._debug_logs.attack)
+            self._handle_hit_logic(enemy)
+        
+        # ? --- PROJECTILE PARRY DETECTION ---
+        # We access the list directly from the manager
+        # Iterate a copy [:] so we don't crash if projectiles get removed
+        for projectile in self.projectile_manager.active_projectiles[:]:
+            
+            # 1. Don't parry your own bullets
+            if projectile.owner == self: continue
+            
+            # 2. Collision Check
+            projectile_rect = projectile.get_rect() # (left, bottom, w, h)
+            
+            if not check_collision(*player_weapon_rect, *projectile_rect): return
+            # 3. Trigger Parry
+            if not projectile.parry(new_owner=self): return
+            self._play_sfx(sfx.impacts.shield_block_shortsword, volume=0.8)
+        
     # * === TICK UPDATES ===
     def tick_logic(self, dt: float) -> None:
         """Runs every frame to check inputs, and other logic."""
