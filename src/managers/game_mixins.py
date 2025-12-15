@@ -1,8 +1,10 @@
 import flet as ft
-from typing import Any, Callable, Literal, TYPE_CHECKING
+from typing import Any, Callable, Literal
 
+from entities.entity import Entity
 from entities.enemy import EnemyType, Enemy
 from entities.goblin import Goblin
+from entities.flying_eye import FlyingEye
 from entities.player import PlayerType, Player
 from entities.hero_knight import HeroKnight
 from entities.projectile import ProjectileStats
@@ -11,9 +13,6 @@ from audio.audio_manager import global_audio_manager
 from audio.sfx_data import SFXLibrary
 
 from utilities.keyboard_manager import held_keys
-
-if TYPE_CHECKING:
-    from entities.entity import Entity
 
 SoundEffect = tuple[SFXLibrary, float]
 Direction = Literal[-1, 1]
@@ -120,10 +119,23 @@ class GameManagerMixin:
 
 # * --- WRAPPED ENTITIES ---
 class NewGoblin(Goblin, GameManagerMixin):
-    """
-    Wrapped `Goblin` class to be used in the `GameMaker` class.
-    Automatically spawns into the scene once called.
-    """
+    """Wrapped `Goblin` class to be used in the `GameMaker` class."""
+    def __init__(
+        self, game_manager: GameManagerMimic, name: str = None,
+        *, center_spawn: bool = True, debug = False, enemy_manager = None
+    ) -> None:
+        """Automatically gets spawned into the scene post-init."""
+        self._configure_from_manager(game_manager)
+        super().__init__(
+            target=game_manager.player,
+            name=name,
+            enemy_manager=enemy_manager,
+            **self._get_base_kwargs(debug)
+        )
+        self._spawn_into_scene(center_spawn=center_spawn)
+
+class NewFlyingEye(FlyingEye, GameManagerMixin):
+    """Wrapped `FlyingEye` class to be used in the `GameMaker` class."""
     def __init__(
         self, game_manager: GameManagerMimic, name: str = None,
         *, center_spawn: bool = True, debug = False, enemy_manager = None
@@ -139,10 +151,7 @@ class NewGoblin(Goblin, GameManagerMixin):
         self._spawn_into_scene(center_spawn=center_spawn)
 
 class NewHeroKnight(HeroKnight, GameManagerMixin):
-    """
-    Wrapped `HeroKnight` class to be used in the `GameMaker` class.
-    Automatically spawns into the scene once called.
-    """
+    """Wrapped `HeroKnight` class to be used in the `GameMaker` class."""
     def __init__(self, game_manager: GameManagerMimic, *, debug = False) -> None:
         """Automatically gets spawned into the scene post-init."""
         self._configure_from_manager(game_manager)
@@ -186,9 +195,15 @@ def NewEnemy(
     match type:
         case EnemyType.GOBLIN:
             return NewGoblin(
-                game_manager, debug=debug, center_spawn=center_spawn,
+                game_manager, center_spawn=center_spawn, debug=debug,
                 enemy_manager=game_manager.game_loop.enemy_manager
             )
-            
+        
+        case EnemyType.FLYING_EYE:
+            return NewFlyingEye(
+                game_manager, center_spawn=center_spawn, debug=debug,
+                enemy_manager=game_manager.game_loop.enemy_manager
+            )
+        
         case _:
             raise NotImplementedError(f"Enemy type {type.name} is not implemented!")

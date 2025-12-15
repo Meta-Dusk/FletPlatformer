@@ -396,7 +396,8 @@ entity_stack: {len(self.entity_stack.controls)}
     # * === GAME EVENTS ===
     def summon_enemy(
         self, enemy_type: EnemyType = None,
-        spawn_amount: int = None, center_spawn: bool = False
+        spawn_amount: int = 1, center_spawn: bool = False, *,
+        spawn_range: tuple[int, int] = None
     ) -> list[Entity]:
         """Summons an enemy and returns the list of created instances."""
         
@@ -404,9 +405,11 @@ entity_stack: {len(self.entity_stack.controls)}
             self._debug_msg("Provide an enemy type to summon.")
             return []
             
-        if spawn_amount is None: spawn_amount = random.randint(1, 5)
-        elif spawn_amount == 0: return []
+        if spawn_amount == 0: return []
+        elif spawn_amount < 0: raise ValueError("'spawn_amount' cannot be negative!")
         else: spawn_amount = abs(spawn_amount)
+        
+        if spawn_range: spawn_amount = random.randrange(*spawn_range)
         
         created_entities = []
         
@@ -414,12 +417,10 @@ entity_stack: {len(self.entity_stack.controls)}
         
         for _ in range(spawn_amount):
             new_entity = None
-            match enemy_type:
-                # We assign to a variable to append it to our list
-                case EnemyType.GOBLIN:
-                    new_entity = NewEnemy(game_manager=self, type=enemy_type, center_spawn=center_spawn)
-                case _: 
-                    raise NotImplementedError("Other enemy types are not yet implemented!")
+            if enemy_type in EnemyType:
+                new_entity = NewEnemy(game_manager=self, type=enemy_type, center_spawn=center_spawn)
+            else:
+                raise NotImplementedError("Other enemy types are not yet implemented!")
             
             if new_entity: created_entities.append(new_entity)
                 
@@ -439,11 +440,13 @@ entity_stack: {len(self.entity_stack.controls)}
     def _start_stage_panning(self) -> None:
         """Starts the stage panning handler's loop."""
         async def run_pan():
-            def summon_gobby(): self.summon_enemy(EnemyType.GOBLIN)
+            def summon_enemies():
+                self.summon_enemy(EnemyType.GOBLIN, spawn_range=(1, 5))
+                self.summon_enemy(EnemyType.FLYING_EYE, spawn_range=(0, 2))
             await stage_panning_loop(
                 game_manager=self,
                 projectile_stack=self.projectile_stack,
-                post_callback=summon_gobby
+                post_callback=summon_enemies
             )
         self.running_tasks.append(self.page.run_task(run_pan))
     

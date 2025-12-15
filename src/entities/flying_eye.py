@@ -4,7 +4,7 @@ from typing import Literal
 
 from entities.enemy import Enemy, EnemyType, get_inversely_scaling_stats
 from entities.entity import Entity, EntityStats, AnimConfig
-from entities.projectile import ProjectileStats
+from entities.projectile import PresetProjectileStats
 from utilities.physics import Velocity
 from utilities.components import try_update
 
@@ -23,10 +23,10 @@ class FlyingEye(Enemy):
         name: str = None,
         entity_list: list[Entity] = None,
         projectile_manager = None,
-        enemy_manager = None,
         *,
         debug: bool = False,
-        simple_revive: bool = True
+        simple_revive: bool = True,
+        enemy_manager = None,
     ) -> None:
         if name is None: name = self.generate_rnd_name()
         
@@ -238,17 +238,7 @@ class FlyingEye(Enemy):
         """Testing for projectile: 'Banshee Blast'."""
         angle = self.attack_angle
         
-        proj_stats = ProjectileStats(
-            velocity=Velocity(dx=10.0, dy=10.0),
-            gravity=0,
-            lifespan=3.0,
-            damage=15,
-            impact_damage=True,
-            is_parryable=True,
-            width=48, height=48,
-            fly_anim=AnimConfig(3, 0.1),
-            explode_anim=AnimConfig(8, 0.1, start_frame=3)
-        )
+        proj_stats = PresetProjectileStats.BansheeBlast
         
         # Spawn
         super().attack_ranged(
@@ -256,7 +246,7 @@ class FlyingEye(Enemy):
             start_y=self.stack.bottom + (self.stack.height / 2) - (proj_stats.height / 2) - 20,
             stats=proj_stats,
             src="images/enemies/flying_eye/projectile_0.png",
-            sfx_upon_spawn=(sfx.explosions.sparkler_ignite, 0.5)
+            sfx_upon_spawn=((sfx.whoosh.swish_blast_1, 0.5))
         )
         # Override velocity with precise angle
         # Access the last spawned projectile (a bit hacky but works)

@@ -222,12 +222,20 @@ class ProjectileManager:
                 
     def _should_skip_target(self, proj: Projectile, entity: Entity) -> bool:
         """Common filter for Friendly Fire and Dead entities."""
+        # 1. Mandatory Skips (Self / Dead / Invincible)
         if (
-            entity == proj.owner
-            or entity.states.dead
-            or entity.faction == proj.owner.faction
-            or not proj.stats.friendly_fire
-        ): return True
+            entity == proj.owner 
+            or entity.states.dead 
+            or entity.states.invincible
+        ): 
+            return True
+        
+        # 2. Friendly Fire Check
+        # ONLY skip same-faction entities if friendly_fire is turned OFF.
+        if not proj.stats.friendly_fire:
+            if entity.faction == proj.owner.faction:
+                return True
+                
         return False
     
     def _visualize_explosion(

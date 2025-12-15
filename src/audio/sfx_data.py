@@ -79,6 +79,8 @@ class ImpactsSFX:
 class WhooshSFX:
     cape = sound_path("whoosh_cape")
     motion = sound_path("whoosh_motion")
+    swish_blast_1 = sound_path("swish_blast_1")
+    swish_blast_2 = sound_path("swish_blast_2")
 
 @dataclass
 class ButtonSFX:

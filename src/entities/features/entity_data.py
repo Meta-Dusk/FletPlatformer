@@ -127,7 +127,7 @@ class SFXRegistry:
         """Internal storage: (`state`, `frame`) -> `SFXEvent`"""
         self._data: dict[tuple[AnimationState, int], list[SFXEvent]] = defaultdict(list)
         
-    def add(self, state: AnimationState, sfx: SFXLibrary, volume: float = 1.0, *, frame: int):
+    def add(self, state: AnimationState, sfx: SFXLibrary, volume: float = 1.0, *, frame: int = 0):
         """Registers an SFX event. Refer to the type hints for `state`."""
         self._data[(state, frame)].append(SFXEvent(sfx, volume))
         
