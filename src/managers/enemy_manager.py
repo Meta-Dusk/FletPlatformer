@@ -39,7 +39,7 @@ class EnemyManager:
 
         # 2. Sort by distance to their target (Player)
         # We use the helper method _get_center_point which exists on the Entity
-        living.sort(key=lambda g: abs(g._get_center_point(g.target) - g._get_center_point(g)) if g.target else float('inf'))
+        living.sort(key=lambda g: abs(g.target._get_center_point() - g._get_center_point()) if g.target else float('inf'))
 
         # 3. Check Rank
         try:

@@ -86,13 +86,10 @@ async def stage_panning_loop(
             entity.states.disable_movement = True
             entity.states.invincible = True
             entity.states.is_moving = False
-            
-            # INJECT Animation Property
-            # We add this temporarily so Flet interpolates the position change smoothly
             entity.stack.animate_position = ft.Animation(PAN_ANIM_DURATION, ft.AnimationCurve.EASE_IN_OUT)
+            try_update(entity.stack)
         
         all_stacks = [e.stack for e in game_manager.entity_list]
-        if all_stacks: try_update(*all_stacks)
         
         await asyncio.sleep(0.05)
         
@@ -115,9 +112,6 @@ async def stage_panning_loop(
         for entity in game_manager.entity_list:
             entity.states.disable_movement = False
             entity.states.invincible = False
-            
-            # 5. REMOVE Animation Property
-            # This returns control to the PhysicsManager for the next frame
             entity.stack.animate_position = None
         
         if all_stacks: try_update(*all_stacks)

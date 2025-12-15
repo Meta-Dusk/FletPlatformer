@@ -41,6 +41,7 @@ class EntityStates:
     disable_movement: bool = False
     dead: bool = False
     taking_damage: bool = False
+    enable_flight: bool = False
 
 @dataclass
 class EntityStats:

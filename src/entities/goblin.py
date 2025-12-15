@@ -4,7 +4,6 @@ from typing import Literal
 
 from entities.enemy import Enemy, EnemyType, get_inversely_scaling_stats
 from entities.entity import Entity, EntityStats, AnimConfig
-from entities.features.entity_data import SFXRegistry
 from entities.player import PlayerType, Player
 from entities.projectile import PresetProjectileStats
 
@@ -33,7 +32,7 @@ class Goblin(Enemy):
         min_mv_speed = 2.8
         rnd_health, rnd_mv_speed = get_inversely_scaling_stats(rnd_health_range, min_mv_speed)
         
-        if name in {"Gerald", "Rin"}:
+        if name in {"Gnar", "Muck", "Shank", "Gerald", "Steve"}:
             rnd_health *= 2.0
             rnd_mv_speed *= 1.5
             
@@ -59,7 +58,6 @@ class Goblin(Enemy):
             "attack-3": AnimConfig(frame_count=12, frame_duration=self.stats.attack_frame_delay, loop=False),
         }
         
-        self.sfx_registry = SFXRegistry()
         MV_VOLUME = 0.2
         self.sfx_registry.add("run", sfx.footsteps.footstep_grass_1, MV_VOLUME, frame=2)
         self.sfx_registry.add("run", sfx.footsteps.footstep_grass_2, MV_VOLUME, frame=5)
@@ -70,7 +68,10 @@ class Goblin(Enemy):
         self.sfx_registry.add("death", sfx.impacts.flesh_impact_2, frame=0)
         self.sfx_registry.add("revive", sfx.magic.strike, frame=3)
         
-        self._make_atk_hitbox(p1_r_left=-15, p1_width=180, p1_height=100, p2_r_left=70, p2_width=140, p2_height=80)
+        self._make_atk_hitbox(
+            p1_r_left=-15, p1_width=180, p1_height=100,
+            p2_r_left=70, p2_width=140, p2_height=80
+        )
         self._make_self_hitbox(width=70, height=75, r_left=40)
         
         self.ai_timer: float = 0.0
@@ -87,10 +88,21 @@ class Goblin(Enemy):
         self._spawning_in: bool = True
 
     def generate_rnd_name(self) -> str:
-        names = [
-            "Gobby", "Gibby", "Geeb", "Goob", "Gubby", "Gebby", "Gub", "Gerald", "Gibby", "Gib",
-            "Gob", "Gobber", "Gob Lin", "Gob Gob", "Geb Geb", "Gub Gub", "Gib Gib", "Gibba", "Gibber",
-            "Gob Rin", "Gobrin", "Rin"
+        names = [ # Total: 37
+            # The "Classic" Goblin Sounds (Guttural)
+            "Gnar", "Krug", "Zog", "Rakk", "Vex", "Snark", "Grit", "Brog", 
+            
+            # The "Scrappy/Gross" Ones
+            "Scab", "Grub", "Rot", "Snot", "Muck", "Sludge", "Wart", "Fungus",
+            
+            # The "Sneaky" Ones
+            "Snitch", "Shank", "Swipe", "Klepto", "Skulk", "Rat", "Weasel",
+            
+            # The "Silly/Punny" Ones
+            "Boblin", "Gnob", "Hob", "Nob", "Gobby", "Goob", "Gobber",
+            
+            # The "Suspiciously Normal" Ones (Always funny for monsters)
+            "Gerald", "Kevin", "Steve", "Gary", "Dave", "Frank", "Harold"
         ]
         return random.choice(names)
     
@@ -161,6 +173,7 @@ class Goblin(Enemy):
                     case 7:
                         self.states.dealing_damage = False
                         self._toggle_atk_hb_border()
+                        
             case "attack-2":
                 match frame:
                     case 0: self._modify_self_hitbox(r_left=30)
@@ -173,6 +186,7 @@ class Goblin(Enemy):
                     case 7:
                         self.states.dealing_damage = False
                         self._toggle_atk_hb_border()
+                        
             case "take-hit":
                 match frame:
                     case 1:
@@ -194,7 +208,7 @@ class Goblin(Enemy):
         if state == "death":
             self.velocity.dx = 0
         
-        if state == "revive":
+        elif state == "revive":
             self.states.is_reviving = False
             self.states.dead = False
             self.states.revivable = False
@@ -298,7 +312,7 @@ class Goblin(Enemy):
             self.current_ai_goal = "idle"
             return
 
-        dist = self._get_center_point(self.target) - self._get_center_point(self)
+        dist = self.target._get_center_point() - self._get_center_point()
         abs_dist = abs(dist)
         
         # [NEW] Ask the Manager for a role
@@ -348,14 +362,14 @@ class Goblin(Enemy):
         self._spawning_in = False
     
     def attack_ranged(self) -> None:
-        """Testing for projectile: 'Small Bomb'."""
+        """Shoots out a projectile: 'Small Bomb'."""
         if self._get_facing_direction() < 0:
             offset = -self.stack.width / 2
         else:
             offset = 0
         super().attack_ranged(
-            start_x=self.stack.left + self.stack.width / 2 + offset,
-            start_y=self.stack.bottom + self.stack.height / 2,
+            start_x=self.stack.left + (self.stack.width / 2) + offset,
+            start_y=self.stack.bottom + (self.stack.height / 2),
             stats=PresetProjectileStats.SmallBomb,
             src="images/enemies/goblin/projectile_0.png",
             sfx_upon_spawn=(sfx.explosions.sparkler_ignite, 0.5)

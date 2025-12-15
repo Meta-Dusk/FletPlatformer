@@ -1,7 +1,6 @@
 import flet as ft
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, TYPE_CHECKING
 
-from entities.entity import Entity
 from entities.enemy import EnemyType, Enemy
 from entities.goblin import Goblin
 from entities.player import PlayerType, Player
@@ -13,8 +12,12 @@ from audio.sfx_data import SFXLibrary
 
 from utilities.keyboard_manager import held_keys
 
+if TYPE_CHECKING:
+    from entities.entity import Entity
+
+SoundEffect = tuple[SFXLibrary, float]
 Direction = Literal[-1, 1]
-SpawnProjectileCallableType = Callable[[float, float, Direction, Entity, ProjectileStats, tuple[SFXLibrary, float]], None]
+SpawnProjectileCallableType = Callable[[float, float, Direction, Entity, ProjectileStats, SoundEffect], None]
 
 # * === TEMP CLASSES (MIMICS) ===
 class ProjectileManagerMimic:

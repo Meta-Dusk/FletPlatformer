@@ -1,6 +1,6 @@
 [project]
 name = "fushi-the-beckoning"
-version = "0.6.8"
+version = "0.6.9"
 description = "A Platformer Game Made with Flet"
 readme = "README.md"
 requires-python = ">=3.13"
