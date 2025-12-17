@@ -65,9 +65,9 @@ class Enemy(Entity):
         """The main setup for all enemy-type entities."""
         
         # ? Entity inherited class setup
-        self._enemy_name = type.name.lower()
+        _enemy_name = type.name.lower()
         _sprite = Sprite(
-            src=f"images/enemies/{self._enemy_name}/idle_0.png",
+            src=f"images/enemies/{_enemy_name}/idle_0.png",
             width=type.value.width, height=type.value.height
         )
         self.name = type.value.name if name is None else name

@@ -12,7 +12,8 @@ from audio.sfx_data import SFXLibrary
 
 sfx = SFXLibrary()
 
-class Goblin(Enemy):
+# TODO: Finish implementing the Mushroom
+class Mushroom(Enemy):
     def __init__(
         self,
         page: ft.Page = None,
@@ -28,21 +29,18 @@ class Goblin(Enemy):
     ) -> None:
         if name is None: name = self.generate_rnd_name()
         
-        rnd_health_range = (10, 20)
-        min_mv_speed = 2.8
+        rnd_health_range = (20, 30)
+        min_mv_speed = 2.0
         rnd_health, rnd_mv_speed = get_inversely_scaling_stats(rnd_health_range, min_mv_speed)
         
         if name in {"Gnar", "Muck", "Shank", "Gerald", "Steve"}:
             rnd_health *= 2.0
             rnd_mv_speed *= 1.5
             
-        custom_stats = EntityStats(
-            movement_speed=rnd_mv_speed, health=rnd_health, max_health=rnd_health,
-            stun_immune_bonus_armor=100
-        )
+        custom_stats = EntityStats(movement_speed=rnd_mv_speed, health=rnd_health, max_health=rnd_health)
         
         super().__init__(
-            type=EnemyType.GOBLIN, page=page, audio_manager=audio_manager,
+            type=EnemyType.MUSHROOM, page=page, audio_manager=audio_manager,
             target=target, name=name, entity_list=entity_list, debug=debug,
             stats=custom_stats, simple_revive=simple_revive,
             projectile_manager=projectile_manager, enemy_manager=enemy_manager
@@ -50,12 +48,12 @@ class Goblin(Enemy):
         
         self.animations = {
             "idle": AnimConfig(frame_count=4, frame_duration=0.1),
-            "run": AnimConfig(frame_count=7, frame_duration=0.1),
+            "run": AnimConfig(frame_count=8, frame_duration=0.1),
             "take-hit": AnimConfig(frame_count=4, frame_duration=0.1, loop=False),
             "death": AnimConfig(frame_count=4, frame_duration=0.1, loop=False),
             "attack-1": AnimConfig(frame_count=8, frame_duration=self.stats.attack_frame_delay, loop=False),
             "attack-2": AnimConfig(frame_count=8, frame_duration=self.stats.attack_frame_delay, loop=False),
-            "attack-3": AnimConfig(frame_count=12, frame_duration=self.stats.attack_frame_delay, loop=False),
+            "attack-3": AnimConfig(frame_count=11, frame_duration=self.stats.attack_frame_delay, loop=False),
         }
         
         MV_VOLUME = 0.2
@@ -305,17 +303,17 @@ class Goblin(Enemy):
                 self.states.is_moving = True
             else:
                 self.states.is_moving = False
-
+                
     def _decide_next_move(self):
         """Squad-based AI logic."""
         if not self.target or self.target.states.dead:
             self.current_ai_goal = "idle"
             return
-
+        
         dist = self.target._get_center_point() - self._get_center_point()
         abs_dist = abs(dist)
         
-        # Ask the Manager for a role
+        # [NEW] Ask the Manager for a role
         am_i_melee = True # Default to True if no manager exists
         if self.enemy_manager:
             am_i_melee = self.enemy_manager.request_melee_role(self)

@@ -96,6 +96,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
     @show_borders.setter
     def show_borders(self, enabled: bool) -> None:
         self._show_borders = enabled
+        self.game_loop.projectile_manager.debug = enabled
     
     @property
     def kill_count(self) -> int:
@@ -148,7 +149,6 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
             debug=self.show_borders # TODO: Fix 'show_borders' not working for projectiles
         )
         self.projectile_stack = self.game_loop.projectile_manager.projectile_layer
-        self.game_loop.start()
         
         # --- Event Handlers ---
         # self.page.on_keyboard_event = self._on_keyboard_event
@@ -288,9 +288,8 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
             case keyboard.Key.f11:
                 self.page.window.maximized = not self.page.window.maximized
         
+        self.page.update()        
         self.page.run_task(self.console.handle_keyboard, key_id)
-        
-        self.page.update()
                 
     async def _toggle_console(self):
         await self.console.toggle()
@@ -306,8 +305,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
             title="Key Binds Tutorial",
             content="""You've finished the tutorial!
 You can now go ahead an go beyond the starting area.
-Click outside this message to close it."""
-        )
+Click outside this message to close it.""")
         self.page.overlay.append(tutorial_dlg)
         self.page.update()
     
@@ -343,6 +341,7 @@ Click outside this message to close it."""
         
         audio_manager.play_music(music.loops.sketchbook.abstraction_2024_03_20_02)
         self.is_game_running = True
+        self.game_loop.start()
         self.start_tasks()
         self._update_ui_focus()
         self._debug_msg("Starting Game!")
@@ -359,6 +358,7 @@ Click outside this message to close it."""
     async def quit_to_menu(self, _: ft.ControlEvent) -> None:
         """Cleanup game and show menu"""
         self.is_game_running = False
+        self.game_loop.stop()
         
         self.game_layer.opacity = 0
         self.pause_menu.opacity = 0

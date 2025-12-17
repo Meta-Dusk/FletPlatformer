@@ -110,9 +110,6 @@ class MenuManager:
         
         # Handle Player Movement Locking
         if self.game_loop: self.game_loop.is_paused = not game_hud
-        # if self.player:
-        #     # Player can move ONLY if the game HUD is the active focus
-        #     self.player.states.disable_movement = not game_hud
     
     # * === MENU CALLBACKS ===
     async def open_settings(self, _: ft.ControlEvent) -> None:
