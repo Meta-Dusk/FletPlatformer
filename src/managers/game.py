@@ -5,7 +5,7 @@ from pynput import keyboard
 from audio.audio_manager import global_audio_manager as audio_manager
 from audio.music_data import MusicLibrary
 
-from components.menus import PauseMenu, SettingsMenu
+from components.menus import PauseMenu, SettingsMenu, MainMenu
 from components.displays import StatsDisplay
 from components.custom_switches import TextAndToggle
 from components.popups import SimpleDialog
@@ -21,7 +21,7 @@ from entities.enemy import EnemyType
 from entities.entity import Entity
 from entities.player import Player, PlayerType
 
-from bg_loops import light_mv_loop, stage_panning_loop
+from bg_loops import LightMovementLoop, StagePanningLoop
 from backgrounds import add_infinite_layer
 
 from managers.menu import MenuManager
@@ -54,6 +54,8 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         # Task Management
         self.running_tasks: list[asyncio.Task] = []
         self.last_input_time: float = 0.0
+        self.light_mv_loop = LightMovementLoop(self.background_stack)
+        self.stage_panning_loop = StagePanningLoop(self, self.projectile_stack, self.summon_enemies)
         
         # World Configuration
         self._ground_level: int = 30
@@ -68,7 +70,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         self.verbose_stamina: bool = False
         
         # Scenes
-        self.main_menu = None
+        self.main_menu: MainMenu = None
         self.pause_menu = PauseMenu(
             on_resume=self.toggle_pause,
             on_settings=self.open_settings,
@@ -96,6 +98,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
     @show_borders.setter
     def show_borders(self, enabled: bool) -> None:
         self._show_borders = enabled
+        self.game_loop.projectile_manager.debug = enabled
     
     @property
     def kill_count(self) -> int:
@@ -144,11 +147,10 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         kb_manager.on_press_callback = self._handle_input_press
         
         self.game_loop = GameLoop(
-            self.page, self.entity_list, audio_manager, ground_level=self.ground_level,
-            debug=self.show_borders # TODO: Fix 'show_borders' not working for projectiles
+            self.page, self.entity_list, audio_manager,
+            ground_level=self.ground_level, debug=self.show_borders
         )
         self.projectile_stack = self.game_loop.projectile_manager.projectile_layer
-        self.game_loop.start()
         
         # --- Event Handlers ---
         # self.page.on_keyboard_event = self._on_keyboard_event
@@ -194,6 +196,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         def inf_layer(stack: ft.Stack, index: int):
             add_infinite_layer(stack=stack, index=index, page=self.page)
         
+        self.background_stack.controls.clear()
         for i in range(1, 8): inf_layer(self.background_stack, i)
         inf_layer(self.background_stack, 9)
         inf_layer(self.foreground_stack, 8)
@@ -206,8 +209,12 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         )
         stats_switch.switch.on_toggle = self._toggle_stats_panel
         self.stats_panel = StatsDisplay(self.player.stats)
-        self.ui_stack.controls.extend([stats_switch, self.stats_panel])
-        if not self.tutorial_handler.finished_tutorial:
+        self.ui_stack.controls.clear()
+        self.ui_stack.controls = [stats_switch, self.stats_panel]
+        if (
+            not self.tutorial_handler.finished_tutorial and
+            not self.tutorial_handler.tutorial in self.ui_stack.controls
+        ):
             self.ui_stack.controls.insert(0, self.tutorial_handler())
         
         self.kill_count_text = ft.Text(
@@ -230,67 +237,64 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         )
         
         # Composition
-        self.game_stage.controls.extend([
+        self.game_stage.controls = [
             self.background_stack,
             self.entity_stack,
             self.projectile_stack,
             self.foreground_stack,
             self.ui_stack,
-        ])
+        ]
         
         form = ft.WindowDragArea(self.game_stage, expand=True, maximizable=False)
         return form
         
     # * === EVENT HANDLERS ===
-    def _handle_input_press(self, key_id: kb_manager.KeyType):
+    def _handle_input_press(self, key_id: kb_manager.KeyType) -> None:
         """
-        Runs on the Pynput Thread!
-        Fast, direct, and immune to UI lag.
+        Runs on the Pynput Thread.
+        Direct logic remains here for speed; UI calls are offloaded.
         """
-        # ? Game Inputs (Movement/Combat)
+        
+        # 1. IMMEDIATE GAME LOGIC (Fast track - No Lag)
+        # Perform state changes that don't trigger immediate UI diffing here.
         if self.is_game_running and self.player and not self.player.states.disable_movement:
+            if key_id == 'v':
+                self.player.attack() # Internal logic/state change
+                return
+            elif key_id == keyboard.Key.space:
+                self.player.jump()
+                return
+            elif key_id == 'b':
+                self.player.attack_ranged()
+                return
+
+        # 2. UI & SYSTEM LOGIC (Scheduled - Safe from Crashes)
+        # We only offload things that touch self.page or overlays.
+        async def ui_press_logic():
             match key_id:
-                # ATTACK (V)
-                case 'v':
-                    self.player.attack()
-                    return
-                
-                # JUMP (Space)
-                case keyboard.Key.space:
-                    self.player.jump()
-                    return
-                
-                case 'b':
-                    self.player.attack_ranged()
-                    return
+                case keyboard.Key.esc:
+                    if self.console.visible:
+                        await self._toggle_console()
+                    elif self.settings_menu.visible:
+                        self.close_settings(None)
+                    else:
+                        for ctrl in self.page.overlay:
+                            if isinstance(ctrl, ft.AlertDialog): return
+                        self.toggle_pause(None)
+
+                case "/":
+                    if self.console in self.page.overlay:
+                        await self._toggle_console()
+
+                case keyboard.Key.f11:
+                    self.page.window.maximized = not self.page.window.maximized
             
-        # ? UI / System Inputs
-        match key_id:
-            # PAUSE/CLOSE (Escape)
-            case keyboard.Key.esc:
-                if self.console.visible:
-                    self.page.run_task(self._toggle_console)
-                elif self.settings_menu.visible:
-                    self.close_settings(None)
-                else:
-                    # Toggle the pause menu only if there's no alert dialog
-                    for ctrl in self.page.overlay:
-                        if isinstance(ctrl, ft.AlertDialog):
-                            return
-                    self.toggle_pause(None)
-            
-            # CONSOLE (Forward Slash)
-            case "/":
-                if self.console in self.page.overlay:
-                    self.page.run_task(self._toggle_console)
-                
-            # FULLSCREEN (F11)
-            case keyboard.Key.f11:
-                self.page.window.maximized = not self.page.window.maximized
-        
-        self.page.run_task(self.console.handle_keyboard, key_id)
-        
-        self.page.update()
+            # Only update the UI if we actually need to sync changes
+            self.page.update()
+            self.page.run_task(self.console.handle_keyboard, key_id)
+
+        # Schedule the UI-heavy stuff without blocking the Pynput thread
+        self.page.run_task(ui_press_logic)
                 
     async def _toggle_console(self):
         await self.console.toggle()
@@ -300,13 +304,20 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         """Removes the tutorial controls after finishing the tutorial."""
         self._debug_msg("Finished tutorial!")
         self._start_stage_panning()
-        self.ui_stack.controls.remove(self.tutorial_handler.tutorial)
-        self.ui_stack.controls.append(self.stats_view)
+        
+        if self.tutorial_handler.tutorial in self.ui_stack.controls:
+            self.ui_stack.controls.remove(self.tutorial_handler.tutorial)
+            
+        if not self.stats_view in self.ui_stack.controls:
+            self.ui_stack.controls.append(self.stats_view)
+            
         tutorial_dlg = SimpleDialog(
             title="Key Binds Tutorial",
-            content="""You've finished the tutorial!
-You can now go ahead an go beyond the starting area.
-Click outside this message to close it."""
+            content=[
+                "You've finished the tutorial!\n"
+                "You can now go ahead an go beyond the starting area.\n"
+                "Click outside this message to close it."
+            ]
         )
         self.page.overlay.append(tutorial_dlg)
         self.page.update()
@@ -324,13 +335,15 @@ Click outside this message to close it."""
     # * === MENU EVENTS ===
     async def start_game(self, _: ft.ControlEvent) -> None:
         """Switch from Menu to Game"""
+        # Fade in main menu
         self.main_menu.opacity = 0
         try_update(self.main_menu)
         await await_for_dur(self.main_menu.animate_opacity)
         self.main_menu.visible = False
-        self.main_menu.stop_loop()
+        self.main_menu.stop_anim_loop()
         self._remove_main_menu()
         
+        # Fade in game layer
         self.game_layer.opacity = 0
         self.game_layer.visible = True
         self.ui_stack.disabled = False
@@ -341,25 +354,34 @@ Click outside this message to close it."""
         try_update(self.game_layer)
         await await_for_dur(self.game_layer.animate_opacity)
         
+        # Start the actual game
         audio_manager.play_music(music.loops.sketchbook.abstraction_2024_03_20_02)
         self.is_game_running = True
+        self.game_loop.start()
         self.start_tasks()
         self._update_ui_focus()
         self._debug_msg("Starting Game!")
         
+        # Check if tutorial is not yet finished
         if not self.tutorial_handler.finished_tutorial:
             tutorial_dlg = SimpleDialog(
                 title="Key Binds Tutorial",
-                content="""Finish the tutorial first before moving beyond the starting area!
-Click outside this message to close it."""
+                content=[
+                    "Finish the tutorial first before moving beyond the starting area!"
+                    "\nClick outside this message to close it."
+                ]
             )
             self.page.overlay.append(tutorial_dlg)
         self.page.update()
         
     async def quit_to_menu(self, _: ft.ControlEvent) -> None:
-        """Cleanup game and show menu"""
+        """Cleanup game and show the main menu."""
+        # Stop game loop and other tasks
         self.is_game_running = False
+        self.game_loop.stop()
+        self._stop_running_tasks()
         
+        # Animate any open menus and the game menu with fade out
         self.game_layer.opacity = 0
         self.pause_menu.opacity = 0
         self.settings_menu.opacity = 0
@@ -373,15 +395,20 @@ Click outside this message to close it."""
         self.settings_menu.opacity = 1
         try_update(self.page)
         
+        # Reset entities and unrender game stage
+        self._debug_msg("Quitting to Main Menu! Clearing Entities and Tasks...")
+        self.player = None
         self.entity_stack.controls.clear()
         self.entity_list.clear()
         self.game_stage.controls.clear()
-        self._debug_msg(f"""
-Quitting to Main Menu! Clearing Entities...
-entity_list: {len(self.entity_list)}
-entity_stack: {len(self.entity_stack.controls)}
-        """)
+        self._debug_msg(f"Previous running tasks: {self.running_tasks}")
+        self.running_tasks.clear()
+        self._debug_msg(f"player: {self.player}")
+        self._debug_msg(f"entity_list: {self.entity_list}")
+        self._debug_msg(f"entity_stack: {self.entity_stack.controls}")
+        self._debug_msg(f"Running tasks: {self.running_tasks}")
         
+        # Make and show the main menu again
         self._make_main_menu()
         self.main_menu.opacity = 0
         self.main_menu.visible = True
@@ -391,7 +418,7 @@ entity_stack: {len(self.entity_stack.controls)}
         self.main_menu.opacity = 1
         try_update(self.main_menu)
         await await_for_dur(self.main_menu.animate_opacity)
-        self.main_menu.start_loop()
+        self.main_menu.start_anim_loop()
     
     # * === GAME EVENTS ===
     def summon_enemy(
@@ -427,26 +454,30 @@ entity_stack: {len(self.entity_stack.controls)}
         self._debug_msg(f"New entity_stack size: {len(self.entity_stack.controls)}")
         return created_entities
     
+    def summon_enemies(self):
+        """A simple test for summoning enemies."""
+        self.summon_enemy(EnemyType.GOBLIN, spawn_range=(1, 5))
+        self.summon_enemy(EnemyType.FLYING_EYE, spawn_range=(0, 2))
+    
     # * === TASK MANAGEMENT ===
     def start_tasks(self) -> None:
         """Starts background loops and appends them to the `running_tasks` list."""
-        async def run_light(): await light_mv_loop(self.background_stack)
-            
-        # Store tasks so we can cancel them later
+        async def run_light(): await self.light_mv_loop.start()
         self.running_tasks.append(self.page.run_task(run_light))
+        
         if self.tutorial_handler.finished_tutorial:
             self._start_stage_panning()
     
     def _start_stage_panning(self) -> None:
         """Starts the stage panning handler's loop."""
-        async def run_pan():
-            def summon_enemies():
-                self.summon_enemy(EnemyType.GOBLIN, spawn_range=(1, 5))
-                self.summon_enemy(EnemyType.FLYING_EYE, spawn_range=(0, 2))
-            await stage_panning_loop(
-                game_manager=self,
-                projectile_stack=self.projectile_stack,
-                post_callback=summon_enemies
-            )
+        async def run_pan(): await self.stage_panning_loop.start()
         self.running_tasks.append(self.page.run_task(run_pan))
     
+    def _stop_running_tasks(self) -> None:
+        """Stops all background running tasks."""
+        self._debug_msg("Stopping 'light_mv_loop'")
+        self.light_mv_loop.stop()
+        
+        self._debug_msg("Stopping 'stage_panning_loop'")
+        self.stage_panning_loop.stop()
+        

@@ -67,23 +67,16 @@ class PresetProjectileStats:
         gravity=15.0,
         lifespan=2.0,
         damage=15,
-        friendly_fire=True,
-        
-        # Grenade Physics
         collides_with_map=True,
         bounciness=0.6,
         friction=10.0,
         stop_on_explode=True,
         is_parryable=True,
-        
-        # Logic
         impact_damage=False,
         damage_frame=9,
         aoe_radius=50,
-        
         width=100, height=100,
         offset=ft.Offset(0, 0.35),
-        
         fly_anim=AnimConfig(frame_count=3, frame_duration=0.1),
         explode_anim=AnimConfig(frame_count=16, frame_duration=0.08, loop=False, start_frame=3),
         sfx_registry=small_bomb_sfx
@@ -93,20 +86,19 @@ class PresetProjectileStats:
         gravity=0,
         lifespan=1.0,
         damage=8,
-        
         collides_with_map=True,
         stop_on_explode=True,
         is_parryable=True,
-        
         impact_damage=False,
         damage_frame=0,
         aoe_radius=30,
-        
         width=48, height=48,
-        
         fly_anim=AnimConfig(frame_count=3, frame_duration=0.1),
         explode_anim=AnimConfig(frame_count=8, frame_duration=0.1, loop=False, start_frame=3),
         sfx_registry=banshee_blast_sfx
+    )
+    Spear = ProjectileStats(
+        # TODO: Finish implementing the Spear projectile (used by the Huntress)
     )
 
 class Projectile(ft.Container):

@@ -529,7 +529,7 @@ class Entity(DamageHitbox):
         return False
     
     def _get_center_point(self) -> int:
-        """Returns the center point aligned at the bottom self."""
+        """Returns the center point aligned at the bottom stack."""
         return self.stack.left + (self.stack.width / 2)
     
     # * === OTHER HELPERS ===

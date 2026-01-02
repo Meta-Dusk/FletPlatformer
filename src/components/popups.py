@@ -33,7 +33,8 @@ class SimpleNotification(ft.SnackBar):
 class SimpleDialog(ft.AlertDialog):
     """A simple non-blocking and auto-cleanup alert dialog popup."""
     def __init__(
-        self, title: str, content: str, icon: Optional[ft.Control] = None,
+        self, title: str, content: str | list[str],
+        icon: Optional[ft.Control] = None,
         *, title_size: ft.Number = 30
     ) -> None:
         
@@ -42,9 +43,19 @@ class SimpleDialog(ft.AlertDialog):
             alignment=ft.Alignment.CENTER
         )
         content_ctrl = ft.Container(
-            content=ft.Text(value=content, size=title_size-10),
+            content=ft.Text(value="text", size=title_size-10, spans=[]),
             alignment=ft.Alignment.CENTER
         )
+        
+        text_ctrl: ft.Text = content_ctrl.content
+        if isinstance(content, str):
+            text_ctrl.value = content
+        elif isinstance(content, list) and isinstance(content[0], str):
+            text_ctrl.value = ""
+            for text in content:
+                text_ctrl.spans.append(ft.TextSpan(text))
+        else:
+            raise ValueError("'content' must be of str or a list of str!")
         
         super().__init__(
             title=title_ctrl, icon=icon, content=content_ctrl,
