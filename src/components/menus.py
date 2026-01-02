@@ -10,7 +10,7 @@ from components.window_controls import FullscreenToggle
 from components.game_controls import ConsoleToggle, PerfMonitorToggles, StaminaSettings
 
 from backgrounds import add_infinite_layer
-from bg_loops import light_mv_loop
+from bg_loops import LightMovementLoop
 
 from utilities.components import try_update
 from utilities.values import get_app_version
@@ -77,16 +77,20 @@ class MainMenu(Menu):
         
         super().__init__(content=main_container, opacity=0)
         
+        self.light_mv_loop = LightMovementLoop(self.bg_stack)
         self.light_mv_task: asyncio.Task = None
     
-    def stop_loop(self):
+    def stop_anim_loop(self):
         """Stops the looping animation for the background."""
-        self.light_mv_task.cancel()
-        self.light_mv_task = None
+        self.light_mv_loop.stop()
     
-    def start_loop(self):
+    async def _light_mv_loop(self) -> None:
+        await self.light_mv_loop.start()
+    
+    def start_anim_loop(self):
         """Looping animation for the background."""
-        self.light_mv_task = self.page.run_task(light_mv_loop, self.bg_stack)
+        # print("starting light_mv_loop")
+        self.light_mv_task = self.page.run_task(self._light_mv_loop)
     
     async def start_up_anim(self):
         """Animation when starting up the game."""
@@ -104,7 +108,7 @@ class MainMenu(Menu):
                 expand=True
             )
         )
-        self.start_loop()
+        self.start_anim_loop()
         try_update(self.bg_stack)
         self.page.run_task(self.start_up_anim)
 

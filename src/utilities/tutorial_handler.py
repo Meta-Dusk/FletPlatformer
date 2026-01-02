@@ -22,6 +22,8 @@ class TutorialHandler:
         self.tutorial_state: set[str] = set()
         self._finished_tutorial: bool = False
         self.on_finish_tutorial = on_finish_tutorial
+        self._has_initialized: bool = False
+        self.input_check_delay: float = 0.1 # seconds
     
     @property
     def finished_tutorial(self) -> bool:
@@ -41,7 +43,9 @@ class TutorialHandler:
     
     def initialize(self) -> None:
         """Starts the loop for the keyboard input checking."""
-        self._keyboard_check_task = self.page.run_task(self._keyboard_check_loop)
+        if not self._has_initialized:
+            self._keyboard_check_task = self.page.run_task(self._keyboard_check_loop)
+        self._has_initialized = True
     
     def _debug_msg(self, msg: str) -> None:
         if self.debug:
@@ -50,7 +54,7 @@ class TutorialHandler:
     async def _keyboard_check_loop(self) -> None:
         """Handles user input checking."""
         while not self.finished_tutorial:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(self.input_check_delay)
             is_shift_held = keyboard.Key.shift in held_keys
             
             # Jumping
