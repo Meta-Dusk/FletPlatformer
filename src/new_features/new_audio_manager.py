@@ -13,13 +13,11 @@ class AudioManager:
         music_volume: float = 0.3,
         sfx_volume: float = 0.5,
         directional_sfx: bool = True,
-        overlapping_sfx: bool = True,
         *, debug: bool = False
     ) -> None:
         self._music_volume = music_volume
         self._sfx_volume = sfx_volume
         self.directional_sfx = directional_sfx
-        self.overlapping_sfx = overlapping_sfx
         self.debug = debug
         
         # Performance & Logic tracking
@@ -32,7 +30,7 @@ class AudioManager:
         return self._sfx_volume
     
     @sfx_volume.setter
-    def sfx_volume(self, volume: float):
+    def sfx_volume(self, volume: float) -> None:
         self._sfx_volume = round(clamp(volume), 1)
     
     @property
@@ -40,13 +38,13 @@ class AudioManager:
         return self._music_volume
     
     @music_volume.setter
-    def music_volume(self, volume: float):
+    def music_volume(self, volume: float) -> None:
         self._music_volume = round(clamp(volume), 1)
         if self.music_instance:
             self.music_instance.volume = self._music_volume
-            self.music_instance.update() # Triggers the binary patch for volume
+            self.music_instance.update()
             
-    def _debug_msg(self, msg: str):
+    def _debug_msg(self, msg: str) -> None:
         if self.debug: print(f"[AudioManager] {msg}")
         
     def play_music(self, music_src: str) -> None:
@@ -60,7 +58,6 @@ class AudioManager:
                     release_mode=fta.ReleaseMode.LOOP
                 )
             else:
-                # Optimized swap: just change the source and update
                 self.music_instance.src = music_src
                 self.music_instance.update()
         except Exception as e:
@@ -74,29 +71,29 @@ class AudioManager:
     ) -> None:
         """Plays a sound effect with panning and spam prevention."""
         try:
-            # 1. OPTIMIZATION: Distance Culling
+            # Distance Culling
             if self.directional_sfx and left_volume is not None and right_volume is not None:
                 if left_volume < 0.01 and right_volume < 0.01: return
                 
-            # 2. OPTIMIZATION: Spam Prevention (50ms Cooldown)
+            # Spam Prevention (50ms Cooldown)
             curr_time: float = time.time()
             if curr_time - self._sfx_cooldowns.get(sfx_src, 0) < 0.05: return
             self._sfx_cooldowns[sfx_src] = curr_time
             
-            # 3. Calculate Balance (Panning)
+            # Calculate Balance (Panning)
             # Flet Balance: -1.0 (Left) to 1.0 (Right)
             calc_balance: float = 0.0
             if left_volume is not None and right_volume is not None:
                 calc_balance = clamp(right_volume - left_volume, -1.0, 1.0)
                 
-            # 4. Final Volume
+            # Final Volume
             final_vol = self.sfx_volume if base_volume is None else clamp(base_volume) * self.sfx_volume
             
-            # 5. Create 'Fire and Forget' instance with auto-cleanup
+            # Create 'Fire and Forget' instance with auto-cleanup
             def on_state_change(e: fta.AudioStateChangeEvent):
                 if e.data == "completed":
                     new_sfx.release() # Frees underlying platform resources
-                    
+            
             new_sfx = fta.Audio(
                 src=sfx_src,
                 volume=final_vol,
@@ -104,14 +101,13 @@ class AudioManager:
                 autoplay=True,
                 on_state_change=on_state_change
             )
-            self._sfx_instances.append(new_sfx)
             
         except Exception as e:
             self._debug_msg(f"SFX Error: {e}")
 
 
 # * Testing for the new audio manager
-async def main(page: ft.Page):
+async def main(page: ft.Page) -> None:
     await test_init(page)
     
     audio_manager = AudioManager(
@@ -120,11 +116,14 @@ async def main(page: ft.Page):
         debug=True
     )
     
+    async def play_music() -> None:
+        audio_manager.play_music("audio/music/forest_ambience.mp3")
+    
     @ft.component
-    def AudioControls():
+    def AudioControls() -> ft.Control:
         return ft.Column(
             controls=[
-                ft.Button("Play Music", on_click=lambda _: page.run_task(audio_manager.play_music("audio/music/forest_ambience.mp3"))),
+                ft.Button("Play Music", on_click=lambda _: page.run_task(play_music)),
                 ft.Button("Pause Music", on_click=lambda _: page.run_task(audio_manager.music_instance.pause)),
                 ft.Button("Resume Music", on_click=lambda _: page.run_task(audio_manager.music_instance.resume)),
                 ft.Button("Play SFX (Center)", on_click=lambda _: audio_manager.play_sfx("audio/sfx/alarm.wav")),
