@@ -1,11 +1,7 @@
-from pathlib import Path
 from dataclasses import dataclass
 
-
-_SFX_DIR = Path("assets") / "audio" / "sfx"
-
-def sound_path(name: str, extension: str = ".wav") -> Path:
-    return _SFX_DIR / f"{name}{extension}"
+def sound_path(name: str, extension: str = "wav") -> str:
+    return f"audio/sfx/{name}.{extension}"
 
 # * Sub Sound Libraries
 @dataclass
@@ -103,7 +99,7 @@ class ExplosionsSFX:
 # * Main Sound Library
 @dataclass
 class SFXLibrary:
-    """Dataclasses containing the `Path` for the SFX."""
+    """Dataclasses containing the `str` paths for available SFX."""
     sword = SwordSFX()
     item = ItemsSFX()
     player = PlayerSFX()

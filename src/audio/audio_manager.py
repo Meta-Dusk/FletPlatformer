@@ -1,134 +1,141 @@
-import pygame, os, time
-from pathlib import Path
+import flet as ft
+import flet_audio as fta
+import time
+from typing import Optional
 
-from utilities.file_management import get_asset_path
 from utilities.values import clamp
-
+from tests.test_templates import test_init
 
 class AudioManager:
-    """Handles all the audio playbacks (both Music and SFX)."""
+    """Handles all Flet-based audio playbacks with culling and cooldowns."""
     def __init__(
-        self, music_volume: float = 0.3,
+        self, 
+        music_volume: float = 0.3,
         sfx_volume: float = 0.5,
         directional_sfx: bool = True,
-        *, debug: bool = True
-    ):
+        *, debug: bool = False
+    ) -> None:
         self._music_volume = music_volume
         self._sfx_volume = sfx_volume
         self.directional_sfx = directional_sfx
         self.debug = debug
         
-        self._sfx_cache: dict[Path, pygame.mixer.Sound] = {}
-        self._sfx_cooldowns: dict[Path, float] = {}
+        # Performance & Logic tracking
+        self._sfx_cooldowns: dict[str, float] = {}
+        self._sfx_instances: list[fta.Audio] = []
+        self.music_instance: Optional[fta.Audio] = None
     
     @property
     def sfx_volume(self) -> float:
-        """SFX volume between 0.0 and 1.0."""
         return self._sfx_volume
     
     @sfx_volume.setter
-    def sfx_volume(self, volume: float):
-        """Automatically clamps volume for sfx between 0.0 and 1.0."""
+    def sfx_volume(self, volume: float) -> None:
         self._sfx_volume = round(clamp(volume), 1)
     
     @property
     def music_volume(self) -> float:
-        """Music volume between 0.0 and 1.0."""
         return self._music_volume
     
     @music_volume.setter
-    def music_volume(self, volume: float):
-        """Automatically clamps volume for music between 0.0 and 1.0."""
+    def music_volume(self, volume: float) -> None:
         self._music_volume = round(clamp(volume), 1)
-        pygame.mixer.music.set_volume(self._music_volume)
-    
-    def _debug_msg(self, msg: str):
+        if self.music_instance:
+            self.music_instance.volume = self._music_volume
+            self.music_instance.update()
+            
+    def _debug_msg(self, msg: str) -> None:
         if self.debug: print(f"[AudioManager] {msg}")
-    
-    def initialize(self):
-        """Initializes `pygame.mixer`. Required to play sounds."""
-        # * Force Windows to use the older DirectSound driver
-        os.environ['SDL_AUDIODRIVER'] = 'directsound'
         
+    def play_music(self, music_src: str) -> None:
+        """Plays music on a loop. Replaces current music if it exists."""
         try:
-            pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
-            pygame.mixer.init()
-            pygame.mixer.set_num_channels(32)
-            
-            freq, size, channels = pygame.mixer.get_init()
-            self._debug_msg(f"MIXER STATUS: Frequency={freq}, Size={size}, Channels={channels}")
-            
-            pygame.mixer.music.set_volume(self.music_volume)
-            self._debug_msg("Successfully initialized pygame.mixer (DirectSound)")
+            if self.music_instance is None:
+                self.music_instance = fta.Audio(
+                    src=music_src,
+                    autoplay=True,
+                    volume=self.music_volume,
+                    release_mode=fta.ReleaseMode.LOOP
+                )
+            else:
+                self.music_instance.src = music_src
+                self.music_instance.update()
         except Exception as e:
-            self._debug_msg(f"Error initializing pygame.mixer: {e}")
-    
-    def play_music(self, music_path: Path):
-        """Plays music that is on loop."""
-        try:
-            # Note: We don't cache music because it streams from disk
-            resolved_path = get_asset_path(music_path)
-            self._debug_msg(f"Playing music: {resolved_path}")
-            pygame.mixer.music.load(resolved_path)
-            pygame.mixer.music.play(-1, fade_ms=1000)
-        except Exception as e:
-            self._debug_msg(f"Error playing music: {e}")
-    
+            self._debug_msg(f"Music Error: {e}")
+            
     def play_sfx(
-        self, sfx_path: Path,
+        self, sfx_src: str,
         left_volume: float = None,
         right_volume: float = None,
         base_volume: float = None
-    ):
-        """
-        Use the `SFXLibrary` dataclass for supplying the `sfx_path`.
-        Includes Culling (distance check) and Cooldowns (spam check).
-        """
+    ) -> None:
+        """Plays a sound effect with panning and spam prevention."""
         try:
-            # OPTIMIZATION 1: Distance Culling
-            # If the calculated volume is virtually silent, don't bother playing it.
+            # Distance Culling
             if self.directional_sfx and left_volume is not None and right_volume is not None:
                 if left_volume < 0.01 and right_volume < 0.01: return
-
-            # OPTIMIZATION 2: Spam Prevention (Cooldown)
-            # If this exact sound played less than 50ms ago, skip it.
-            current_time = time.time()
-            last_played = self._sfx_cooldowns.get(sfx_path, 0)
+                
+            # Spam Prevention (50ms Cooldown)
+            curr_time: float = time.time()
+            if curr_time - self._sfx_cooldowns.get(sfx_src, 0) < 0.05: return
+            self._sfx_cooldowns[sfx_src] = curr_time
             
-            # 0.05s = 50ms cooldown. Adjust this if you want more overlap.
-            if current_time - last_played < 0.05: return
+            # Calculate Balance (Panning)
+            # Flet Balance: -1.0 (Left) to 1.0 (Right)
+            calc_balance: float = 0.0
+            if left_volume is not None and right_volume is not None:
+                calc_balance = clamp(right_volume - left_volume, -1.0, 1.0)
+                
+            # Final Volume
+            final_vol = self.sfx_volume if base_volume is None else clamp(base_volume) * self.sfx_volume
             
-            self._sfx_cooldowns[sfx_path] = current_time
+            # Create 'Fire and Forget' instance with auto-cleanup
+            def on_state_change(e: fta.AudioStateChangeEvent):
+                if e.data == "completed":
+                    new_sfx.release() # Frees underlying platform resources
             
-            # Load Sound
-            if sfx_path not in self._sfx_cache:
-                resolved_path = get_asset_path(sfx_path.as_posix())
-                self._sfx_cache[sfx_path] = pygame.mixer.Sound(resolved_path)
+            new_sfx = fta.Audio(
+                src=sfx_src,
+                volume=final_vol,
+                balance=calc_balance,
+                autoplay=True,
+                on_state_change=on_state_change
+            )
             
-            sound = self._sfx_cache[sfx_path]
-            
-            # Apply Master Volume
-            # Use specific base_volume if provided, else use global sfx_volume
-            vol = self.sfx_volume if base_volume is None else clamp(base_volume) * self.sfx_volume
-            sound.set_volume(vol)
-            
-            # Play to get a Channel
-            channel = sound.play()
-            if not channel: return
-            
-            # Apply Panning (If requested)
-            if left_volume is not None and right_volume is not None and self.directional_sfx:
-                clamped_vol_r = clamp(right_volume)
-                clamped_vol_l = clamp(left_volume)
-                channel.set_volume(clamped_vol_l, clamped_vol_r)
-                self._debug_msg(f"Played SFX (Pan): L={clamped_vol_l:.1f} R={clamped_vol_r:.1f}")
-            else:
-                # Force full volume on this channel if centered (overrides previous settings)
-                channel.set_volume(1.0, 1.0)
-                self._debug_msg(f"Played SFX (Center)")
-                    
         except Exception as e:
-            self._debug_msg(f"Failed to play SFX: {e}")
+            self._debug_msg(f"SFX Error: {e}")
 
-global_audio_manager = AudioManager(debug=False)
-global_audio_manager.initialize()
+global_audio_manager = AudioManager()
+
+# * Testing for the new audio manager
+async def main(page: ft.Page) -> None:
+    await test_init(page)
+    
+    audio_manager = AudioManager(
+        music_volume=1.0,
+        sfx_volume=1.0,
+        debug=True
+    )
+    
+    async def play_music() -> None:
+        audio_manager.play_music("audio/music/forest_ambience.mp3")
+    
+    @ft.component
+    def AudioControls() -> ft.Control:
+        return ft.Column(
+            controls=[
+                ft.Button("Play Music", on_click=lambda _: page.run_task(play_music)),
+                ft.Button("Pause Music", on_click=lambda _: page.run_task(audio_manager.music_instance.pause)),
+                ft.Button("Resume Music", on_click=lambda _: page.run_task(audio_manager.music_instance.resume)),
+                ft.Button("Play SFX (Center)", on_click=lambda _: audio_manager.play_sfx("audio/sfx/alarm.wav")),
+                ft.Button("Play SFX (Pan Left)", on_click=lambda _: audio_manager.play_sfx("audio/sfx/alarm.wav", left_volume=1.0, right_volume=0.0)),
+                ft.Button("Play SFX (Pan Right)", on_click=lambda _: audio_manager.play_sfx("audio/sfx/alarm.wav", left_volume=0.0, right_volume=1.0)),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        )
+    
+    page.render(AudioControls)
+
+if __name__ == "__main__":
+    ft.run(main, assets_dir="../assets")

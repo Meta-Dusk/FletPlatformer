@@ -1,18 +1,22 @@
 import flet as ft
 
-from audio.audio_manager import global_audio_manager
 from components.buttons import SimpleButton
 from tests.test_templates import test_init
 
-async def test(page: ft.Page):
-    await test_init(page)
-    
-    buttons_column = ft.Column()
+@ft.component
+def TestView() -> ft.Control:
+    buttons_column = ft.Column(
+        alignment=ft.MainAxisAlignment.CENTER,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+    )
     for i in range(5):
         buttons_column.controls.append(
             SimpleButton(ft.Text(f"Button {i}", size=20), width=200, height=100)
         )
-        
-    page.add(buttons_column)
+    return buttons_column
+
+async def test(page: ft.Page):
+    await test_init(page)
+    page.render(TestView)
 
 ft.run(test, assets_dir="../assets")

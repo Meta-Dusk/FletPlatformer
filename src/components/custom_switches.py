@@ -1,125 +1,165 @@
 import flet as ft
-from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 import inspect
 
-from utilities.components import try_update
-from audio.audio_manager import global_audio_manager
+from audio.audio_manager import global_audio_manager as audio_manager
 from audio.sfx_data import SFXLibrary
 from setup import FontStyles
 
-audio_manager = global_audio_manager
 sfx = SFXLibrary()
 
-SwitchBoolState = bool
+SwitchEventCallable = Optional[Callable[[bool], None]]
 
+# * --- CustomSwitch ---
+@ft.control(kw_only=True)
 class CustomSwitch(ft.Container):
-    """A switch but square."""
-    def __init__(
-        self, width: ft.Number = 100, height: ft.Number = 50, value: bool = False,
-        on_toggle: Callable[[SwitchBoolState], None] = None
-    ) -> None:
-        self.on_toggle = on_toggle
+    # Defining these fields here gives you IDE autocompletion
+    width: ft.Number = 100
+    height: ft.Number = 50
+    initial_value: bool = False
+    on_toggle: Optional[Callable[[bool], None]] = None
+
+    def init(self):
+        # We store the setter in a standard attribute for the component to use
+        self.toggle_state: Callable[[bool], None] = lambda _: None
+
+@ft.component
+def CustomSwitchComponent(control: CustomSwitch) -> ft.Control:
+    # 1. Reactive State
+    is_on, set_is_on = ft.use_state(control.initial_value)
+    
+    # Link the hook setter back to the class instance for external access
+    control.toggle_state = set_is_on
+
+    # 2. UI Logic (Derived from State)
+    # Alignment and Colors are now calculated reactively
+    if is_on:
+        align = ft.Alignment.CENTER_RIGHT
+        thumb_color = ft.Colors.PRIMARY
+        thumb_border = ft.Border.all(2, ft.Colors.ON_PRIMARY)
+        bg_color = ft.Colors.PRIMARY_CONTAINER
+        border_color = ft.Border.all(2, ft.Colors.ON_PRIMARY_CONTAINER)
+    else:
+        align = ft.Alignment.CENTER_LEFT
+        thumb_color = ft.Colors.SECONDARY
+        thumb_border = ft.Border.all(2, ft.Colors.ON_SECONDARY)
+        bg_color = ft.Colors.SECONDARY_CONTAINER
+        border_color = ft.Border.all(2, ft.Colors.ON_SECONDARY_CONTAINER)
+
+    async def _on_click(_: ft.ControlEvent) -> None:
+        new_state = not is_on
+        set_is_on(new_state) # Triggers reactive re-render
         
-        self.thumb = ft.Container(
-            animate_align=ft.Animation(500, ft.AnimationCurve.EASE_IN_OUT_CUBIC_EMPHASIZED),
-            animate=ft.Animation(500, ft.AnimationCurve.EASE_IN_OUT), 
-            width=width / 2, height=height,
-        )
+        # SFX Logic
+        audio_manager.play_sfx(sfx.ui.buttons.switch_on if new_state else sfx.ui.buttons.switch_off)
         
-        self.hitbox = ft.Button(
-            content=self.thumb,
-            clip_behavior=ft.ClipBehavior.NONE,
+        # Callback logic
+        if control.on_toggle:
+            result = control.on_toggle(new_state)
+            if inspect.isawaitable(result): await result
+    
+    def _on_hover(e: ft.ControlEvent) -> None:
+        if e.data: audio_manager.play_sfx(sfx.ui.buttons.hover_1)
+    
+    def _on_focus(_: ft.ControlEvent) -> None:
+        audio_manager.play_sfx(sfx.ui.buttons.hover_1)
+    
+    # 3. Component Tree
+    # The 'thumb' alignment is now tied to the 'align' variable
+    thumb = ft.Container(
+        width=control.width / 2, 
+        height=control.height,
+        bgcolor=thumb_color,
+        border=thumb_border,
+        align=align, # Reactively updated
+        animate_align=ft.Animation(500, ft.AnimationCurve.EASE_IN_OUT_CUBIC_EMPHASIZED),
+        animate=ft.Animation(500, ft.AnimationCurve.EASE_IN_OUT),
+    )
+    
+    return ft.Container(
+        width=control.width,
+        height=control.height,
+        bgcolor=bg_color,
+        border=border_color,
+        animate=ft.Animation(500, ft.AnimationCurve.EASE_IN_OUT),
+        content=ft.Button(
+            content=thumb,
+            on_click=_on_click,
+            on_hover=_on_hover,
+            on_focus=_on_focus,
             style=ft.ButtonStyle(
-                shape={ft.ControlState.DEFAULT: ft.RoundedRectangleBorder(radius=0)},
-                padding={ft.ControlState.DEFAULT: 0},
+                shape=ft.RoundedRectangleBorder(radius=0),
+                padding=0,
             ),
-            width=width, height=height,
-            on_click=self._on_click,
-            # on_hover=self._on_hover,
-            on_focus=self._on_focus,
+            expand=True
         )
-        
-        super().__init__(
-            content=self.hitbox, width=width, height=height, expand=False, data=value,
-            animate=ft.Animation(500, ft.AnimationCurve.EASE_IN_OUT)
-        )
-        self._toggle_state()
-    
-    def _toggle_state(self) -> None:
-        """Toggles the state of the switch depending on `data`."""
-        if self.data:
-            self.thumb.align = ft.Alignment.CENTER_RIGHT
-            self.thumb.border = ft.Border.all(2, ft.Colors.ON_PRIMARY)
-            self.thumb.bgcolor = ft.Colors.PRIMARY
-            self.hitbox.bgcolor = ft.Colors.PRIMARY_CONTAINER
-            self.border = ft.Border.all(2, ft.Colors.ON_PRIMARY_CONTAINER)
-        else:
-            self.thumb.align = ft.Alignment.CENTER_LEFT
-            self.thumb.border = ft.Border.all(2, ft.Colors.ON_SECONDARY)
-            self.thumb.bgcolor = ft.Colors.SECONDARY
-            self.hitbox.bgcolor = ft.Colors.SECONDARY_CONTAINER
-            self.border = ft.Border.all(2, ft.Colors.ON_SECONDARY_CONTAINER)
-        try_update(self.thumb)
-        
-        if self.on_toggle:
-            result = self.on_toggle(self.data)
-            if inspect.isawaitable(result):
-                self.page.run_task(result, self.data)
-    
-    def _play_sfx(self, sfx: Path) -> None:
-        """Play a sound effect."""
-        audio_manager.play_sfx(sfx)
-    
-    def _on_click(self, _: ft.ControlEvent) -> None:
-        # print(f"Setting CustomSwitch from {self.data} -> ", end="")
-        self.data = not self.data
-        # print(self.data)
-        if self.data: self._play_sfx(sfx.ui.buttons.switch_on)
-        else: self._play_sfx(sfx.ui.buttons.switch_off)
-        self._toggle_state()
-        
-    def _on_hover(self, e: ft.ControlEvent) -> None:
-        if e.data: self._play_sfx(sfx.ui.buttons.hover_1)
-    
-    def _on_focus(self, _: ft.ControlEvent) -> None:
-        self._play_sfx(sfx.ui.buttons.hover_1)
-        
+    )
+
+# Helper for creation
+def NewSwitch(initial_value: bool = False, on_toggle: SwitchEventCallable = None) -> CustomSwitch:
+    return CustomSwitchComponent(CustomSwitch(initial_value=initial_value, on_toggle=on_toggle))
+
+
+# * --- TextAndToggle ---
 class TextAndToggle(ft.Container):
     def __init__(
         self,
         label_text: str = "",
-        label_offset: ft.Offset = ft.Offset(0.0, 0.0),
         label_size: ft.Number = 30,
-        spacer_width: int = 60,
-        switch_value: bool = False,
-        left: ft.Number = None,
-        right: ft.Number = None,
-        top: ft.Number = None,
-        bottom: ft.Number = None,
-        width: ft.Number = 100,
-        height: ft.Number = 50
+        switch_value: bool = False, *,
+        label_offset: ft.Offset = ft.Offset(0.0, 0.0),
+        # Standard Flet Container properties for positioning
+        left: Optional[ft.Number] = None,
+        right: Optional[ft.Number] = None,
+        top: Optional[ft.Number] = None,
+        bottom: Optional[ft.Number] = None,
     ) -> None:
-        self.switch = CustomSwitch(value=switch_value, width=width, height=height)
-        label = ft.Container(
-            content=ft.Text(
-                value=label_text, size=label_size,
-                font_family=FontStyles.ADAPA, color=ft.Colors.WHITE_70
-            ),
-            alignment=ft.Alignment.CENTER, offset=label_offset
+        super().__init__(left=left, right=right, top=top, bottom=bottom)
+        self.label_text = label_text
+        self.label_size = label_size
+        self.label_offset = label_offset
+        self.switch_value = switch_value
+        # Initialize the stateful class
+        self.switch = CustomSwitch(initial_value=switch_value)
+
+@ft.component
+def TextAndToggleComponent(control: TextAndToggle, spacer_width: ft.Number = None) -> ft.Control:
+    """This component 'unpacks' the class and builds the reactive UI."""
+    return ft.Container(
+        left=control.left, right=control.right, top=control.top, bottom=control.bottom,
+        content=ft.Row(
+            controls=[
+                ft.Text(
+                    control.label_text, size=control.label_size,
+                    font_family=FontStyles.ADAPA, color=ft.Colors.WHITE_70,
+                    offset=control.label_offset
+                ),
+                ft.Container(width=(60 if spacer_width is None else None)),
+                CustomSwitchComponent(control.switch)
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
         )
-        spacer = ft.Container(width=spacer_width)
-        
-        main_container = ft.Container(
-            content=ft.Row(
-                controls=[label, spacer, self.switch], expand=True,
-                alignment=ft.MainAxisAlignment.CENTER,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER
-            ),
-            alignment=ft.Alignment.CENTER
+    )
+
+def CreateTextAndToggle(
+    label_text: str = "",
+    label_size: ft.Number = 30,
+    switch_value: bool = False, *,
+    spacer_width: ft.Number = None,
+    label_offset: ft.Offset = ft.Offset(0.0, 0.0),
+    left: Optional[ft.Number] = None,
+    right: Optional[ft.Number] = None,
+    top: Optional[ft.Number] = None,
+    bottom: Optional[ft.Number] = None,
+) -> TextAndToggle:
+    """Helper that provides full type hinting for your custom arguments."""
+    return TextAndToggleComponent(
+        TextAndToggle(
+            label_text, label_size,
+            switch_value,
+            label_offset=label_offset,
+            spacer_width=spacer_width,
+            left=left, right=right,
+            top=top, bottom=bottom
         )
-        
-        super().__init__(
-            content=main_container, alignment=ft.Alignment.CENTER,
-            padding=4, expand=True, left=left, right=right, top=top, bottom=bottom
-        )
+    )
