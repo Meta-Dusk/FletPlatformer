@@ -6,7 +6,7 @@ from audio.audio_manager import global_audio_manager as audio_manager
 from audio.music_data import MusicLibrary
 
 from components.menus import PauseMenu, SettingsMenu, MainMenu
-from components.displays import StatsDisplay
+from components.displays import StatsDisplay, CreateCounter
 from components.custom_switches import TextAndToggle
 from components.popups import SimpleDialog
 
@@ -113,8 +113,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         """
         self._kill_count = amount
         if hasattr(self, "kill_count_text"):
-            self.kill_count_text.spans[1].text = self._kill_count
-            try_update(self.kill_count_text)
+            self.kill_count_text.set_val(amount)
     
     @property
     def death_count(self) -> int:
@@ -129,8 +128,7 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         """
         self._death_count = amount
         if hasattr(self, "death_count_text"):
-            self.death_count_text.spans[1].text = self._death_count
-            try_update(self.death_count_text)
+            self.death_count_text.set_val(amount)
     
     # * === IMPORTANT METHODS ===
     async def __call__(self) -> None:
@@ -174,7 +172,12 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         perf_toggles.ups_switch.switch.on_toggle = lambda b: self.perf_monitor.toggle_ups(b)
         perf_toggles.lag_switch.switch.on_toggle = lambda b: self.perf_monitor.toggle_latency(b)
         
-        self.page.add(self.stage)
+        @ft.component
+        def Root(): return self.stage
+        
+        # ! Doing this means we have to refactor everything...
+        self.page.render(Root)
+        
         await self.page.window.center()
         self.page.window.maximized = True
     
@@ -217,18 +220,8 @@ class GameManager(GameCommands, MenuManager, SettingsManager):
         ):
             self.ui_stack.controls.insert(0, self.tutorial_handler())
         
-        self.kill_count_text = ft.Text(
-            spans=[
-                ft.TextSpan("Kills: "),
-                ft.TextSpan(self.kill_count)
-            ], size=20, text_align=ft.TextAlign.START
-        )
-        self.death_count_text = ft.Text(
-            spans=[
-                ft.TextSpan("Deaths: "),
-                ft.TextSpan(self.death_count)
-            ], size=20, text_align=ft.TextAlign.START
-        )
+        self.kill_count_text = CreateCounter("Kills", self.kill_count)
+        self.death_count_text = CreateCounter("Deaths", self.death_count)
         self.stats_view = ft.Column(
             controls=[self.kill_count_text, self.death_count_text],
             spacing=4, left=10, top=10,

@@ -28,6 +28,7 @@ def new_button(
         on_click=on_click
     )
 
+# TODO: Refactor everything that is reactive...
 class Menu(ft.WindowDragArea):
     """Menu base class."""
     def __init__(

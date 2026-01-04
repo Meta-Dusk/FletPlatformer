@@ -1,9 +1,38 @@
 import flet as ft
 
+from typing import Callable
+
 from entities.features.entity_data import EntityStats, ARMOR_SCALING_CONSTANT
 from setup import FontStyles
 from utilities.components import try_update
 
+class StatsCounter(ft.Text):
+    def __init__(self, label: str, initial_value: int = 0):
+        super().__init__(size=20)
+        self.label = label
+        self.initial_value = initial_value
+        self.set_val: Callable[[int], None] = lambda _: None
+
+@ft.component
+def StatsCounterComponent(control: StatsCounter):
+    count: int
+    set_count: Callable[[int], None]
+    count, set_count = ft.use_state(control.initial_value)
+    
+    control.set_val = set_count
+    control.spans = [
+        ft.TextSpan(f"{control.label}: "),
+        ft.TextSpan(str(count), weight=ft.FontWeight.BOLD)
+    ]
+    return control
+
+# Helper to keep GameManager clean
+def CreateCounter(label: str, val: int) -> StatsCounter:
+    """Returns a counter component."""
+    # This returns the 'control' that is internally wrapped by the component
+    return StatsCounterComponent(StatsCounter(label, val))
+
+# TODO: Rework to use 'component' wrapper
 class StatsDisplay(ft.Container):
     def __init__(
         self, stats: EntityStats
