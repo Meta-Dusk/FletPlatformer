@@ -17,7 +17,7 @@ class CustomSwitch(ft.Container):
     width: ft.Number = 100
     height: ft.Number = 50
     initial_value: bool = False
-    on_toggle: Optional[Callable[[bool], None]] = None
+    on_toggle: SwitchEventCallable = None
 
     def init(self):
         # We store the setter in a standard attribute for the component to use

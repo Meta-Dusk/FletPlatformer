@@ -1,6 +1,6 @@
 import asyncio
 import flet as ft
-from typing import Optional, Literal
+from typing import Optional, Literal, Callable
 
 from setup import FontStyles
 
