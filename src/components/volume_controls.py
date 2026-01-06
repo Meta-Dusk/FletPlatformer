@@ -1,121 +1,126 @@
 import flet as ft
-from typing import Literal
+from typing import Literal, Any
 
-from audio.audio_manager import AudioManager
+from audio.audio_manager import AudioManager, global_audio_manager
 
 from components.buttons import SimpleButton
-from components.custom_switches import CustomSwitch
+from components.custom_switches import NewSwitch
 
 from setup import FontStyles
 
-from utilities.components import try_update
+AudioTypes = Literal["music", "sfx"]
 
-class VolumeControl(ft.Container):
-    def __init__(
-        self, audio_manager: AudioManager,
-        audio_type: Literal["music", "sfx"],
-        label: str
-    ) -> None:
-        self.audio_manager = audio_manager
-        self.audio_type = audio_type
-        self.label = label
-        
-        self.value_container = ft.Container(
-            self._make_text(size=30), padding=4,
-            alignment=ft.Alignment.CENTER, width=250
-        )
-        self._update_text()
-        
-        v_up_btn = SimpleButton(self._make_text("+"), on_click=self.on_volume_up)
-        v_down_btn = SimpleButton(self._make_text("-"), on_click=self.on_volume_down)
-        
-        btn_row = ft.Row(
-            controls=[v_down_btn, v_up_btn], spacing=4,
-            alignment=ft.MainAxisAlignment.CENTER,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER
-        )
-        
-        spacer = ft.Container(width=25)
-        main_row = ft.Row(
-            controls=[self.value_container, spacer, btn_row], spacing=20,
-            alignment=ft.MainAxisAlignment.CENTER,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            expand=True
-        )
-        
-        super().__init__(
-            content=main_row, padding=4,
-            alignment=ft.Alignment.CENTER, expand=True
-        )
+# * --- VolumeControl ---
+@ft.component
+def VolumeControlComponent(
+    initial_value: float,
+    audio_type: AudioTypes,
+    label: str
+)  -> ft.Control:
+    # 1. State management: Initialize from the manager's current value
+    volume, set_volume = ft.use_state(initial_value)
     
-    def _update_text(self) -> None:
-        text: ft.Text = self.value_container.content
-        text.value = f"{self.label}: {self._get_volume_from_type()}"
-        try_update(self.value_container)
-    
-    def _make_text(
-        self, text: str = "",
-        font_family: FontStyles = FontStyles.ADAPA,
-        size: ft.Number = 15
-    ) -> ft.Text:
+    # 2. Logic: Modification handlers
+    def change_volume(delta: float) -> None:
+        new_vol = round(volume + delta, 1)
+        if 0.0 <= new_vol <= 1.0:
+            # Update the underlying logic (AudioManager)
+            if audio_type == "music":
+                global_audio_manager.music_volume = new_vol
+            else:
+                global_audio_manager.sfx_volume = new_vol
+            set_volume(new_vol)
+            
+    # 3. UI Helpers
+    def make_text(text: str, size: int = 15) -> ft.Text:
         return ft.Text(
-            value=text, font_family=font_family,
+            value=text, font_family=FontStyles.ADAPA,
             size=size, text_align=ft.TextAlign.CENTER,
             color=ft.Colors.WHITE_70
         )
     
-    def _get_volume_from_type(self) -> float:
-        match self.audio_type:
-            case "music": return self.audio_manager.music_volume
-            case "sfx": return self.audio_manager.sfx_volume
-            case _: return 0.0
-    
-    def _modify_volume_from_type(self, volume: float) -> None:
-        if self.audio_type == "music":
-            print(f"Music volume {self._get_volume_from_type()} -> ", end="")
-            self.audio_manager.music_volume += volume
-        elif self.audio_type == "sfx":
-            print(f"SFX volume {self._get_volume_from_type()} -> ", end="")
-            self.audio_manager.sfx_volume += volume
-        print(self._get_volume_from_type())
-    
-    def on_volume_up(self, _: ft.ControlEvent) -> None:
-        self._modify_volume_from_type(0.1)
-        self._update_text()
-            
-    def on_volume_down(self: ft.ControlEvent) -> None:
-        self._modify_volume_from_type(-0.1)
-        self._update_text()
-        
-class DirectionalVolumeToggle(ft.Container):
-    def __init__(
-        self, audio_manager: AudioManager
-    ) -> None:
-        self.audio_manager = audio_manager
-        toggle = CustomSwitch(value=True, on_toggle=self._on_toggle)
-        label = ft.Container(
-            content=ft.Text(
-                "Directional Audio", size=30,
-                font_family=FontStyles.ADAPA,
-                color=ft.Colors.WHITE_70
+    main_content = ft.Row(
+        controls=[
+            # Value Display
+            ft.Container(
+                content=make_text(f"{label}: {volume}", 30),
+                width=250, alignment=ft.Alignment.CENTER
             ),
-            alignment=ft.Alignment.CENTER, offset=ft.Offset(0.1, 0.0)
-        )
-        spacer = ft.Container(width=100)
+            ft.Container(width=25), # Spacer
+            # Controls
+            ft.Row([
+                SimpleButton(
+                    content=make_text("-"), 
+                    user_on_click=lambda _: change_volume(-0.1)
+                ),
+                SimpleButton(
+                    content=make_text("+"), 
+                    user_on_click=lambda _: change_volume(0.1)
+                ),
+            ], spacing=4)
+        ],
+        alignment=ft.MainAxisAlignment.CENTER,
+        expand=True
+    )
+    
+    # 4. Component Tree
+    return ft.Container(
+        content=main_content,
+        padding=4, alignment=ft.Alignment.CENTER
+    )
+
+
+# * --- DirectionalVolumeToggle ---
+@ft.component
+def DirectionalVolumeToggleComponent(initial_state: bool) -> ft.Control:
+    is_on, set_is_on = ft.use_state(initial_state)
+    
+    def on_toggle(new_state: bool):
+        global_audio_manager.directional_sfx = new_state
+        set_is_on(new_state)
         
-        main_container = ft.Container(
-            content=ft.Row(
-                controls=[label, spacer, toggle], expand=True,
-                alignment=ft.MainAxisAlignment.CENTER,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER
-            ),
-            alignment=ft.Alignment.CENTER
+    return ft.Container(
+        alignment=ft.Alignment.CENTER,
+        padding=4,
+        content=ft.Row(
+            controls=[
+                ft.Text(
+                    "Directional Audio", size=30,
+                    font_family=FontStyles.ADAPA,
+                    color=ft.Colors.WHITE_70
+                ),
+                ft.Container(width=100), # Spacer
+                NewSwitch(
+                    initial_value=is_on,
+                    on_toggle=on_toggle
+                )
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            expand=True
         )
-        
-        super().__init__(
-            content=main_container, alignment=ft.Alignment.CENTER,
-            padding=4, expand=True
+    )
+
+from tests.test_templates import test_init
+from audio.audio_manager import AudioManager
+
+async def test(page: ft.Page) -> None:
+    await test_init(page)
+    
+    audio_manager = AudioManager(debug=True)
+    
+    @ft.component
+    def TestView() -> ft.Control:
+        return ft.Column(
+            controls=[
+                DirectionalVolumeToggleComponent(audio_manager.directional_sfx),
+                VolumeControlComponent(audio_manager.music_volume, "music", "Music Volume"),
+                VolumeControlComponent(audio_manager.sfx_volume, "sfx", "SFX Volume")
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
         )
     
-    def _on_toggle(self, data: bool):
-        self.audio_manager.directional_sfx = data
+    page.render(TestView)
+
+if __name__ == "__main__":
+    ft.run(test, assets_dir="../assets")

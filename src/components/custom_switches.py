@@ -141,7 +141,7 @@ def TextAndToggleComponent(control: TextAndToggle, spacer_width: ft.Number = Non
         )
     )
 
-def CreateTextAndToggle(
+def NewTextAndToggle(
     label_text: str = "",
     label_size: ft.Number = 30,
     switch_value: bool = False, *,
@@ -158,8 +158,7 @@ def CreateTextAndToggle(
             label_text, label_size,
             switch_value,
             label_offset=label_offset,
-            spacer_width=spacer_width,
             left=left, right=right,
             top=top, bottom=bottom
-        )
+        ), spacer_width=spacer_width
     )

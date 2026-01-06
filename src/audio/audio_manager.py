@@ -32,6 +32,7 @@ class AudioManager:
     @sfx_volume.setter
     def sfx_volume(self, volume: float) -> None:
         self._sfx_volume = round(clamp(volume), 1)
+        self._debug_msg(f"Setting SFX volume to: {self._sfx_volume}")
     
     @property
     def music_volume(self) -> float:
@@ -40,6 +41,7 @@ class AudioManager:
     @music_volume.setter
     def music_volume(self, volume: float) -> None:
         self._music_volume = round(clamp(volume), 1)
+        self._debug_msg(f"Setting Music volume to: {self._music_volume}")
         if self.music_instance:
             self.music_instance.volume = self._music_volume
             self.music_instance.update()
