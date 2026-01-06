@@ -6,6 +6,7 @@ from typing import Optional
 from utilities.values import clamp
 from tests.test_templates import test_init
 
+@ft.observable
 class AudioManager:
     """Handles all Flet-based audio playbacks with culling and cooldowns."""
     def __init__(
@@ -107,7 +108,7 @@ class AudioManager:
         except Exception as e:
             self._debug_msg(f"SFX Error: {e}")
 
-global_audio_manager = AudioManager()
+global_audio_manager = AudioManager(debug=False)
 
 # * Testing for the new audio manager
 async def main(page: ft.Page) -> None:

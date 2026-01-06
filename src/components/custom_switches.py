@@ -107,8 +107,8 @@ class TextAndToggle(ft.Container):
         label_text: str = "",
         label_size: ft.Number = 30,
         switch_value: bool = False, *,
+        on_toggle: SwitchEventCallable = None,
         label_offset: ft.Offset = ft.Offset(0.0, 0.0),
-        # Standard Flet Container properties for positioning
         left: Optional[ft.Number] = None,
         right: Optional[ft.Number] = None,
         top: Optional[ft.Number] = None,
@@ -120,10 +120,10 @@ class TextAndToggle(ft.Container):
         self.label_offset = label_offset
         self.switch_value = switch_value
         # Initialize the stateful class
-        self.switch = CustomSwitch(initial_value=switch_value)
+        self.switch = CustomSwitch(initial_value=switch_value, on_toggle=on_toggle)
 
 @ft.component
-def TextAndToggleComponent(control: TextAndToggle, spacer_width: ft.Number = None) -> ft.Control:
+def TextAndToggleComponent(control: TextAndToggle, spacer_width: ft.Number) -> ft.Control:
     """This component 'unpacks' the class and builds the reactive UI."""
     return ft.Container(
         left=control.left, right=control.right, top=control.top, bottom=control.bottom,
@@ -134,7 +134,7 @@ def TextAndToggleComponent(control: TextAndToggle, spacer_width: ft.Number = Non
                     font_family=FontStyles.ADAPA, color=ft.Colors.WHITE_70,
                     offset=control.label_offset
                 ),
-                ft.Container(width=(60 if spacer_width is None else None)),
+                ft.Container(width=spacer_width),
                 CustomSwitchComponent(control.switch)
             ],
             alignment=ft.MainAxisAlignment.CENTER,
@@ -145,7 +145,8 @@ def NewTextAndToggle(
     label_text: str = "",
     label_size: ft.Number = 30,
     switch_value: bool = False, *,
-    spacer_width: ft.Number = None,
+    on_toggle: SwitchEventCallable = None,
+    spacer_width: ft.Number = 60,
     label_offset: ft.Offset = ft.Offset(0.0, 0.0),
     left: Optional[ft.Number] = None,
     right: Optional[ft.Number] = None,
@@ -155,8 +156,8 @@ def NewTextAndToggle(
     """Helper that provides full type hinting for your custom arguments."""
     return TextAndToggleComponent(
         TextAndToggle(
-            label_text, label_size,
-            switch_value,
+            label_text, label_size, switch_value,
+            on_toggle=on_toggle,
             label_offset=label_offset,
             left=left, right=right,
             top=top, bottom=bottom

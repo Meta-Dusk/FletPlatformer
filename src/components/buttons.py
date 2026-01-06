@@ -8,41 +8,49 @@ from setup import FontStyles
 
 sfx = SFXLibrary()
 
-@ft.control
 class SimpleButton(ft.Button):
-    # --- Define Fields for the Automatic Dataclass Constructor ---
-    user_on_click: Optional[ft.ControlEventHandler] = None
-    user_on_hover: Optional[ft.ControlEventHandler] = None
-    user_on_focus: Optional[ft.ControlEventHandler] = None
-    
-    on_click_sfx: str = sfx.ui.buttons.item_select
-    on_hover_sfx: str = sfx.ui.buttons.hover_1
-    on_focus_sfx: str = sfx.ui.buttons.hover_1
-    
-    font_family: str = FontStyles.ADAPA
-    
-    def init(self):
-        """Custom initialization logic (called after the dataclass __init__)"""
-        # Wire up Flet's internal handlers to our custom logic
-        self.on_click = self._on_click
-        self.on_focus = self._on_focus
-        self.on_hover = self._on_hover
-        
-        # Apply visual styling
-        self.style = ft.ButtonStyle(
-            shape=ft.RoundedRectangleBorder(
-                side=ft.BorderSide(color=ft.Colors.WHITE),
-                radius=0
-            )
+    def __init__(
+        self, content: ft.StrOrControl,
+        on_click: Optional[ft.ControlEventHandler[ft.Button]] = None,
+        on_hover: Optional[ft.ControlEventHandler[ft.Button]] = None,
+        on_focus: Optional[ft.ControlEventHandler[ft.Button]] = None,
+        on_click_sfx: str = sfx.ui.buttons.item_select,
+        on_hover_sfx: str = sfx.ui.buttons.hover_1,
+        on_focus_sfx: str = sfx.ui.buttons.hover_1,
+        *,
+        width: ft.Number = None,
+        height: ft.Number = None,
+        font_family: FontStyles = FontStyles.ADAPA,
+        left: ft.Number = None,
+        right: ft.Number = None,
+        top: ft.Number = None,
+        bottom: ft.Number = None,
+    ) -> None:
+        self.user_on_click = on_click
+        self.user_on_hover = on_hover
+        self.user_on_focus = on_focus
+        self.on_click_sfx = on_click_sfx
+        self.on_hover_sfx = on_hover_sfx
+        self.on_focus_sfx = on_focus_sfx
+        super().__init__(
+            content=content,
+            on_click=self._on_click,
+            on_hover=self._on_hover,
+            on_focus=self._on_focus,
+            width=width, height=height,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(
+                    side=ft.BorderSide(color=ft.Colors.WHITE),
+                    radius=0
+                )
+            ),
+            left=left, right=right, top=top, bottom=bottom
         )
-        
-        # Handle child text properties
         if isinstance(self.content, ft.Text):
-            self.content.font_family = self.font_family
-            # Scale text if height is provided
-            if self.content.size is None and self.height and self.height != 0:
-                self.content.size = self.height / 2
-    
+            self.content.font_family = font_family
+            if self.content.size is None and height and height != 0:
+                self.content.size = height / 2
+        
     def _play_sfx(self, sfx: str) -> None:
         """Play a sound effect."""
         global_audio_manager.play_sfx(sfx)
