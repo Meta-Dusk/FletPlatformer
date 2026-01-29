@@ -101,17 +101,21 @@ def DirectionalVolumeToggleComponent(initial_state: bool, *, debug: bool = False
 
 # * Volume Controls Test
 from tests.test_templates import test_init
+from audio.music_data import MusicLibrary
 
 async def test(page: ft.Page) -> None:
     await test_init(page)
+    music = MusicLibrary()
     
     @ft.component
     def TestView() -> ft.Control:
         return ft.Column(
             controls=[
+                ft.Text("Volume Controls", size=30),
                 DirectionalVolumeToggleComponent(audio_manager.directional_sfx, debug=True),
                 VolumeControlComponent(audio_manager.music_volume, "music", "Music Volume"),
-                VolumeControlComponent(audio_manager.sfx_volume, "sfx", "SFX Volume")
+                VolumeControlComponent(audio_manager.sfx_volume, "sfx", "SFX Volume"),
+                SimpleButton("Play Some Music", on_click=lambda _: audio_manager.play_music(music.ambience.forest))
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER

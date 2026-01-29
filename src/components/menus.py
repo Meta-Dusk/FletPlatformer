@@ -4,8 +4,8 @@ from typing import Optional, Callable
 
 from setup import FontStyles
 from components.buttons import SimpleButton
-from components.volume_controls import NewVolumeControl, NewDirectionalToggle
-from components.window_controls import NewFullscreenToggle
+from components.volume_controls import VolumeControlComponent, DirectionalVolumeToggleComponent
+from components.window_controls import FullscreenToggleComponent
 from components.game_controls import NewConsoleToggle, NewPerfToggles, NewStaminaToggle
 
 from backgrounds import add_infinite_layer
@@ -122,7 +122,7 @@ def SettingsMenuComponent(control: SettingsMenu) -> ft.Control:
     # 2. Window Event Handling via Effect
     # Use a reference for the toggle to ensure it's tracked correctly
     fullscreen_toggle_ref = ft.use_ref()
-
+    
     def setup_window_sync():
         # GUARD: Ensure page exists before doing anything
         if not control.page:
@@ -134,9 +134,10 @@ def SettingsMenuComponent(control: SettingsMenu) -> ft.Control:
                 set_scroll_height(control.page.height / 2)
                 
                 # Check if the ref has been assigned before calling sync_ui
+                print({fullscreen_toggle_ref})
                 if fullscreen_toggle_ref.current:
                     fullscreen_toggle_ref.current.sync_ui()
-
+                    
         # Initial calculation
         set_scroll_height(control.page.height / 2)
         
@@ -145,17 +146,17 @@ def SettingsMenuComponent(control: SettingsMenu) -> ft.Control:
         control.page.on_window_event = on_win_event
         
         return lambda: setattr(control.page, "on_window_event", old_handler)
-
+    
     # This effect now depends on 'control.page' being populated
     ft.use_effect(setup_window_sync, [control.page])
-
+    
     # 3. Sections
     def section(text: str):
         return ft.Text(text, size=40, font_family=FontStyles.LIEF, color=ft.Colors.WHITE_54)
-
+    
     # Instantiate nested reactive components
-    control.fullscreen_toggle = NewFullscreenToggle(ref=fullscreen_toggle_ref)
-
+    control.fullscreen_toggle = FullscreenToggleComponent(False)
+    
     return ft.Container(
         expand=True,
         bgcolor=ft.Colors.with_opacity(0.65, ft.Colors.BLACK),
@@ -169,9 +170,9 @@ def SettingsMenuComponent(control: SettingsMenu) -> ft.Control:
                     bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
                     content=ft.Column([
                         section("Volume"),
-                        NewVolumeControl(control.audio_manager, "music", "Music Volume"),
-                        NewVolumeControl(control.audio_manager, "sfx", "SFX Volume"),
-                        NewDirectionalToggle(control.audio_manager),
+                        VolumeControlComponent(control.audio_manager, "music", "Music Volume"),
+                        VolumeControlComponent(control.audio_manager, "sfx", "SFX Volume"),
+                        DirectionalVolumeToggleComponent(control.audio_manager),
                         section("Window"),
                         control.fullscreen_toggle,
                         section("Game"),
